@@ -413,19 +413,17 @@ for {
 ```txt
 /
 ├── cmd/
-│   ├── client/       // ptor-client main
-│   ├── relay/        // ptor-relay  main
-│   ├── hidden/       // ptor-hidden main
-│   ├── directory/    // ptor-dir    main
-│   └── keygen/       // ptor-keygen main
+│   ├── client/       // Entry point for ptor-client
+│   ├── relay/        // Entry point for ptor-relay
+│   ├── hidden/       // Entry point for ptor-hidden
+│   ├── directory/    // Entry point for ptor-dir
+│   └── keygen/       // Entry point for ptor-keygen
 ├── internal/
-│   ├── cell/         // Cell encode/decode
-│   ├── crypto/       // RSA・AES ラッパ
-│   ├── circuit/      // 回路ステート管理
-│   ├── socksproxy/   // 最小 SOCKS5 実装
-│   ├── dirclient/    // Directory JSON クライアント
-│   ├── logger/       // zap ラッパ（optional）
-│   └── util/         // 汎用ヘルパ
+│   ├── domain/       // Core models and business logic
+│   ├── usecase/      // Application-specific orchestration logic
+│   ├── handler/      // External interfaces (e.g., HTTP APIs)
+│   ├── infrastructure/ // External systems (DB, APIs, etc.)
+│   └── util/         // General-purpose helpers (non-core utilities)
 └── go.mod
 
 ```
