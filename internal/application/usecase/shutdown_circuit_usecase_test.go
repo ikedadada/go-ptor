@@ -1,0 +1,109 @@
+package usecase_test
+
+import (
+	"errors"
+	"testing"
+
+	"ikedadada/go-ptor/internal/application/usecase"
+	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/domain/value_object"
+)
+
+type mockCircuitRepoShutdown struct {
+	circuit   *entity.Circuit
+	findErr   error
+	deleteErr error
+	deleted   value_object.CircuitID
+}
+
+func (m *mockCircuitRepoShutdown) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+	return m.circuit, m.findErr
+}
+func (m *mockCircuitRepoShutdown) Save(*entity.Circuit) error { return nil }
+func (m *mockCircuitRepoShutdown) Delete(id value_object.CircuitID) error {
+	m.deleted = id
+	return m.deleteErr
+}
+func (m *mockCircuitRepoShutdown) ListActive() ([]*entity.Circuit, error) { return nil, nil }
+
+type mockTransmitterShutdown struct {
+	endCalls []struct {
+		cid value_object.CircuitID
+		sid value_object.StreamID
+	}
+}
+
+func (m *mockTransmitterShutdown) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
+	m.endCalls = append(m.endCalls, struct {
+		cid value_object.CircuitID
+		sid value_object.StreamID
+	}{c, s})
+	return nil
+}
+func (m *mockTransmitterShutdown) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+	return nil
+}
+
+func makeTestCircuitShutdown() *entity.Circuit {
+	id, _ := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
+	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
+	c, _ := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+	st1, _ := c.OpenStream()
+	st2, _ := c.OpenStream()
+	_ = st1
+	_ = st2
+	return c
+}
+
+func TestShutdownCircuitInteractor_Handle(t *testing.T) {
+	circuit := makeTestCircuitShutdown()
+	cid := circuit.ID().String()
+
+	t.Run("ok", func(t *testing.T) {
+		repo := &mockCircuitRepoShutdown{circuit: circuit}
+		tx := &mockTransmitterShutdown{}
+		uc := usecase.NewShutdownCircuitInteractor(repo, tx)
+		out, err := uc.Handle(usecase.ShutdownCircuitInput{CircuitID: cid})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !out.Success {
+			t.Errorf("expected success true")
+		}
+		if repo.deleted.String() != cid {
+			t.Errorf("expected repo.Delete called with %s", cid)
+		}
+		if len(tx.endCalls) < 3 { // 2 streams + control END
+			t.Errorf("expected at least 3 SendEnd calls, got %d", len(tx.endCalls))
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		repo := &mockCircuitRepoShutdown{findErr: errors.New("not found")}
+		uc := usecase.NewShutdownCircuitInteractor(repo, &mockTransmitterShutdown{})
+		_, err := uc.Handle(usecase.ShutdownCircuitInput{CircuitID: cid})
+		if err == nil {
+			t.Errorf("expected error")
+		}
+	})
+
+	t.Run("bad id", func(t *testing.T) {
+		repo := &mockCircuitRepoShutdown{}
+		uc := usecase.NewShutdownCircuitInteractor(repo, &mockTransmitterShutdown{})
+		_, err := uc.Handle(usecase.ShutdownCircuitInput{CircuitID: "bad-uuid"})
+		if err == nil {
+			t.Errorf("expected error")
+		}
+	})
+
+	t.Run("delete error", func(t *testing.T) {
+		repo := &mockCircuitRepoShutdown{circuit: circuit, deleteErr: errors.New("fail")}
+		uc := usecase.NewShutdownCircuitInteractor(repo, &mockTransmitterShutdown{})
+		_, err := uc.Handle(usecase.ShutdownCircuitInput{CircuitID: cid})
+		if err == nil {
+			t.Errorf("expected error")
+		}
+	})
+}
