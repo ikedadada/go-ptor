@@ -12,7 +12,7 @@ type Endpoint struct {
 }
 
 func NewEndpoint(host string, port uint16) (Endpoint, error) {
-	if port == 0 || port > 65535 {
+	if port == 0 {
 		return Endpoint{}, fmt.Errorf("invalid port: %d", port)
 	}
 	if ip := net.ParseIP(host); ip == nil && host == "" {
