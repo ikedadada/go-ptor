@@ -79,6 +79,19 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for SendEnd")
 	}
+
+	err = tx.SendDestroy(cid)
+	if err != nil {
+		t.Fatalf("SendDestroy error: %v", err)
+	}
+	select {
+	case msg := <-received:
+		if len(msg) < 20 || msg[18] != 0xFE {
+			t.Errorf("DESTROY cell not detected in sent buffer")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for SendDestroy")
+	}
 }
 
 func TestTCPTransmitter_SendData_tooBig_realConn(t *testing.T) {

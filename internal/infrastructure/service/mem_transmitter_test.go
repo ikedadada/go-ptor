@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestMemTx_SendData_SendEnd(t *testing.T) {
-	ch := make(chan string, 2)
+func TestMemTx_SendData_SendEnd_Destroy(t *testing.T) {
+	ch := make(chan string, 3)
 
 	tx := &service.MemTransmitter{Out: ch}
 	cid := value_object.NewCircuitID()
@@ -30,5 +30,14 @@ func TestMemTx_SendData_SendEnd(t *testing.T) {
 	msg = <-ch
 	if msg == "" || msg[:3] != "END" {
 		t.Errorf("unexpected SendEnd message: %q", msg)
+	}
+
+	err = tx.SendDestroy(cid)
+	if err != nil {
+		t.Fatalf("SendDestroy error: %v", err)
+	}
+	msg = <-ch
+	if msg == "" || msg[:7] != "DESTROY" {
+		t.Errorf("unexpected SendDestroy message: %q", msg)
 	}
 }

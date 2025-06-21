@@ -26,7 +26,7 @@ func NewTCPTransmitter(addr string) (service.CircuitTransmitter, error) {
 	return &TCPTransmitter{conn: c}, nil
 }
 
-func (t *TCPTransmitter) send(cid value_object.CircuitID, sid value_object.StreamID, data []byte, endFlag bool) error {
+func (t *TCPTransmitter) send(cid value_object.CircuitID, sid value_object.StreamID, data []byte, flag byte) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -35,8 +35,8 @@ func (t *TCPTransmitter) send(cid value_object.CircuitID, sid value_object.Strea
 	binary.BigEndian.PutUint16(buf[16:18], sid.UInt16())
 	binary.BigEndian.PutUint16(buf[18:20], uint16(len(data)))
 	copy(buf[20:], data)
-	if endFlag {
-		buf[18] = 0xFF // LEN=0xFF?? 簡易 END 表現
+	if flag != 0 {
+		buf[18] = flag // 特殊フラグ
 	}
 	_, err := t.conn.Write(buf)
 	return err
@@ -46,9 +46,13 @@ func (t *TCPTransmitter) SendData(c value_object.CircuitID, s value_object.Strea
 	if len(d) > 65535 {
 		return fmt.Errorf("data too big")
 	}
-	return t.send(c, s, d, false)
+	return t.send(c, s, d, 0)
 }
 
 func (t *TCPTransmitter) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
-	return t.send(c, s, nil, true)
+	return t.send(c, s, nil, 0xFF)
+}
+
+func (t *TCPTransmitter) SendDestroy(c value_object.CircuitID) error {
+	return t.send(c, 0, nil, 0xFE)
 }

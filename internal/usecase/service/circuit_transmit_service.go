@@ -7,4 +7,5 @@ import "ikedadada/go-ptor/internal/domain/value_object"
 type CircuitTransmitter interface {
 	SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error
 	SendEnd(c value_object.CircuitID, s value_object.StreamID) error
+	SendDestroy(c value_object.CircuitID) error
 }

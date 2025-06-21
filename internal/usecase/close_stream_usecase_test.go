@@ -33,6 +33,7 @@ func (m *mockTransmitterClose) SendEnd(c value_object.CircuitID, s value_object.
 func (m *mockTransmitterClose) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return nil
 }
+func (m *mockTransmitterClose) SendDestroy(value_object.CircuitID) error { return nil }
 
 func TestCloseStreamInteractor_Handle(t *testing.T) {
 	circuit, err := makeTestCircuit()

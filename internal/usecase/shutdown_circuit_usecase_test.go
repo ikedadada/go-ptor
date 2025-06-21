@@ -43,6 +43,7 @@ func (m *mockTransmitterShutdown) SendEnd(c value_object.CircuitID, s value_obje
 func (m *mockTransmitterShutdown) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return nil
 }
+func (m *mockTransmitterShutdown) SendDestroy(value_object.CircuitID) error { return nil }
 
 func makeTestCircuitShutdown() (*entity.Circuit, error) {
 	id, err := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
