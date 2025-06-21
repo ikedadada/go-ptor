@@ -25,7 +25,7 @@ type openStreamUseCaseImpl struct {
 	cr repository.CircuitRepository
 }
 
-func NewOpenStreamInteractor(cr repository.CircuitRepository) *openStreamUseCaseImpl {
+func NewOpenStreamUsecase(cr repository.CircuitRepository) *openStreamUseCaseImpl {
 	return &openStreamUseCaseImpl{cr: cr}
 }
 

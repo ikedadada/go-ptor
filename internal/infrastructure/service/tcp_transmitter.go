@@ -18,7 +18,7 @@ type TCPTransmitter struct {
 	conn net.Conn
 }
 
-func Dial(addr string) (service.CircuitTransmitter, error) {
+func NewTCPTransmitter(addr string) (service.CircuitTransmitter, error) {
 	c, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, err

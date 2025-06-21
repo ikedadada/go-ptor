@@ -46,7 +46,7 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	addr, received, closeFn := startTestTCPServer(t)
 	defer closeFn()
 
-	tx, err := service.Dial(addr)
+	tx, err := service.NewTCPTransmitter(addr)
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 func TestTCPTransmitter_SendData_tooBig_realConn(t *testing.T) {
 	addr, _, closeFn := startTestTCPServer(t)
 	defer closeFn()
-	tx, err := service.Dial(addr)
+	tx, err := service.NewTCPTransmitter(addr)
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
 	}

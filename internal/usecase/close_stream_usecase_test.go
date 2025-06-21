@@ -59,7 +59,7 @@ func TestCloseStreamInteractor_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewCloseStreamInteractor(tt.repo, tt.tx)
+			uc := usecase.NewCloseStreamUsecase(tt.repo, tt.tx)
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")

@@ -26,7 +26,7 @@ type sendDataUseCaseImpl struct {
 	tx service.CircuitTransmitter
 }
 
-func NewSendDataInteractor(cr repository.CircuitRepository, tx service.CircuitTransmitter) SendDataUseCase {
+func NewSendDataUsecase(cr repository.CircuitRepository, tx service.CircuitTransmitter) SendDataUseCase {
 	return &sendDataUseCaseImpl{cr: cr, tx: tx}
 }
 

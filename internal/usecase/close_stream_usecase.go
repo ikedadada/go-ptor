@@ -26,7 +26,7 @@ type closeStreamUsecaseImpl struct {
 	tx service.CircuitTransmitter
 }
 
-func NewCloseStreamInteractor(cr repository.CircuitRepository, tx service.CircuitTransmitter) CloseStreamUseCase {
+func NewCloseStreamUsecase(cr repository.CircuitRepository, tx service.CircuitTransmitter) CloseStreamUseCase {
 	return &closeStreamUsecaseImpl{cr: cr, tx: tx}
 }
 

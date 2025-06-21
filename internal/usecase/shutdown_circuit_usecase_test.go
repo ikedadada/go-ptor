@@ -84,7 +84,7 @@ func TestShutdownCircuitInteractor_Handle(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		repo := &mockCircuitRepoShutdown{circuit: circuit}
 		tx := &mockTransmitterShutdown{}
-		uc := usecase.NewShutdownCircuitInteractor(repo, tx)
+		uc := usecase.NewShutdownCircuitUsecase(repo, tx)
 		out, err := uc.Handle(usecase.ShutdownCircuitInput{CircuitID: cid})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -102,7 +102,7 @@ func TestShutdownCircuitInteractor_Handle(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		repo := &mockCircuitRepoShutdown{findErr: errors.New("not found")}
-		uc := usecase.NewShutdownCircuitInteractor(repo, &mockTransmitterShutdown{})
+		uc := usecase.NewShutdownCircuitUsecase(repo, &mockTransmitterShutdown{})
 		_, err := uc.Handle(usecase.ShutdownCircuitInput{CircuitID: cid})
 		if err == nil {
 			t.Errorf("expected error")
@@ -111,7 +111,7 @@ func TestShutdownCircuitInteractor_Handle(t *testing.T) {
 
 	t.Run("bad id", func(t *testing.T) {
 		repo := &mockCircuitRepoShutdown{}
-		uc := usecase.NewShutdownCircuitInteractor(repo, &mockTransmitterShutdown{})
+		uc := usecase.NewShutdownCircuitUsecase(repo, &mockTransmitterShutdown{})
 		_, err := uc.Handle(usecase.ShutdownCircuitInput{CircuitID: "bad-uuid"})
 		if err == nil {
 			t.Errorf("expected error")
@@ -120,7 +120,7 @@ func TestShutdownCircuitInteractor_Handle(t *testing.T) {
 
 	t.Run("delete error", func(t *testing.T) {
 		repo := &mockCircuitRepoShutdown{circuit: circuit, deleteErr: errors.New("fail")}
-		uc := usecase.NewShutdownCircuitInteractor(repo, &mockTransmitterShutdown{})
+		uc := usecase.NewShutdownCircuitUsecase(repo, &mockTransmitterShutdown{})
 		_, err := uc.Handle(usecase.ShutdownCircuitInput{CircuitID: cid})
 		if err == nil {
 			t.Errorf("expected error")
