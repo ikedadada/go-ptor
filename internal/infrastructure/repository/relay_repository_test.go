@@ -36,7 +36,7 @@ func makeTestRelay(status entity.RelayStatus, idStr string) (*entity.Relay, erro
 }
 
 func TestRelayRepo_Save_FindByID(t *testing.T) {
-	repo := repository.NewRelayRepo()
+	repo := repository.NewRelayRepository()
 	rel, err := makeTestRelay(entity.Online, "550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		t.Fatalf("setup relay: %v", err)
@@ -55,7 +55,7 @@ func TestRelayRepo_Save_FindByID(t *testing.T) {
 }
 
 func TestRelayRepo_FindByID_NotFound(t *testing.T) {
-	repo := repository.NewRelayRepo()
+	repo := repository.NewRelayRepository()
 	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440001")
 	if err != nil {
 		t.Fatalf("NewRelayID: %v", err)
@@ -67,7 +67,7 @@ func TestRelayRepo_FindByID_NotFound(t *testing.T) {
 }
 
 func TestRelayRepo_AllOnline(t *testing.T) {
-	repo := repository.NewRelayRepo()
+	repo := repository.NewRelayRepository()
 	on, err := makeTestRelay(entity.Online, "550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		t.Fatalf("setup on relay: %v", err)

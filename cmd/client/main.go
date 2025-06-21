@@ -5,11 +5,12 @@ import (
 	"crypto/rsa"
 	"flag"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"log"
 	"net"
 	"strconv"
+
+	"github.com/google/uuid"
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
@@ -25,8 +26,8 @@ func main() {
 	flag.Parse()
 
 	// --- repositories & services ---
-	relayRepo := infraRepo.NewRelayRepo()
-	circuitRepo := infraRepo.NewCircuitRepo()
+	relayRepo := infraRepo.NewRelayRepository()
+	circuitRepo := infraRepo.NewCircuitRepository()
 
 	host, portStr, err := net.SplitHostPort(*entry)
 	if err != nil {

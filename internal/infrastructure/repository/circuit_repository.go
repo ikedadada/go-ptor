@@ -8,22 +8,22 @@ import (
 	"ikedadada/go-ptor/internal/domain/value_object"
 )
 
-type CircuitRepo struct {
+type circuitRepository struct {
 	mu sync.RWMutex
 	m  map[value_object.CircuitID]*entity.Circuit
 }
 
-func NewCircuitRepo() *CircuitRepo {
-	return &CircuitRepo{m: make(map[value_object.CircuitID]*entity.Circuit)}
+func NewCircuitRepository() repository.CircuitRepository {
+	return &circuitRepository{m: make(map[value_object.CircuitID]*entity.Circuit)}
 }
 
-func (r *CircuitRepo) Save(c *entity.Circuit) error {
+func (r *circuitRepository) Save(c *entity.Circuit) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.m[c.ID()] = c
 	return nil
 }
-func (r *CircuitRepo) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (r *circuitRepository) Find(id value_object.CircuitID) (*entity.Circuit, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	c, ok := r.m[id]
@@ -32,13 +32,13 @@ func (r *CircuitRepo) Find(id value_object.CircuitID) (*entity.Circuit, error) {
 	}
 	return c, nil
 }
-func (r *CircuitRepo) Delete(id value_object.CircuitID) error {
+func (r *circuitRepository) Delete(id value_object.CircuitID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.m, id)
 	return nil
 }
-func (r *CircuitRepo) ListActive() ([]*entity.Circuit, error) {
+func (r *circuitRepository) ListActive() ([]*entity.Circuit, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]*entity.Circuit, 0, len(r.m))

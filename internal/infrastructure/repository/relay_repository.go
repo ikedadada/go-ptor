@@ -8,23 +8,23 @@ import (
 	"ikedadada/go-ptor/internal/domain/value_object"
 )
 
-type RelayRepo struct {
+type relayRepositoryImpl struct {
 	mu sync.RWMutex
 	m  map[value_object.RelayID]*entity.Relay
 }
 
-func NewRelayRepo() repository.RelayRepository {
-	return &RelayRepo{m: make(map[value_object.RelayID]*entity.Relay)}
+func NewRelayRepository() repository.RelayRepository {
+	return &relayRepositoryImpl{m: make(map[value_object.RelayID]*entity.Relay)}
 }
 
-func (r *RelayRepo) Save(rel *entity.Relay) error {
+func (r *relayRepositoryImpl) Save(rel *entity.Relay) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.m[rel.ID()] = rel
 	return nil
 }
 
-func (r *RelayRepo) FindByID(id value_object.RelayID) (*entity.Relay, error) {
+func (r *relayRepositoryImpl) FindByID(id value_object.RelayID) (*entity.Relay, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	rel, ok := r.m[id]
@@ -34,7 +34,7 @@ func (r *RelayRepo) FindByID(id value_object.RelayID) (*entity.Relay, error) {
 	return rel, nil
 }
 
-func (r *RelayRepo) AllOnline() ([]*entity.Relay, error) {
+func (r *relayRepositoryImpl) AllOnline() ([]*entity.Relay, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]*entity.Relay, 0, len(r.m))

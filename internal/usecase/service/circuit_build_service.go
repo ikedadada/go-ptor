@@ -12,9 +12,6 @@ import (
 
 // ---- CircuitBuilder --------------------------------------------------------
 
-type BuilderConfig struct {
-}
-
 // CircuitBuilder は Circuit を生成するためのインターフェース。
 type CircuitBuildService interface {
 	// Build は新しい Circuit を生成してリポジトリに保存し、返す。

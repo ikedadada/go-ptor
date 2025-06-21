@@ -30,16 +30,16 @@ type BuildCircuitUseCase interface {
 
 // ---------- 実装 ----------
 
-type BuildCircuitUseCaseImpl struct {
+type buildCircuitUseCaseImpl struct {
 	builder service.CircuitBuildService
 }
 
 // コンストラクタ
 func NewBuildCircuitUseCase(b service.CircuitBuildService) BuildCircuitUseCase {
-	return &BuildCircuitUseCaseImpl{builder: b}
+	return &buildCircuitUseCaseImpl{builder: b}
 }
 
-func (uc *BuildCircuitUseCaseImpl) Handle(in BuildCircuitInput) (BuildCircuitOutput, error) {
+func (uc *buildCircuitUseCaseImpl) Handle(in BuildCircuitInput) (BuildCircuitOutput, error) {
 	// hops 引数を service に渡して Circuit を生成
 	cir, err := uc.builder.Build(in.Hops) // Build(hops int) を想定
 	if err != nil {

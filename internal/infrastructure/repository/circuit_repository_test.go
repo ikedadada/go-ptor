@@ -31,7 +31,7 @@ func makeTestCircuit(id value_object.CircuitID) (*entity.Circuit, error) {
 }
 
 func TestCircuitRepo_Save_Find_Delete(t *testing.T) {
-	repo := repository.NewCircuitRepo()
+	repo := repository.NewCircuitRepository()
 	id := value_object.NewCircuitID()
 	c, err := makeTestCircuit(id)
 	if err != nil {
@@ -63,7 +63,7 @@ func TestCircuitRepo_Save_Find_Delete(t *testing.T) {
 }
 
 func TestCircuitRepo_ListActive(t *testing.T) {
-	repo := repository.NewCircuitRepo()
+	repo := repository.NewCircuitRepository()
 	id1 := value_object.NewCircuitID()
 	id2 := value_object.NewCircuitID()
 	c1, err := makeTestCircuit(id1)

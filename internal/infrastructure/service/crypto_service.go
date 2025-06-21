@@ -11,20 +11,20 @@ import (
 )
 
 // CryptoServiceImpl implements service.CryptoService using the standard library.
-type CryptoServiceImpl struct{}
+type cryptoServiceImpl struct{}
 
 // NewCryptoService returns a CryptoService backed by Go's crypto packages.
-func NewCryptoService() service.CryptoService { return CryptoServiceImpl{} }
+func NewCryptoService() service.CryptoService { return &cryptoServiceImpl{} }
 
-func (CryptoServiceImpl) RSAEncrypt(pub *rsa.PublicKey, in []byte) ([]byte, error) {
+func (*cryptoServiceImpl) RSAEncrypt(pub *rsa.PublicKey, in []byte) ([]byte, error) {
 	return rsa.EncryptOAEP(sha256.New(), rand.Reader, pub, in, nil)
 }
 
-func (CryptoServiceImpl) RSADecrypt(priv *rsa.PrivateKey, in []byte) ([]byte, error) {
+func (*cryptoServiceImpl) RSADecrypt(priv *rsa.PrivateKey, in []byte) ([]byte, error) {
 	return rsa.DecryptOAEP(sha256.New(), rand.Reader, priv, in, nil)
 }
 
-func (CryptoServiceImpl) AESSeal(key [32]byte, nonce [12]byte, plain []byte) ([]byte, error) {
+func (*cryptoServiceImpl) AESSeal(key [32]byte, nonce [12]byte, plain []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (CryptoServiceImpl) AESSeal(key [32]byte, nonce [12]byte, plain []byte) ([]
 	return gcm.Seal(nil, nonce[:], plain, nil), nil
 }
 
-func (CryptoServiceImpl) AESOpen(key [32]byte, nonce [12]byte, enc []byte) ([]byte, error) {
+func (*cryptoServiceImpl) AESOpen(key [32]byte, nonce [12]byte, enc []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, err
