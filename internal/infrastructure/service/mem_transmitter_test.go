@@ -9,7 +9,7 @@ import (
 func TestMemTx_SendData_SendEnd(t *testing.T) {
 	ch := make(chan string, 2)
 
-	tx := &service.MemTx{Out: ch}
+	tx := &service.MemTransmitter{Out: ch}
 	cid := value_object.NewCircuitID()
 	sid := value_object.NewStreamIDAuto()
 	data := []byte("hello")

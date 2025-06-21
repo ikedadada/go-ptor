@@ -14,3 +14,6 @@ func CircuitIDFrom(s string) (CircuitID, error) {
 }
 func (c CircuitID) String() string         { return c.val.String() }
 func (c CircuitID) Equal(o CircuitID) bool { return c.val == o.val }
+func (c CircuitID) Bytes() []byte {
+	return c.val[:]
+}
