@@ -2,9 +2,9 @@ package usecase
 
 import (
 	"fmt"
-	"ikedadada/go-ptor/internal/application/service"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 type SendDataInput struct {

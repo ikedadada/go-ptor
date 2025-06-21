@@ -2,9 +2,10 @@ package usecase_test
 
 import (
 	"errors"
-	"ikedadada/go-ptor/internal/application/usecase"
-	"ikedadada/go-ptor/internal/domain/entity"
 	"testing"
+
+	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/usecase"
 )
 
 type mockBuildService struct {

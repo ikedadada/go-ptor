@@ -6,8 +6,8 @@ import (
 	"net"
 	"sync"
 
-	"ikedadada/go-ptor/internal/application/service" // 依存関係のために必要
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/usecase/service" // 依存関係のために必要
 )
 
 // 簡易セル: | CID(16B) | SID(2B) | LEN(2B) | DATA |
