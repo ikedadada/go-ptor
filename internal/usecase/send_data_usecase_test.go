@@ -60,7 +60,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewSendDataInteractor(tt.repo, tt.tx)
+			uc := usecase.NewSendDataUsecase(tt.repo, tt.tx)
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")

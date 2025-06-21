@@ -23,11 +23,12 @@ import (
 func main() {
 	entry := flag.String("entry", "127.0.0.1:5000", "entry relay address")
 	hops := flag.Int("hops", 3, "number of hops")
+	socks := flag.String("socks", "127.0.0.1:9050", "SOCKS5 listen address")
 	flag.Parse()
 
 	// --- repositories & services ---
-	relayRepo := infraRepo.NewRelayRepository()
-	circuitRepo := infraRepo.NewCircuitRepository()
+	relayRepository := infraRepo.NewRelayRepository()
+	circuitRepository := infraRepo.NewCircuitRepository()
 
 	host, portStr, err := net.SplitHostPort(*entry)
 	if err != nil {
@@ -53,12 +54,12 @@ func main() {
 		}
 		rel := entity.NewRelay(rid, ep, value_object.RSAPubKey{PublicKey: &key.PublicKey})
 		rel.SetOnline()
-		if err := relayRepo.Save(rel); err != nil {
+		if err := relayRepository.Save(rel); err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	builder := useSvc.NewCircuitBuildService(relayRepo, circuitRepo)
+	builder := useSvc.NewCircuitBuildService(relayRepository, circuitRepository)
 	buildUC := usecase.NewBuildCircuitUseCase(builder)
 
 	out, err := buildUC.Handle(usecase.BuildCircuitInput{Hops: *hops})
@@ -67,11 +68,11 @@ func main() {
 	}
 	fmt.Println("Circuit built:", out.CircuitID)
 
-	tx := &infraSvc.MemTransmitter{Out: make(chan string, 10)}
-	openUC := usecase.NewOpenStreamInteractor(circuitRepo)
-	closeUC := usecase.NewCloseStreamInteractor(circuitRepo, tx)
+	tx := infraSvc.NewMemTransmitter(make(chan string, 10))
+	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
+	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, tx)
 
-	ln, err := net.Listen("tcp", "127.0.0.1:9050")
+	ln, err := net.Listen("tcp", *socks)
 	if err != nil {
 		log.Fatal(err)
 	}

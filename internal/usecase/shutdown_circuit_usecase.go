@@ -25,7 +25,7 @@ type shutdownCircuitUseCaseImpl struct {
 	tx   service.CircuitTransmitter
 }
 
-func NewShutdownCircuitInteractor(cr repository.CircuitRepository, tx service.CircuitTransmitter) ShutdownCircuitUseCase {
+func NewShutdownCircuitUsecase(cr repository.CircuitRepository, tx service.CircuitTransmitter) ShutdownCircuitUseCase {
 	return &shutdownCircuitUseCaseImpl{repo: cr, tx: tx}
 }
 

@@ -3,10 +3,17 @@ package service
 import (
 	"fmt"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 type MemTransmitter struct {
 	Out chan string // デバッグ表示用
+}
+
+func NewMemTransmitter(out chan string) service.CircuitTransmitter {
+	return &MemTransmitter{
+		Out: out,
+	}
 }
 
 func (tx *MemTransmitter) SendData(c value_object.CircuitID, s value_object.StreamID, d []byte) error {
