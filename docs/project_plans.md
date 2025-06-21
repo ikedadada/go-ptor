@@ -20,10 +20,46 @@ go_ptor は「多段暗号による秘匿通信を“最小の部品数”と“
 
 ### 1.1 ランタイムトポロジ
 
-```txt
-ブラウザ ──▶ SOCKS5 (127.0.0.1:9050) ─▶ ptor-client
-       ▲                                        │
-       └────────── TCP ← AES-GCM cells … ←─────┘
+```mermaid
+flowchart LR
+  subgraph UserSpace["🖥️  End-User Space"]
+    Browser["🌐 Browser / curl / ssh"]
+  end
+
+  subgraph ClientBox["🚀 ptor-client (localhost)"]
+    Socks["SOCKS5 :9050"]
+    CircuitMgr["CircuitBuilder + CellMux"]
+  end
+
+  subgraph RelayNet["🔄 Relay Network"]
+    R1["ptor-relay #1"]
+    R2["ptor-relay #2"]
+    R3["ptor-relay #3 (Exit)"]
+  end
+
+  subgraph HiddenBox["🔒 ptor-hidden (HS)"]
+    LocalHTTP["HTTP App :8080"]
+    HProxy["HS Proxy :5003"]
+  end
+
+  subgraph DirBox["📚 ptor-dir (Directory)"]
+    DirAPI["/relays.json + /hidden.json"]
+  end
+
+  Browser--localhost TCP-->Socks
+  Socks--SOCKS stream-->CircuitMgr
+  CircuitMgr-->|EXTEND / DATA cells|R1
+  R1-->|cells|R2
+  R2-->|cells|R3
+  R3-->|plain TCP|HProxy
+  HProxy-->|tcp loopback|LocalHTTP
+
+  CircuitMgr--JSON GET-->DirAPI
+  R1 -. fetch RSA pub .-> DirAPI
+  R2 -. fetch RSA pub .-> DirAPI
+  R3 -. fetch RSA pub .-> DirAPI
+  click DirAPI "https://example.com/ptor/relays.json" "open directory"
+
 ```
 
 - 三層ハンドシェイク（Entry→Middle→Exit）に固定
@@ -43,6 +79,26 @@ go_ptor は「多段暗号による秘匿通信を“最小の部品数”と“
 | **エラー処理** | タイムアウトは `context.WithTimeout`。ホップ失敗時は `DESTROY` セル送信 → 全て Close |
 | **Config**     | YAML / CLI フラグ両対応 (`-entry`, `-hops`, `-dirurl`)                               |
 
+```mermaid
+flowchart LR
+  subgraph Client["ptor-client"]
+    style Client fill:#e6f7ff
+    Listener["SOCKS5 Listener :9050"]
+    ConnHandler["Connection Worker"]
+    CircuitBuilder["CircuitBuilder"]
+    CellMux["Cell Multiplexer / Demux"]
+    KeyCache["Relay PubKey Cache"]
+    DirFetcher["Directory Fetcher"]
+  end
+
+  Listener -- new SOCKS session --> ConnHandler
+  ConnHandler -- create --> CircuitBuilder
+  CircuitBuilder -- aesKeys / relayList --> CellMux
+  CellMux -- "enc/dec cells" --- ConnHandler
+  DirFetcher -- JSON--> KeyCache
+  CircuitBuilder -- "RSA pub request" --- KeyCache
+```
+
 #### 1.2.2 `ptor-relay`
 
 | 観点                                               | 内容                                                       |
@@ -53,6 +109,32 @@ go_ptor は「多段暗号による秘匿通信を“最小の部品数”と“
 | **パフォーマンス**                                 | `io.CopyBuffer` で 512 byte 固定読取。                     |
 | Back-pressure は `net.Conn.SetReadDeadline` で実装 |                                                            |
 | **安全装置**                                       | 不正セル長 / cmd 不正 → 即 `DESTROY`                       |
+
+```mermaid
+flowchart LR
+  subgraph Relay["ptor-relay"]
+    style Relay fill:#fffbe6
+    ListenerR["TCP Listener :5000"]
+    ConnR["Conn Goroutine"]
+    Decoder["CellDecoder"]
+    Encoder["CellEncoder"]
+    CircTbl["CircuitTable (map)"]
+    GC["GC Cleaner (60s)"]
+  end
+
+  ListenerR --> ConnR
+  ConnR --> Decoder
+  Decoder --> CircTbl
+  CircTbl --> Encoder
+  Encoder --> ConnR
+  GC --> CircTbl
+
+  subgraph NextHop["Next Relay / HS"]
+    style NextHop fill:#f0f5ff
+    Upstream["net.Conn"]
+  end
+  Encoder -- forward --> Upstream
+```
 
 #### 1.2.3 `ptor-hidden`
 
@@ -66,6 +148,22 @@ go_ptor は「多段暗号による秘匿通信を“最小の部品数”と“
 > - 公開鍵をハッシュして 52 文字の .ptor を生成：
 >   addr := base32.StdEncoding.EncodeToString(sha3.Sum256(pub)[:]) + ".ptor"
 
+```mermaid
+flowchart LR
+  subgraph HS["ptor-hidden (on Exit host)"]
+    style HS fill:#f6ffed
+    KeyMgr["KeyManager (ED25519)"]
+    AddrGen["HiddenAddr (.ptor)"]
+    HSListener["Relay Listener :5003"]
+    ProxyLoop["TCP Proxy → :8080"]
+    LocalSvc["Local HTTP :8080"]
+  end
+
+  KeyMgr --> AddrGen
+  HSListener --> ProxyLoop
+  ProxyLoop --> LocalSvc
+```
+
 #### 1.2.4 `ptor-dir`
 
 | 観点           | 内容                                                        |
@@ -75,6 +173,19 @@ go_ptor は「多段暗号による秘匿通信を“最小の部品数”と“
 | **キャッシュ** | client 側はメモリ + `~/.ptor/cache.json`                    |
 | **配布方法**   | HTTP または `file://` パス。学習環境なら GitHub Gist でも可 |
 
+```mermaid
+flowchart LR
+  subgraph Dir["ptor-dir"]
+    style Dir fill:#fff0f6
+    APISrv["HTTP Server :7000"]
+    JSONStore["JSON Files (relays.json, hidden.json)"]
+    Signer["(optional) Ed25519 Signer"]
+  end
+
+  APISrv -- serve --> JSONStore
+  Signer -- sign --> JSONStore
+```
+
 #### 1.2.5 `ptor-keygen`
 
 | 観点       | 内容                                       |
@@ -82,6 +193,15 @@ go_ptor は「多段暗号による秘匿通信を“最小の部品数”と“
 | **生成**   | `rsa.GenerateKey(rand.Reader, 2048)`       |
 | **保存**   | `x509.MarshalPKCS1PrivateKey` → PEM        |
 | **対称鍵** | Circuit 時に `crypto/rand` で 32 byte 生成 |
+
+```mermaid
+flowchart LR
+  Keygen["ptor-keygen CLI"]
+  Keygen --> RSAgen["rsa.GenerateKey()"]
+  Keygen --> EDgen["ed25519.GenerateKey()"]
+  RSAgen -- write PEM --> FileRSA["relay.pem"]
+  EDgen -- write PEM --> FileED["hidden.pem"]
+```
 
 ### 1.3 ゴルーチン / チャネル設計
 
