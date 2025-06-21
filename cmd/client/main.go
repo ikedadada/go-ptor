@@ -1,56 +1,76 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"flag"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"log"
 	"net"
+	"strconv"
+
+	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/domain/value_object"
+	infraRepo "ikedadada/go-ptor/internal/infrastructure/repository"
+	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
+	"ikedadada/go-ptor/internal/usecase"
+	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
 func main() {
 	entry := flag.String("entry", "127.0.0.1:5000", "entry relay address")
 	hops := flag.Int("hops", 3, "number of hops")
-	dirURL := flag.String("dir", "", "directory service URL")
 	flag.Parse()
 
-	fmt.Printf("building circuit via %s with %d hops (dir=%s)\n", *entry, *hops, *dirURL)
-	cir, err := buildCircuit(*hops)
+	// --- repositories & services ---
+	relayRepo := infraRepo.NewRelayRepo()
+	circuitRepo := infraRepo.NewCircuitRepo()
+
+	host, portStr, err := net.SplitHostPort(*entry)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer cir.Close()
+	p, _ := strconv.Atoi(portStr)
+	ep, _ := value_object.NewEndpoint(host, uint16(p))
+
+	for i := 0; i < *hops; i++ {
+		rid, _ := value_object.NewRelayID(uuid.NewString())
+		key, _ := rsa.GenerateKey(rand.Reader, 2048)
+		rel := entity.NewRelay(rid, ep, value_object.RSAPubKey{&key.PublicKey})
+		rel.SetOnline()
+		_ = relayRepo.Save(rel)
+	}
+
+	builder := useSvc.NewCircuitBuildService(relayRepo, circuitRepo)
+	buildUC := usecase.NewBuildCircuitUseCase(builder)
+
+	out, err := buildUC.Handle(usecase.BuildCircuitInput{Hops: *hops})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Circuit built:", out.CircuitID)
+
+	tx := &infraSvc.MemTransmitter{Out: make(chan string, 10)}
+	openUC := usecase.NewOpenStreamInteractor(circuitRepo)
+	closeUC := usecase.NewCloseStreamInteractor(circuitRepo, tx)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:9050")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("SOCKS5 proxy listening on", ln.Addr())
+	log.Println("SOCKS5 proxy listening on", ln.Addr())
 	for {
 		c, err := ln.Accept()
 		if err != nil {
 			continue
 		}
-		go HandleSOCKS(c, cir.Dial)
+		go handleSOCKS(c, out.CircuitID, openUC, closeUC)
 	}
 }
 
-// ---- minimal circuit stub ----------------------------------------------
-
-type circuit struct{}
-
-func buildCircuit(hops int) (*circuit, error) {
-	// In a full implementation this would establish multi-hop encryption.
-	fmt.Printf("circuit constructed with %d hops\n", hops)
-	return &circuit{}, nil
-}
-
-func (c *circuit) Dial(addr string) (net.Conn, error) { return net.Dial("tcp", addr) }
-func (c *circuit) Close() error                       { return nil }
-
-// ---- minimal SOCKS5 handler --------------------------------------------
-
-func HandleSOCKS(conn net.Conn, dial func(string) (net.Conn, error)) {
+func handleSOCKS(conn net.Conn, circuitID string, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase) {
 	defer conn.Close()
 
 	var buf [262]byte
@@ -94,7 +114,13 @@ func HandleSOCKS(conn net.Conn, dial func(string) (net.Conn, error)) {
 	port := int(buf[0])<<8 | int(buf[1])
 	addr := fmt.Sprintf("%s:%d", host, port)
 
-	target, err := dial(addr)
+	stOut, err := open.Handle(usecase.OpenStreamInput{CircuitID: circuitID})
+	if err != nil {
+		return
+	}
+	sid := stOut.StreamID
+
+	target, err := net.Dial("tcp", addr)
 	if err != nil {
 		conn.Write([]byte{5, 1, 0, 1, 0, 0, 0, 0, 0, 0})
 		return
@@ -104,4 +130,6 @@ func HandleSOCKS(conn net.Conn, dial func(string) (net.Conn, error)) {
 
 	go io.Copy(target, conn)
 	io.Copy(conn, target)
+
+	_, _ = close.Handle(usecase.CloseStreamInput{CircuitID: circuitID, StreamID: sid})
 }

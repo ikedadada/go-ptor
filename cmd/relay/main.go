@@ -1,11 +1,17 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"io"
 	"log"
 	"net"
+
+	"github.com/google/uuid"
+	"ikedadada/go-ptor/internal/domain/value_object"
 )
+
+const hdr = 20
 
 func main() {
 	listen := flag.String("listen", ":5000", "listen address")
@@ -27,11 +33,41 @@ func main() {
 
 func handleConn(c net.Conn) {
 	defer c.Close()
-	buf := make([]byte, 512)
 	for {
-		if _, err := io.ReadFull(c, buf); err != nil {
+		cell, err := readCell(c)
+		if err != nil {
+			if err != io.EOF {
+				log.Println("read cell:", err)
+			}
 			return
 		}
-		// Placeholder for cell decoding and forwarding logic
+		log.Printf("cell cid=%s sid=%d end=%v len=%d", cell.circID.String(), cell.streamID.UInt16(), cell.end, len(cell.data))
 	}
+}
+
+type simpleCell struct {
+	circID   value_object.CircuitID
+	streamID value_object.StreamID
+	data     []byte
+	end      bool
+}
+
+func readCell(r io.Reader) (simpleCell, error) {
+	var hdrBuf [hdr]byte
+	if _, err := io.ReadFull(r, hdrBuf[:]); err != nil {
+		return simpleCell{}, err
+	}
+	var id uuid.UUID
+	copy(id[:], hdrBuf[:16])
+	cid, _ := value_object.CircuitIDFrom(id.String())
+	sid, _ := value_object.StreamIDFrom(binary.BigEndian.Uint16(hdrBuf[16:18]))
+	l := binary.BigEndian.Uint16(hdrBuf[18:20])
+	if l == 0xFFFF {
+		return simpleCell{circID: cid, streamID: sid, end: true}, nil
+	}
+	buf := make([]byte, int(l))
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return simpleCell{}, err
+	}
+	return simpleCell{circID: cid, streamID: sid, data: buf}, nil
 }
