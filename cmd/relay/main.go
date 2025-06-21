@@ -7,8 +7,9 @@ import (
 	"log"
 	"net"
 
-	"github.com/google/uuid"
 	"ikedadada/go-ptor/internal/domain/value_object"
+
+	"github.com/google/uuid"
 )
 
 const hdr = 20

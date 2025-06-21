@@ -17,6 +17,7 @@ import (
 func main() {
 	keyPath := flag.String("key", "hidden.pem", "ED25519 private key")
 	listen := flag.String("listen", ":5000", "relay listen address")
+	httpAddr := flag.String("http", "127.0.0.1:8080", "HTTP service address")
 	flag.Parse()
 
 	priv, err := loadEDPriv(*keyPath)
@@ -26,7 +27,7 @@ func main() {
 	addr := value_object.NewHiddenAddr(priv.Public().(ed25519.PublicKey))
 	fmt.Println("Hidden address:", addr.String())
 
-	go http.ListenAndServe("127.0.0.1:8080", demoMux())
+	go http.ListenAndServe(*httpAddr, demoMux())
 
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
