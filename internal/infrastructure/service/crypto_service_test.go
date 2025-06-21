@@ -1,11 +1,11 @@
-package crypto_test
+package service_test
 
 import (
 	"crypto/rand"
 	"crypto/rsa"
 	"testing"
 
-	"ikedadada/go-ptor/internal/infrastructure/crypto"
+	"ikedadada/go-ptor/internal/infrastructure/service"
 )
 
 func TestAESRoundTrip(t *testing.T) {
@@ -18,11 +18,12 @@ func TestAESRoundTrip(t *testing.T) {
 		t.Fatalf("rand: %v", err)
 	}
 	plain := []byte("hello")
-	enc, err := crypto.AESSeal(key, nonce, plain)
+	svc := service.NewCryptoService()
+	enc, err := svc.AESSeal(key, nonce, plain)
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
-	out, err := crypto.AESOpen(key, nonce, enc)
+	out, err := svc.AESOpen(key, nonce, enc)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -37,11 +38,12 @@ func TestRSARoundTrip(t *testing.T) {
 		t.Fatalf("gen key: %v", err)
 	}
 	msg := []byte("secret")
-	enc, err := crypto.RSAEncrypt(&priv.PublicKey, msg)
+	svc := service.NewCryptoService()
+	enc, err := svc.RSAEncrypt(&priv.PublicKey, msg)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
-	out, err := crypto.RSADecrypt(priv, enc)
+	out, err := svc.RSADecrypt(priv, enc)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
 	}
