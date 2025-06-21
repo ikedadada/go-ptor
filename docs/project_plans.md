@@ -542,8 +542,7 @@ for {
 │   ├── domain/       // Core models and business logic
 │   ├── usecase/      // Application-specific orchestration logic
 │   ├── handler/      // External interfaces (e.g., HTTP APIs)
-│   ├── infrastructure/ // External systems (DB, APIs, etc.)
-│   └── util/         // General-purpose helpers (non-core utilities)
+│   └── infrastructure/ // External systems (DB, APIs, etc.)
 └── go.mod
 
 ```
