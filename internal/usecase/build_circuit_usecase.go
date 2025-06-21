@@ -1,9 +1,9 @@
-// file: internal/application/usecase/build_circuit_usecase.go
+// file: internal/usecase/build_circuit_usecase.go
 package usecase
 
 import (
-	"ikedadada/go-ptor/internal/application/service"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 // ---------- DTO ----------

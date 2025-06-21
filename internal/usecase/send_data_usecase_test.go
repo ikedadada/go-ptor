@@ -4,11 +4,11 @@ import (
 	"errors"
 	"testing"
 
-	"ikedadada/go-ptor/internal/application/service"
-	"ikedadada/go-ptor/internal/application/usecase"
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/usecase"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 type mockCircuitRepoSend struct {

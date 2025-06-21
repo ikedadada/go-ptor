@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"ikedadada/go-ptor/internal/application/usecase"
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/usecase"
 )
 
 type mockCircuitRepoShutdown struct {
