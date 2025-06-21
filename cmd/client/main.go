@@ -127,7 +127,14 @@ func handleSOCKS(conn net.Conn, circuitID string, open usecase.OpenStreamUseCase
 		return
 	}
 	port := int(buf[0])<<8 | int(buf[1])
-	addr := fmt.Sprintf("%s:%d", host, port)
+	var addr string
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		// IPv6 address
+		addr = fmt.Sprintf("[%s]:%d", host, port)
+	} else {
+		// IPv4 address or hostname
+		addr = fmt.Sprintf("%s:%d", host, port)
+	}
 
 	stOut, err := open.Handle(usecase.OpenStreamInput{CircuitID: circuitID})
 	if err != nil {
