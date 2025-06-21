@@ -10,9 +10,15 @@ import (
 )
 
 func TestRSAPubKey_Table(t *testing.T) {
-	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
 	pub := &key.PublicKey
-	pkixBytes, _ := x509.MarshalPKIXPublicKey(pub)
+	pkixBytes, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		t.Fatalf("marshal pkix: %v", err)
+	}
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pkixBytes})
 	tests := []struct {
 		name       string

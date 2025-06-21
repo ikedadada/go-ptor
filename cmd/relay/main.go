@@ -59,8 +59,14 @@ func readCell(r io.Reader) (simpleCell, error) {
 	}
 	var id uuid.UUID
 	copy(id[:], hdrBuf[:16])
-	cid, _ := value_object.CircuitIDFrom(id.String())
-	sid, _ := value_object.StreamIDFrom(binary.BigEndian.Uint16(hdrBuf[16:18]))
+	cid, err := value_object.CircuitIDFrom(id.String())
+	if err != nil {
+		return simpleCell{}, err
+	}
+	sid, err := value_object.StreamIDFrom(binary.BigEndian.Uint16(hdrBuf[16:18]))
+	if err != nil {
+		return simpleCell{}, err
+	}
 	l := binary.BigEndian.Uint16(hdrBuf[18:20])
 	if l == 0xFFFF {
 		return simpleCell{circID: cid, streamID: sid, end: true}, nil

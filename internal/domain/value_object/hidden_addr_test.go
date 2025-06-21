@@ -9,7 +9,10 @@ import (
 )
 
 func TestHiddenAddr_Table(t *testing.T) {
-	pub, _, _ := ed25519.GenerateKey(rand.Reader)
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
 	tests := []struct {
 		name string
 		pub  ed25519.PublicKey

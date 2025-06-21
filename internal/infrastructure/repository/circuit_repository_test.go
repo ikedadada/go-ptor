@@ -10,39 +10,55 @@ import (
 	"ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
-func makeTestCircuit(id value_object.CircuitID) *entity.Circuit {
-	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	key, _ := value_object.NewAESKey()
-	nonce, _ := value_object.NewNonce()
-	c, _ := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
-	return c
+func makeTestCircuit(id value_object.CircuitID) (*entity.Circuit, error) {
+	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	if err != nil {
+		return nil, err
+	}
+	key, err := value_object.NewAESKey()
+	if err != nil {
+		return nil, err
+	}
+	nonce, err := value_object.NewNonce()
+	if err != nil {
+		return nil, err
+	}
+	c, err := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func TestCircuitRepo_Save_Find_Delete(t *testing.T) {
 	repo := repository.NewCircuitRepo()
 	id := value_object.NewCircuitID()
-	c := makeTestCircuit(id)
-	// Save
-	err := repo.Save(c)
+	c, err := makeTestCircuit(id)
 	if err != nil {
-		t.Fatalf("Save error: %v", err)
+		t.Fatalf("setup circuit: %v", err)
 	}
-	// Find
-	got, err := repo.Find(id)
-	if err != nil {
-		t.Fatalf("Find error: %v", err)
-	}
-	if got != c {
-		t.Errorf("Find returned wrong circuit")
-	}
-	// Delete
-	err = repo.Delete(id)
-	if err != nil {
-		t.Fatalf("Delete error: %v", err)
-	}
-	_, err = repo.Find(id)
-	if !errors.Is(err, repoif.ErrNotFound) {
-		t.Errorf("expected ErrNotFound after delete, got %v", err)
+
+	tests := []struct{ name string }{{"ok"}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err = repo.Save(c); err != nil {
+				t.Fatalf("Save error: %v", err)
+			}
+			got, err := repo.Find(id)
+			if err != nil {
+				t.Fatalf("Find error: %v", err)
+			}
+			if got != c {
+				t.Errorf("Find returned wrong circuit")
+			}
+			if err = repo.Delete(id); err != nil {
+				t.Fatalf("Delete error: %v", err)
+			}
+			if _, err = repo.Find(id); !errors.Is(err, repoif.ErrNotFound) {
+				t.Errorf("expected ErrNotFound after delete, got %v", err)
+			}
+		})
 	}
 }
 
@@ -50,27 +66,44 @@ func TestCircuitRepo_ListActive(t *testing.T) {
 	repo := repository.NewCircuitRepo()
 	id1 := value_object.NewCircuitID()
 	id2 := value_object.NewCircuitID()
-	c1 := makeTestCircuit(id1)
-	c2 := makeTestCircuit(id2)
-	repo.Save(c1)
-	repo.Save(c2)
-	list, err := repo.ListActive()
+	c1, err := makeTestCircuit(id1)
 	if err != nil {
-		t.Fatalf("ListActive error: %v", err)
+		t.Fatalf("setup circuit1: %v", err)
 	}
-	if len(list) != 2 {
-		t.Errorf("expected 2 circuits, got %d", len(list))
+	c2, err := makeTestCircuit(id2)
+	if err != nil {
+		t.Fatalf("setup circuit2: %v", err)
 	}
-	found1, found2 := false, false
-	for _, c := range list {
-		if c == c1 {
-			found1 = true
-		}
-		if c == c2 {
-			found2 = true
-		}
-	}
-	if !found1 || !found2 {
-		t.Errorf("not all circuits found in ListActive")
+
+	tests := []struct{ name string }{{"ok"}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := repo.Save(c1); err != nil {
+				t.Fatalf("save c1: %v", err)
+			}
+			if err := repo.Save(c2); err != nil {
+				t.Fatalf("save c2: %v", err)
+			}
+			list, err := repo.ListActive()
+			if err != nil {
+				t.Fatalf("ListActive error: %v", err)
+			}
+			if len(list) != 2 {
+				t.Errorf("expected 2 circuits, got %d", len(list))
+			}
+			found1, found2 := false, false
+			for _, c := range list {
+				if c == c1 {
+					found1 = true
+				}
+				if c == c2 {
+					found2 = true
+				}
+			}
+			if !found1 || !found2 {
+				t.Errorf("not all circuits found in ListActive")
+			}
+		})
 	}
 }

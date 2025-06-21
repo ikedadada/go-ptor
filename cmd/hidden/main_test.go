@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/ed25519"
 	"encoding/pem"
+	"io"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -37,7 +38,10 @@ func TestDemoMux(t *testing.T) {
 	}
 	defer res.Body.Close()
 	buf := make([]byte, 32)
-	n, _ := res.Body.Read(buf)
+	n, err := res.Body.Read(buf)
+	if err != nil && err != io.EOF {
+		t.Fatalf("read body: %v", err)
+	}
 	if string(buf[:n]) != "hello from hidden service" {
 		t.Errorf("unexpected body: %q", buf[:n])
 	}

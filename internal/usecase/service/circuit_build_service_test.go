@@ -39,19 +39,37 @@ func (m *mockCircuitRepo) Find(_ value_object.CircuitID) (*entity.Circuit, error
 func (m *mockCircuitRepo) Delete(_ value_object.CircuitID) error                  { return nil }
 func (m *mockCircuitRepo) ListActive() ([]*entity.Circuit, error)                 { return nil, nil }
 
-func makeTestRelay() *entity.Relay {
-	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	pkix, _ := rsa.GenerateKey(rand.Reader, 2048)
+func makeTestRelay() (*entity.Relay, error) {
+	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	if err != nil {
+		return nil, err
+	}
+	pkix, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
 	pub := &pkix.PublicKey
-	pkixBytes, _ := x509.MarshalPKIXPublicKey(pub)
+	pkixBytes, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return nil, err
+	}
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pkixBytes})
-	rsaPub, _ := value_object.RSAPubKeyFromPEM(pemBytes)
-	end, _ := value_object.NewEndpoint("127.0.0.1", 5000)
-	return entity.NewRelay(relayID, end, rsaPub)
+	rsaPub, err := value_object.RSAPubKeyFromPEM(pemBytes)
+	if err != nil {
+		return nil, err
+	}
+	end, err := value_object.NewEndpoint("127.0.0.1", 5000)
+	if err != nil {
+		return nil, err
+	}
+	return entity.NewRelay(relayID, end, rsaPub), nil
 }
 
 func TestCircuitBuildService_Build_Table(t *testing.T) {
-	relay := makeTestRelay()
+	relay, err := makeTestRelay()
+	if err != nil {
+		t.Fatalf("setup relay: %v", err)
+	}
 	tests := []struct {
 		name       string
 		online     []*entity.Relay
