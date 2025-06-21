@@ -47,7 +47,9 @@ func (b *circuitBuildServiceImpl) Build(hops int) (*entity.Circuit, error) {
 	}
 
 	// 2. 無作為に hops 個選出（重複なし）
-	secureShuffle(relays)
+	if err := secureShuffle(relays); err != nil {
+		return nil, fmt.Errorf("shuffle relays: %w", err)
+	}
 	selected := relays[:hops]
 
 	relayIDs := make([]value_object.RelayID, 0, hops)
@@ -87,11 +89,14 @@ func (b *circuitBuildServiceImpl) Build(hops int) (*entity.Circuit, error) {
 	return circuit, nil
 }
 
-func secureShuffle[T any](xs []T) {
+func secureShuffle[T any](xs []T) error {
 	for i := len(xs) - 1; i > 0; i-- {
 		var b [2]byte
-		rand.Read(b[:]) // crypto/rand
+		if _, err := rand.Read(b[:]); err != nil { // crypto/rand
+			return err
+		}
 		j := int(binary.BigEndian.Uint16(b[:])) % (i + 1)
 		xs[i], xs[j] = xs[j], xs[i]
 	}
+	return nil
 }

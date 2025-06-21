@@ -11,8 +11,12 @@ import (
 func TestAESRoundTrip(t *testing.T) {
 	var key [32]byte
 	var nonce [12]byte
-	rand.Read(key[:])
-	rand.Read(nonce[:])
+	if _, err := rand.Read(key[:]); err != nil {
+		t.Fatalf("rand: %v", err)
+	}
+	if _, err := rand.Read(nonce[:]); err != nil {
+		t.Fatalf("rand: %v", err)
+	}
 	plain := []byte("hello")
 	enc, err := crypto.AESSeal(key, nonce, plain)
 	if err != nil {
