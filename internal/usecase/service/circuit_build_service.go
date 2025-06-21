@@ -57,10 +57,16 @@ func (b *circuitBuildServiceImpl) Build(hops int) (*entity.Circuit, error) {
 	for _, r := range selected {
 		relayIDs = append(relayIDs, r.ID())
 
-		k, _ := value_object.NewAESKey() // 32B ランダム
+		k, err := value_object.NewAESKey() // 32B ランダム
+		if err != nil {
+			return nil, fmt.Errorf("generate AES key: %w", err)
+		}
 		keys = append(keys, k)
 
-		n, _ := value_object.NewNonce() // 12B ランダム
+		n, err := value_object.NewNonce() // 12B ランダム
+		if err != nil {
+			return nil, fmt.Errorf("generate nonce: %w", err)
+		}
 		nonces = append(nonces, n)
 	}
 

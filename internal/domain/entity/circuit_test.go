@@ -7,10 +7,22 @@ import (
 )
 
 func TestNewCircuit_Table(t *testing.T) {
-	id, _ := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
-	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	key, _ := value_object.AESKeyFrom(make([]byte, 32))
-	nonce, _ := value_object.NonceFrom(make([]byte, 12))
+	id, err := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
+	if err != nil {
+		t.Fatalf("CircuitIDFrom: %v", err)
+	}
+	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	if err != nil {
+		t.Fatalf("NewRelayID: %v", err)
+	}
+	key, err := value_object.AESKeyFrom(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("AESKeyFrom: %v", err)
+	}
+	nonce, err := value_object.NonceFrom(make([]byte, 12))
+	if err != nil {
+		t.Fatalf("NonceFrom: %v", err)
+	}
 	tests := []struct {
 		name       string
 		relays     []value_object.RelayID
@@ -39,23 +51,47 @@ func TestNewCircuit_Table(t *testing.T) {
 }
 
 func TestCircuit_StreamManagement(t *testing.T) {
-	id, _ := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
-	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	key, _ := value_object.AESKeyFrom(make([]byte, 32))
-	nonce, _ := value_object.NonceFrom(make([]byte, 12))
-	c, _ := entity.NewCircuit(id, []value_object.RelayID{relayID, relayID, relayID}, []value_object.AESKey{key, key, key}, []value_object.Nonce{nonce, nonce, nonce})
-	st, err := c.OpenStream()
+	id, err := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
-		t.Fatalf("OpenStream error: %v", err)
+		t.Fatalf("CircuitIDFrom: %v", err)
 	}
-	if st.Closed {
-		t.Errorf("stream should be open")
+	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	if err != nil {
+		t.Fatalf("NewRelayID: %v", err)
 	}
-	c.CloseStream(st.ID)
-	if !st.Closed {
-		t.Errorf("stream should be closed")
+	key, err := value_object.AESKeyFrom(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("AESKeyFrom: %v", err)
 	}
-	if len(c.ActiveStreams()) != 0 {
-		t.Errorf("no active streams expected")
+	nonce, err := value_object.NonceFrom(make([]byte, 12))
+	if err != nil {
+		t.Fatalf("NonceFrom: %v", err)
+	}
+
+	tests := []struct {
+		name string
+	}{{"open close"}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := entity.NewCircuit(id, []value_object.RelayID{relayID, relayID, relayID}, []value_object.AESKey{key, key, key}, []value_object.Nonce{nonce, nonce, nonce})
+			if err != nil {
+				t.Fatalf("NewCircuit: %v", err)
+			}
+			st, err := c.OpenStream()
+			if err != nil {
+				t.Fatalf("OpenStream error: %v", err)
+			}
+			if st.Closed {
+				t.Errorf("stream should be open")
+			}
+			c.CloseStream(st.ID)
+			if !st.Closed {
+				t.Errorf("stream should be closed")
+			}
+			if len(c.ActiveStreams()) != 0 {
+				t.Errorf("no active streams expected")
+			}
+		})
 	}
 }

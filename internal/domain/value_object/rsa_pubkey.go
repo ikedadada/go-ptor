@@ -22,7 +22,7 @@ func RSAPubKeyFromPEM(pemBytes []byte) (RSAPubKey, error) {
 	if !ok {
 		return RSAPubKey{}, errors.New("not RSA key")
 	}
-	return RSAPubKey{rsaPub}, nil
+	return RSAPubKey{PublicKey: rsaPub}, nil
 }
 
 func (k RSAPubKey) ToPEM() []byte {

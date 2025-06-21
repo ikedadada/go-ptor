@@ -32,15 +32,29 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	p, _ := strconv.Atoi(portStr)
-	ep, _ := value_object.NewEndpoint(host, uint16(p))
+	p, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ep, err := value_object.NewEndpoint(host, uint16(p))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	for i := 0; i < *hops; i++ {
-		rid, _ := value_object.NewRelayID(uuid.NewString())
-		key, _ := rsa.GenerateKey(rand.Reader, 2048)
-		rel := entity.NewRelay(rid, ep, value_object.RSAPubKey{&key.PublicKey})
+		rid, err := value_object.NewRelayID(uuid.NewString())
+		if err != nil {
+			log.Fatal(err)
+		}
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			log.Fatal(err)
+		}
+		rel := entity.NewRelay(rid, ep, value_object.RSAPubKey{PublicKey: &key.PublicKey})
 		rel.SetOnline()
-		_ = relayRepo.Save(rel)
+		if err := relayRepo.Save(rel); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	builder := useSvc.NewCircuitBuildService(relayRepo, circuitRepo)
@@ -131,5 +145,7 @@ func handleSOCKS(conn net.Conn, circuitID string, open usecase.OpenStreamUseCase
 	go io.Copy(target, conn)
 	io.Copy(conn, target)
 
-	_, _ = close.Handle(usecase.CloseStreamInput{CircuitID: circuitID, StreamID: sid})
+	if _, err := close.Handle(usecase.CloseStreamInput{CircuitID: circuitID, StreamID: sid}); err != nil {
+		log.Println("close stream:", err)
+	}
 }

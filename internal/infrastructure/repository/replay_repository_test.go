@@ -1,6 +1,8 @@
 package repository_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	"testing"
 
@@ -10,24 +12,36 @@ import (
 	"ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
-func makeTestRelay(status entity.RelayStatus, idStr string) *entity.Relay {
-	relayID, _ := value_object.NewRelayID(idStr)
-	end, _ := value_object.NewEndpoint("127.0.0.1", 5000)
-	pk, _ := value_object.RSAPubKeyFromPEM([]byte("-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7\n-----END PUBLIC KEY-----\n"))
-	rel := entity.NewRelay(relayID, end, pk)
+func makeTestRelay(status entity.RelayStatus, idStr string) (*entity.Relay, error) {
+	relayID, err := value_object.NewRelayID(idStr)
+	if err != nil {
+		return nil, err
+	}
+	end, err := value_object.NewEndpoint("127.0.0.1", 5000)
+	if err != nil {
+		return nil, err
+	}
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+	rel := entity.NewRelay(relayID, end, value_object.RSAPubKey{PublicKey: &key.PublicKey})
 	switch status {
 	case entity.Online:
 		rel.SetOnline()
 	case entity.Offline:
 		rel.SetOffline()
 	}
-	return rel
+	return rel, nil
 }
 
 func TestRelayRepo_Save_FindByID(t *testing.T) {
 	repo := repository.NewRelayRepo()
-	rel := makeTestRelay(entity.Online, "550e8400-e29b-41d4-a716-446655440000")
-	err := repo.Save(rel)
+	rel, err := makeTestRelay(entity.Online, "550e8400-e29b-41d4-a716-446655440000")
+	if err != nil {
+		t.Fatalf("setup relay: %v", err)
+	}
+	err = repo.Save(rel)
 	if err != nil {
 		t.Fatalf("Save error: %v", err)
 	}
@@ -42,8 +56,11 @@ func TestRelayRepo_Save_FindByID(t *testing.T) {
 
 func TestRelayRepo_FindByID_NotFound(t *testing.T) {
 	repo := repository.NewRelayRepo()
-	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440001")
-	_, err := repo.FindByID(relayID)
+	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440001")
+	if err != nil {
+		t.Fatalf("NewRelayID: %v", err)
+	}
+	_, err = repo.FindByID(relayID)
 	if !errors.Is(err, repoif.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -51,10 +68,20 @@ func TestRelayRepo_FindByID_NotFound(t *testing.T) {
 
 func TestRelayRepo_AllOnline(t *testing.T) {
 	repo := repository.NewRelayRepo()
-	on := makeTestRelay(entity.Online, "550e8400-e29b-41d4-a716-446655440000")
-	off := makeTestRelay(entity.Offline, "550e8400-e29b-41d4-a716-446655440001")
-	repo.Save(on)
-	repo.Save(off)
+	on, err := makeTestRelay(entity.Online, "550e8400-e29b-41d4-a716-446655440000")
+	if err != nil {
+		t.Fatalf("setup on relay: %v", err)
+	}
+	off, err := makeTestRelay(entity.Offline, "550e8400-e29b-41d4-a716-446655440001")
+	if err != nil {
+		t.Fatalf("setup off relay: %v", err)
+	}
+	if err := repo.Save(on); err != nil {
+		t.Fatalf("Save on: %v", err)
+	}
+	if err := repo.Save(off); err != nil {
+		t.Fatalf("Save off: %v", err)
+	}
 	list, err := repo.AllOnline()
 	if err != nil {
 		t.Fatalf("AllOnline error: %v", err)

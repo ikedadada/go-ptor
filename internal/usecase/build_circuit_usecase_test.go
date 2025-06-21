@@ -18,13 +18,17 @@ func (m *mockBuildService) Build(hops int) (*entity.Circuit, error) {
 }
 
 func TestBuildCircuitUseCase_Handle_Table(t *testing.T) {
+	circuit, err := makeTestCircuit()
+	if err != nil {
+		t.Fatalf("setup circuit: %v", err)
+	}
 	tests := []struct {
 		name       string
 		circuit    *entity.Circuit
 		err        error
 		expectsErr bool
 	}{
-		{"ok", makeTestCircuit(), nil, false},
+		{"ok", circuit, nil, false},
 		{"error", nil, errors.New("fail"), true},
 	}
 	for _, tt := range tests {

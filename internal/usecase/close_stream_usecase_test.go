@@ -35,8 +35,14 @@ func (m *mockTransmitterClose) SendData(c value_object.CircuitID, s value_object
 }
 
 func TestCloseStreamInteractor_Handle(t *testing.T) {
-	circuit := makeTestCircuit()
-	st, _ := circuit.OpenStream()
+	circuit, err := makeTestCircuit()
+	if err != nil {
+		t.Fatalf("setup circuit: %v", err)
+	}
+	st, err := circuit.OpenStream()
+	if err != nil {
+		t.Fatalf("open stream: %v", err)
+	}
 
 	tests := []struct {
 		name       string

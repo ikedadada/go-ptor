@@ -44,21 +44,41 @@ func (m *mockTransmitterShutdown) SendData(c value_object.CircuitID, s value_obj
 	return nil
 }
 
-func makeTestCircuitShutdown() *entity.Circuit {
-	id, _ := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
-	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	key, _ := value_object.NewAESKey()
-	nonce, _ := value_object.NewNonce()
-	c, _ := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
-	st1, _ := c.OpenStream()
-	st2, _ := c.OpenStream()
-	_ = st1
-	_ = st2
-	return c
+func makeTestCircuitShutdown() (*entity.Circuit, error) {
+	id, err := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
+	if err != nil {
+		return nil, err
+	}
+	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	if err != nil {
+		return nil, err
+	}
+	key, err := value_object.NewAESKey()
+	if err != nil {
+		return nil, err
+	}
+	nonce, err := value_object.NewNonce()
+	if err != nil {
+		return nil, err
+	}
+	c, err := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := c.OpenStream(); err != nil {
+		return nil, err
+	}
+	if _, err := c.OpenStream(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func TestShutdownCircuitInteractor_Handle(t *testing.T) {
-	circuit := makeTestCircuitShutdown()
+	circuit, err := makeTestCircuitShutdown()
+	if err != nil {
+		t.Fatalf("setup circuit: %v", err)
+	}
 	cid := circuit.ID().String()
 
 	t.Run("ok", func(t *testing.T) {
