@@ -1,0 +1,97 @@
+package usecase_test
+
+import (
+	"errors"
+	"testing"
+
+	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/usecase"
+)
+
+type mockRepoDestroy struct {
+	err  error
+	del  value_object.CircuitID
+	circ *entity.Circuit
+}
+
+func (m *mockRepoDestroy) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+	return m.circ, nil
+}
+func (m *mockRepoDestroy) Save(*entity.Circuit) error             { return nil }
+func (m *mockRepoDestroy) Delete(id value_object.CircuitID) error { m.del = id; return m.err }
+func (m *mockRepoDestroy) ListActive() ([]*entity.Circuit, error) { return nil, nil }
+
+type mockTxDestroy struct {
+	err     error
+	destroy value_object.CircuitID
+}
+
+func (m *mockTxDestroy) SendData(value_object.CircuitID, value_object.StreamID, []byte) error {
+	return nil
+}
+func (m *mockTxDestroy) SendEnd(value_object.CircuitID, value_object.StreamID) error { return nil }
+func (m *mockTxDestroy) SendDestroy(c value_object.CircuitID) error {
+	m.destroy = c
+	return m.err
+}
+
+func makeCircuitForDestroy() (*entity.Circuit, error) {
+	id := value_object.NewCircuitID()
+	rid, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
+	return entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+}
+
+func TestDestroyCircuitUsecase(t *testing.T) {
+	cir, err := makeCircuitForDestroy()
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	cid := cir.ID().String()
+
+	t.Run("ok", func(t *testing.T) {
+		repo := &mockRepoDestroy{}
+		tx := &mockTxDestroy{}
+		uc := usecase.NewDestroyCircuitUsecase(repo, tx)
+		out, err := uc.Handle(usecase.DestroyCircuitInput{CircuitID: cid})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !out.Aborted {
+			t.Errorf("expected aborted true")
+		}
+		if repo.del.String() != cid || tx.destroy.String() != cid {
+			t.Errorf("expected tx and repo with cid")
+		}
+	})
+
+	t.Run("bad id", func(t *testing.T) {
+		uc := usecase.NewDestroyCircuitUsecase(&mockRepoDestroy{}, &mockTxDestroy{})
+		_, err := uc.Handle(usecase.DestroyCircuitInput{CircuitID: "bad"})
+		if err == nil {
+			t.Errorf("expected error")
+		}
+	})
+
+	t.Run("tx error", func(t *testing.T) {
+		repo := &mockRepoDestroy{}
+		tx := &mockTxDestroy{err: errors.New("fail")}
+		uc := usecase.NewDestroyCircuitUsecase(repo, tx)
+		_, err := uc.Handle(usecase.DestroyCircuitInput{CircuitID: cid})
+		if err == nil {
+			t.Errorf("expected error")
+		}
+	})
+
+	t.Run("delete error", func(t *testing.T) {
+		repo := &mockRepoDestroy{err: errors.New("fail")}
+		tx := &mockTxDestroy{}
+		uc := usecase.NewDestroyCircuitUsecase(repo, tx)
+		_, err := uc.Handle(usecase.DestroyCircuitInput{CircuitID: cid})
+		if err == nil {
+			t.Errorf("expected error")
+		}
+	})
+}

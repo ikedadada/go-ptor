@@ -33,6 +33,7 @@ func (m *mockTransmitterSend) SendData(c value_object.CircuitID, s value_object.
 func (m *mockTransmitterSend) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
 	return nil
 }
+func (m *mockTransmitterSend) SendDestroy(value_object.CircuitID) error { return nil }
 
 func TestSendDataInteractor_Handle(t *testing.T) {
 	circuit, err := makeTestCircuit()

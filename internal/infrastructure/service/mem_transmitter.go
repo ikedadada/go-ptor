@@ -24,3 +24,7 @@ func (tx *MemTransmitter) SendEnd(c value_object.CircuitID, s value_object.Strea
 	tx.Out <- fmt.Sprintf("END  cid=%s sid=%d", c, s)
 	return nil
 }
+func (tx *MemTransmitter) SendDestroy(c value_object.CircuitID) error {
+	tx.Out <- fmt.Sprintf("DESTROY cid=%s", c)
+	return nil
+}
