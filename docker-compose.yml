@@ -1,0 +1,73 @@
+version: '3.8'
+services:
+  relay1:
+    build:
+      context: .
+      dockerfile: docker/relay/Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./docker/relay/relay1.pem:/relay.pem:ro
+    networks:
+      - ptor
+
+  relay2:
+    build:
+      context: .
+      dockerfile: docker/relay/Dockerfile
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./docker/relay/relay2.pem:/relay.pem:ro
+    networks:
+      - ptor
+
+  relay3:
+    build:
+      context: .
+      dockerfile: docker/relay/Dockerfile
+    ports:
+      - "5002:5000"
+    volumes:
+      - ./docker/relay/relay3.pem:/relay.pem:ro
+    networks:
+      - ptor
+
+  directory:
+    build:
+      context: .
+      dockerfile: docker/directory/Dockerfile
+    ports:
+      - "8081:8081"
+    networks:
+      - ptor
+
+  hidden:
+    build:
+      context: .
+      dockerfile: docker/hidden/Dockerfile
+    ports:
+      - "5003:5000"
+      - "8080:8080"
+    depends_on:
+      - relay3
+    networks:
+      - ptor
+
+  client:
+    build:
+      context: .
+      dockerfile: docker/client/Dockerfile
+    ports:
+      - "9050:9050"
+    depends_on:
+      - relay1
+      - relay2
+      - relay3
+      - directory
+    networks:
+      - ptor
+
+networks:
+  ptor:
+    driver: bridge
