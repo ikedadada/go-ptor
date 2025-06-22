@@ -17,7 +17,7 @@ func NewMemDialer() useSvc.CircuitDialer { return &MemDialer{} }
 
 func (MemDialer) Dial(string) (net.Conn, error)                      { return dummyConn{}, nil }
 func (MemDialer) SendCell(net.Conn, entity.Cell) error               { return nil }
-func (MemDialer) WaitAck(net.Conn) error                             { return nil }
+func (MemDialer) WaitCreated(net.Conn) ([]byte, error)               { return make([]byte, 32), nil }
 func (MemDialer) SendDestroy(net.Conn, value_object.CircuitID) error { return nil }
 
 // dummyConn implements net.Conn but does nothing.

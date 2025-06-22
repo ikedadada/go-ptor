@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 
@@ -35,10 +36,20 @@ func (TCPDialer) SendCell(conn net.Conn, c entity.Cell) error {
 	return err
 }
 
-func (TCPDialer) WaitAck(conn net.Conn) error {
-	var buf [20]byte
-	_, err := io.ReadFull(conn, buf[:])
-	return err
+func (TCPDialer) WaitCreated(conn net.Conn) ([]byte, error) {
+	var hdr [20]byte
+	if _, err := io.ReadFull(conn, hdr[:]); err != nil {
+		return nil, err
+	}
+	l := binary.BigEndian.Uint16(hdr[18:20])
+	if l == 0 {
+		return nil, fmt.Errorf("no payload")
+	}
+	payload := make([]byte, l)
+	if _, err := io.ReadFull(conn, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
 }
 
 func (TCPDialer) SendDestroy(conn net.Conn, cid value_object.CircuitID) error {

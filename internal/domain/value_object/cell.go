@@ -16,6 +16,7 @@ const (
 	CmdDestroy  byte = 0x05
 	CmdBegin    byte = 0x06
 	CmdBeginAck byte = 0x07
+	CmdCreated  byte = 0x08
 
 	MaxPayloadSize = MaxCellSize - headerOverhead
 )

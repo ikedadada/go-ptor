@@ -3,10 +3,14 @@ package service
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"fmt"
+	"io"
+
+	"golang.org/x/crypto/hkdf"
 
 	"ikedadada/go-ptor/internal/usecase/service"
 )
@@ -78,4 +82,39 @@ func (c *cryptoServiceImpl) AESMultiOpen(keys [][32]byte, nonces [][12]byte, enc
 		}
 	}
 	return out, nil
+}
+
+func (*cryptoServiceImpl) X25519Generate() (priv, pub []byte, err error) {
+	curve := ecdh.X25519()
+	kp, err := curve.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	return kp.Bytes(), kp.PublicKey().Bytes(), nil
+}
+
+func (*cryptoServiceImpl) X25519Shared(privBytes, pubBytes []byte) ([]byte, error) {
+	curve := ecdh.X25519()
+	priv, err := curve.NewPrivateKey(privBytes)
+	if err != nil {
+		return nil, err
+	}
+	pub, err := curve.NewPublicKey(pubBytes)
+	if err != nil {
+		return nil, err
+	}
+	return priv.ECDH(pub)
+}
+
+func (*cryptoServiceImpl) DeriveKeyNonce(secret []byte) ([32]byte, [12]byte, error) {
+	var key [32]byte
+	var nonce [12]byte
+	hk := hkdf.New(sha256.New, secret, nil, []byte("go-ptor"))
+	if _, err := io.ReadFull(hk, key[:]); err != nil {
+		return key, nonce, err
+	}
+	if _, err := io.ReadFull(hk, nonce[:]); err != nil {
+		return key, nonce, err
+	}
+	return key, nonce, nil
 }

@@ -6,9 +6,10 @@ import (
 )
 
 // ExtendPayload carries the information needed to extend a circuit to the next hop.
+// ExtendPayload carries the next hop address and the client's public key.
 type ExtendPayload struct {
-	NextHop string
-	EncKey  []byte
+	NextHop   string
+	ClientPub [32]byte
 }
 
 // EncodeExtendPayload serializes p using gob.

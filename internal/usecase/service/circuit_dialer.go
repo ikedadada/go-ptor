@@ -13,8 +13,8 @@ type CircuitDialer interface {
 	Dial(addr string) (net.Conn, error)
 	// SendCell writes a cell to the relay.
 	SendCell(conn net.Conn, cell entity.Cell) error
-	// WaitAck blocks until an ACK for the given circuit is received.
-	WaitAck(conn net.Conn) error
+	// WaitCreated waits for a CREATED payload from the relay.
+	WaitCreated(conn net.Conn) ([]byte, error)
 	// SendDestroy notifies the relay about circuit teardown.
 	SendDestroy(conn net.Conn, cid value_object.CircuitID) error
 }
