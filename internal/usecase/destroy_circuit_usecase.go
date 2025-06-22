@@ -35,6 +35,14 @@ func (uc *destroyCircuitUsecaseImpl) Handle(in DestroyCircuitInput) (DestroyCirc
 	if err != nil {
 		return DestroyCircuitOutput{}, fmt.Errorf("parse circuit id: %w", err)
 	}
+	// notify all relays about circuit tear-down
+	cir, err := uc.repo.Find(cid)
+	if err == nil && cir != nil {
+		// send END for each active stream to allow graceful close
+		for _, sid := range cir.ActiveStreams() {
+			_ = uc.tx.SendEnd(cid, sid)
+		}
+	}
 	if err := uc.tx.SendDestroy(cid); err != nil {
 		return DestroyCircuitOutput{}, fmt.Errorf("send destroy: %w", err)
 	}
