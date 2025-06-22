@@ -2,13 +2,24 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+	"github.com/google/uuid"
+	"ikedadada/go-ptor/internal/domain/entity"
 )
 
 func freePort(t *testing.T) string {
@@ -51,15 +62,39 @@ func TestClientMain_E2E(t *testing.T) {
 	defer targetLn.Close()
 	targetAddr := targetLn.Addr().(*net.TCPAddr)
 
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal pkix: %v", err)
+	}
+	pem := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
+	dirData := entity.Directory{
+		Relays: map[string]entity.RelayInfo{
+			uuid.NewString(): {Endpoint: "127.0.0.1:5000", PubKey: pem},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(dirData)
+	}))
+	defer srv.Close()
+
 	exe := buildBin(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, exe, "-hops", "1", "-socks", socks)
+	cmd := exec.CommandContext(ctx, exe, "-hops", "1", "-socks", socks, "-dir", srv.URL)
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start client: %v", err)
 	}
 	defer func() {
 		cancel()
 		cmd.Wait()
+		t.Log(buf.String())
 	}()
 
 	c, err := waitDial(socks, 5*time.Second)

@@ -1,16 +1,14 @@
 package main
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"strconv"
-
-	"github.com/google/uuid"
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
@@ -20,42 +18,70 @@ import (
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
+func fetchDirectory(url string) (entity.Directory, error) {
+	res, err := http.Get(url)
+	if err != nil {
+		return entity.Directory{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return entity.Directory{}, fmt.Errorf("unexpected status: %s", res.Status)
+	}
+	var d entity.Directory
+	if err := json.NewDecoder(res.Body).Decode(&d); err != nil {
+		return entity.Directory{}, err
+	}
+	return d, nil
+}
+
 func main() {
-	entry := flag.String("entry", "127.0.0.1:5000", "entry relay address")
 	hops := flag.Int("hops", 3, "number of hops")
 	socks := flag.String("socks", "127.0.0.1:9050", "SOCKS5 listen address")
+	dirURL := flag.String("dir", "", "directory service URL")
 	flag.Parse()
 
 	// --- repositories & services ---
 	relayRepository := infraRepo.NewRelayRepository()
 	circuitRepository := infraRepo.NewCircuitRepository()
 
-	host, portStr, err := net.SplitHostPort(*entry)
-	if err != nil {
-		log.Fatal(err)
-	}
-	p, err := strconv.Atoi(portStr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	ep, err := value_object.NewEndpoint(host, uint16(p))
-	if err != nil {
-		log.Fatal(err)
+	if *dirURL == "" {
+		log.Fatal("directory URL required")
 	}
 
-	for i := 0; i < *hops; i++ {
-		rid, err := value_object.NewRelayID(uuid.NewString())
+	dir, err := fetchDirectory(*dirURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for id, info := range dir.Relays {
+		rid, err := value_object.NewRelayID(id)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("invalid relay id %q: %v", id, err)
+			continue
 		}
-		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		host, portStr, err := net.SplitHostPort(info.Endpoint)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("parse endpoint %q: %v", info.Endpoint, err)
+			continue
 		}
-		rel := entity.NewRelay(rid, ep, value_object.RSAPubKey{PublicKey: &key.PublicKey})
+		p, err := strconv.Atoi(portStr)
+		if err != nil {
+			log.Printf("parse port %q: %v", portStr, err)
+			continue
+		}
+		ep, err := value_object.NewEndpoint(host, uint16(p))
+		if err != nil {
+			log.Printf("new endpoint: %v", err)
+			continue
+		}
+		pk, err := value_object.RSAPubKeyFromPEM([]byte(info.PubKey))
+		if err != nil {
+			log.Printf("parse pubkey for %s: %v", id, err)
+			continue
+		}
+		rel := entity.NewRelay(rid, ep, pk)
 		rel.SetOnline()
 		if err := relayRepository.Save(rel); err != nil {
-			log.Fatal(err)
+			log.Printf("save relay %s: %v", id, err)
 		}
 	}
 

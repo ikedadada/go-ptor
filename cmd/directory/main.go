@@ -6,36 +6,23 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"ikedadada/go-ptor/internal/domain/entity"
 )
 
-type Directory struct {
-	Relays         map[string]RelayInfo         `json:"relays"`
-	HiddenServices map[string]HiddenServiceInfo `json:"hidden_services"`
-}
-
-type RelayInfo struct {
-	Endpoint string `json:"endpoint"`
-	PubKey   string `json:"pubkey"`
-}
-
-type HiddenServiceInfo struct {
-	Relay  string `json:"relay"`
-	PubKey string `json:"pubkey"`
-}
-
-func loadDirectory(path string) (Directory, error) {
+func loadDirectory(path string) (entity.Directory, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return Directory{}, err
+		return entity.Directory{}, err
 	}
-	var d Directory
+	var d entity.Directory
 	if err := json.Unmarshal(b, &d); err != nil {
-		return Directory{}, err
+		return entity.Directory{}, err
 	}
 	return d, nil
 }
 
-func handler(d Directory) http.Handler {
+func handler(d entity.Directory) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(d)
