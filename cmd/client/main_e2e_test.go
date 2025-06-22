@@ -53,8 +53,38 @@ func buildBin(t *testing.T) string {
 	return exe
 }
 
+func buildRelayBin(t *testing.T) string {
+	exe := filepath.Join(t.TempDir(), "relay")
+	cmd := exec.Command("go", "build", "-o", exe, "../relay")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("build relay: %v", err)
+	}
+	return exe
+}
+
 func TestClientMain_E2E(t *testing.T) {
 	socks := freePort(t)
+	relayAddr := freePort(t)
+
+	relayExe := buildRelayBin(t)
+	rctx, rcancel := context.WithCancel(context.Background())
+	rcmd := exec.CommandContext(rctx, relayExe, "-listen", relayAddr)
+	var rout bytes.Buffer
+	rcmd.Stdout = &rout
+	rcmd.Stderr = &rout
+	if err := rcmd.Start(); err != nil {
+		t.Fatalf("start relay: %v", err)
+	}
+	defer func() {
+		rcancel()
+		rcmd.Wait()
+		t.Log("relay log:", rout.String())
+	}()
+
+	if _, err := waitDial(relayAddr, 5*time.Second); err != nil {
+		t.Fatalf("dial relay: %v", err)
+	}
+
 	targetLn, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("target listen: %v", err)
@@ -73,7 +103,7 @@ func TestClientMain_E2E(t *testing.T) {
 	pem := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
 	dirData := entity.Directory{
 		Relays: map[string]entity.RelayInfo{
-			uuid.NewString(): {Endpoint: "127.0.0.1:5000", PubKey: pem},
+			uuid.NewString(): {Endpoint: relayAddr, PubKey: pem},
 		},
 	}
 	mux := http.NewServeMux()

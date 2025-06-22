@@ -20,19 +20,13 @@ func NewTCPDialer() useSvc.CircuitDialer { return &TCPDialer{} }
 func (TCPDialer) Dial(addr string) (net.Conn, error) { return net.Dial("tcp", addr) }
 
 func (TCPDialer) SendCell(conn net.Conn, c entity.Cell) error {
-	var hdr [20]byte
-	copy(hdr[:16], c.CircID.Bytes())
-	binary.BigEndian.PutUint16(hdr[16:18], c.StreamID.UInt16())
-	if c.End {
-		binary.BigEndian.PutUint16(hdr[18:20], 0xFFFF)
-		_, err := conn.Write(hdr[:])
+	cell := value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.Version, Payload: c.Data}
+	buf, err := value_object.Encode(cell)
+	if err != nil {
 		return err
 	}
-	binary.BigEndian.PutUint16(hdr[18:20], uint16(len(c.Data)))
-	if _, err := conn.Write(hdr[:]); err != nil {
-		return err
-	}
-	_, err := conn.Write(c.Data)
+	packet := append(c.CircID.Bytes(), buf...)
+	_, err = conn.Write(packet)
 	return err
 }
 
