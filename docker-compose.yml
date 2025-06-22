@@ -68,6 +68,7 @@ services:
       - relay2
       - relay3
       - directory
+    command: ["-dir", "http://directory:8081"]
     networks:
       - ptor
 
