@@ -1,9 +1,12 @@
 package entity_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"testing"
+
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	"testing"
 )
 
 func TestNewCircuit_Table(t *testing.T) {
@@ -23,6 +26,7 @@ func TestNewCircuit_Table(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NonceFrom: %v", err)
 	}
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	tests := []struct {
 		name       string
 		relays     []value_object.RelayID
@@ -36,7 +40,7 @@ func TestNewCircuit_Table(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := entity.NewCircuit(id, tt.relays, tt.keys, tt.nonces)
+			c, err := entity.NewCircuit(id, tt.relays, tt.keys, tt.nonces, priv)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")
 			}
@@ -74,7 +78,8 @@ func TestCircuit_StreamManagement(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := entity.NewCircuit(id, []value_object.RelayID{relayID, relayID, relayID}, []value_object.AESKey{key, key, key}, []value_object.Nonce{nonce, nonce, nonce})
+			priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+			c, err := entity.NewCircuit(id, []value_object.RelayID{relayID, relayID, relayID}, []value_object.AESKey{key, key, key}, []value_object.Nonce{nonce, nonce, nonce}, priv)
 			if err != nil {
 				t.Fatalf("NewCircuit: %v", err)
 			}

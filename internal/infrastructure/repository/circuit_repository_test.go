@@ -1,6 +1,8 @@
 package repository_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	"testing"
 
@@ -23,7 +25,11 @@ func makeTestCircuit(id value_object.CircuitID) (*entity.Circuit, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+	c, err := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, err
 	}
@@ -57,6 +63,9 @@ func TestCircuitRepo_Save_Find_Delete(t *testing.T) {
 			}
 			if _, err = repo.Find(id); !errors.Is(err, repoif.ErrNotFound) {
 				t.Errorf("expected ErrNotFound after delete, got %v", err)
+			}
+			if c.RSAPrivate() != nil {
+				t.Errorf("rsa key not wiped")
 			}
 		})
 	}
