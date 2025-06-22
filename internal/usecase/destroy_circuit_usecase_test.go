@@ -25,12 +25,16 @@ func (m *mockRepoDestroy) ListActive() ([]*entity.Circuit, error) { return nil, 
 type mockTxDestroy struct {
 	err     error
 	destroy value_object.CircuitID
+	ends    []value_object.StreamID
 }
 
 func (m *mockTxDestroy) SendData(value_object.CircuitID, value_object.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTxDestroy) SendEnd(value_object.CircuitID, value_object.StreamID) error { return nil }
+func (m *mockTxDestroy) SendEnd(_ value_object.CircuitID, s value_object.StreamID) error {
+	m.ends = append(m.ends, s)
+	return nil
+}
 func (m *mockTxDestroy) SendDestroy(c value_object.CircuitID) error {
 	m.destroy = c
 	return m.err
@@ -41,7 +45,14 @@ func makeCircuitForDestroy() (*entity.Circuit, error) {
 	rid, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
-	return entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+	c, err := entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := c.OpenStream(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func TestDestroyCircuitUsecase(t *testing.T) {
@@ -52,7 +63,7 @@ func TestDestroyCircuitUsecase(t *testing.T) {
 	cid := cir.ID().String()
 
 	t.Run("ok", func(t *testing.T) {
-		repo := &mockRepoDestroy{}
+		repo := &mockRepoDestroy{circ: cir}
 		tx := &mockTxDestroy{}
 		uc := usecase.NewDestroyCircuitUsecase(repo, tx)
 		out, err := uc.Handle(usecase.DestroyCircuitInput{CircuitID: cid})
@@ -64,6 +75,9 @@ func TestDestroyCircuitUsecase(t *testing.T) {
 		}
 		if repo.del.String() != cid || tx.destroy.String() != cid {
 			t.Errorf("expected tx and repo with cid")
+		}
+		if len(tx.ends) != 1 {
+			t.Errorf("expected 1 SendEnd call, got %d", len(tx.ends))
 		}
 	})
 
