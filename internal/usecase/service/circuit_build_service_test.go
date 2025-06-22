@@ -98,6 +98,9 @@ func TestCircuitBuildService_Build_Table(t *testing.T) {
 			if !tt.expectsErr && circuit == nil {
 				t.Errorf("expected circuit instance")
 			}
+			if !tt.expectsErr && circuit.RSAPrivate() == nil {
+				t.Errorf("expected rsa key")
+			}
 		})
 	}
 }

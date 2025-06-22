@@ -1,6 +1,8 @@
 package usecase_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
@@ -27,7 +29,8 @@ func makeCircuitForEnd() (*entity.Circuit, value_object.StreamID, error) {
 	rid, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
-	cir, err := entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	cir, err := entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, 0, err
 	}

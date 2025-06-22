@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"sync"
@@ -24,16 +25,20 @@ type Circuit struct {
 
 	keys   map[int]value_object.AESKey // per-hop AES key
 	nonces map[int]value_object.Nonce  // per-hop Nonce
+	priv   *rsa.PrivateKey
 	strmMu sync.RWMutex
 	stream map[value_object.StreamID]*StreamState
 }
 
 // NewCircuit は 3 ホップ分の RelayID と鍵束を受け取って生成。
 func NewCircuit(id value_object.CircuitID, relays []value_object.RelayID,
-	keys []value_object.AESKey, nonces []value_object.Nonce) (*Circuit, error) {
+	keys []value_object.AESKey, nonces []value_object.Nonce, priv *rsa.PrivateKey) (*Circuit, error) {
 
 	if len(relays) == 0 || len(relays) != len(keys) || len(keys) != len(nonces) {
 		return nil, errors.New("hops / keys / nonces length mismatch")
+	}
+	if priv == nil {
+		return nil, errors.New("rsa key required")
 	}
 	keyMap := make(map[int]value_object.AESKey, len(keys))
 	ncMap := make(map[int]value_object.Nonce, len(nonces))
@@ -46,6 +51,7 @@ func NewCircuit(id value_object.CircuitID, relays []value_object.RelayID,
 		hops:   relays,
 		keys:   keyMap,
 		nonces: ncMap,
+		priv:   priv,
 		stream: make(map[value_object.StreamID]*StreamState),
 	}, nil
 }
@@ -59,6 +65,24 @@ func (c *Circuit) Hops() []value_object.RelayID {
 }
 func (c *Circuit) HopKey(idx int) value_object.AESKey  { return c.keys[idx] }
 func (c *Circuit) HopNonce(idx int) value_object.Nonce { return c.nonces[idx] }
+func (c *Circuit) RSAPrivate() *rsa.PrivateKey         { return c.priv }
+func (c *Circuit) RSAPublic() *rsa.PublicKey {
+	if c.priv == nil {
+		return nil
+	}
+	return &c.priv.PublicKey
+}
+
+// WipeKeys zeroes all symmetric keys and forgets the RSA private key.
+func (c *Circuit) WipeKeys() {
+	for i := range c.keys {
+		c.keys[i] = value_object.AESKey{}
+	}
+	for i := range c.nonces {
+		c.nonces[i] = value_object.Nonce{}
+	}
+	c.priv = nil
+}
 
 // ----------------------------------------------------------------------------
 // ストリーム管理

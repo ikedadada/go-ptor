@@ -1,6 +1,8 @@
 package usecase_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	"testing"
 
@@ -39,7 +41,11 @@ func makeTestCircuit() (*entity.Circuit, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+	c, err := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, err
 	}

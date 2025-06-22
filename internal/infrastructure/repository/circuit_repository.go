@@ -35,7 +35,10 @@ func (r *circuitRepository) Find(id value_object.CircuitID) (*entity.Circuit, er
 func (r *circuitRepository) Delete(id value_object.CircuitID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.m, id)
+	if c, ok := r.m[id]; ok {
+		c.WipeKeys()
+		delete(r.m, id)
+	}
 	return nil
 }
 func (r *circuitRepository) ListActive() ([]*entity.Circuit, error) {

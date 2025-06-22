@@ -2,6 +2,7 @@ package service
 
 import (
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/binary"
 	"fmt"
 
@@ -69,11 +70,16 @@ func (b *circuitBuildServiceImpl) Build(hops int) (*entity.Circuit, error) {
 		nonces = append(nonces, n)
 	}
 
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, fmt.Errorf("generate rsa key: %w", err)
+	}
+
 	// 3. CircuitID 生成
 	cid := value_object.NewCircuitID()
 
 	// 4. Circuit エンティティ生成
-	circuit, err := entity.NewCircuit(cid, relayIDs, keys, nonces)
+	circuit, err := entity.NewCircuit(cid, relayIDs, keys, nonces, priv)
 	if err != nil {
 		return nil, err
 	}
