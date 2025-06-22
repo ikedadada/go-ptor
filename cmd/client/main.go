@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
@@ -32,6 +33,27 @@ func fetchDirectory(url string) (entity.Directory, error) {
 		return entity.Directory{}, err
 	}
 	return d, nil
+}
+
+// resolveAddress returns the dial address for the given host and port.
+// If host ends with .ptor, it looks up the hidden service in the directory
+// and returns the endpoint of the designated exit relay.
+func resolveAddress(dir entity.Directory, host string, port int) (string, error) {
+	if strings.HasSuffix(host, ".ptor") {
+		hs, ok := dir.HiddenServices[strings.ToUpper(host)]
+		if !ok {
+			return "", fmt.Errorf("hidden service not found: %s", host)
+		}
+		rel, ok := dir.Relays[hs.Relay]
+		if !ok {
+			return "", fmt.Errorf("relay %s not found", hs.Relay)
+		}
+		return rel.Endpoint, nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		return fmt.Sprintf("[%s]:%d", host, port), nil
+	}
+	return fmt.Sprintf("%s:%d", host, port), nil
 }
 
 func main() {
@@ -109,11 +131,11 @@ func main() {
 			log.Println("accept error:", err)
 			continue
 		}
-		go handleSOCKS(c, out.CircuitID, openUC, closeUC)
+		go handleSOCKS(c, dir, out.CircuitID, openUC, closeUC)
 	}
 }
 
-func handleSOCKS(conn net.Conn, circuitID string, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase) {
+func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase) {
 	defer conn.Close()
 
 	var buf [262]byte
@@ -164,13 +186,12 @@ func handleSOCKS(conn net.Conn, circuitID string, open usecase.OpenStreamUseCase
 		return
 	}
 	port := int(buf[0])<<8 | int(buf[1])
-	var addr string
-	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
-		// IPv6 address
-		addr = fmt.Sprintf("[%s]:%d", host, port)
-	} else {
-		// IPv4 address or hostname
-		addr = fmt.Sprintf("%s:%d", host, port)
+
+	addr, err := resolveAddress(dir, host, port)
+	if err != nil {
+		log.Println("resolve address:", err)
+		conn.Write([]byte{5, 4, 0, 1, 0, 0, 0, 0, 0, 0})
+		return
 	}
 
 	stOut, err := open.Handle(usecase.OpenStreamInput{CircuitID: circuitID})
