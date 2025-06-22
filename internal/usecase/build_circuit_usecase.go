@@ -22,8 +22,7 @@ type BuildCircuitOutput struct {
 	AddrList  []value_object.Endpoint `json:"endpoints"`
 }
 
-// ---------- UseCase インターフェース ----------
-
+// BuildCircuitUseCase creates new circuits according to the input parameters.
 type BuildCircuitUseCase interface {
 	Handle(input BuildCircuitInput) (BuildCircuitOutput, error)
 }
@@ -34,7 +33,7 @@ type buildCircuitUseCaseImpl struct {
 	builder service.CircuitBuildService
 }
 
-// コンストラクタ
+// NewBuildCircuitUseCase creates a use case for building circuits.
 func NewBuildCircuitUseCase(b service.CircuitBuildService) BuildCircuitUseCase {
 	return &buildCircuitUseCaseImpl{builder: b}
 }

@@ -3,6 +3,7 @@ package usecase_test
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -30,8 +31,13 @@ func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 	cid := value_object.NewCircuitID()
 	cell := entity.Cell{CircID: cid, StreamID: 0, Data: payload}
 
-	up1, _ := net.Pipe()
+	up1, up2 := net.Pipe()
 	go uc.Handle(up1, cell)
+
+	buf := make([]byte, 20)
+	if _, err := io.ReadFull(up2, buf); err != nil {
+		t.Fatalf("read ack: %v", err)
+	}
 
 	// ensure entry created
 	time.Sleep(10 * time.Millisecond)

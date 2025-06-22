@@ -7,15 +7,18 @@ import (
 	"ikedadada/go-ptor/internal/domain/value_object"
 )
 
+// OpenStreamInput specifies which circuit to open a new stream for.
 type OpenStreamInput struct {
 	CircuitID string
 }
 
+// OpenStreamOutput holds the created stream identifier.
 type OpenStreamOutput struct {
 	CircuitID string `json:"circuit_id"`
 	StreamID  uint16 `json:"stream_id"`
 }
 
+// OpenStreamUseCase opens a new stream on an existing circuit.
 type OpenStreamUseCase interface {
 	Handle(in OpenStreamInput) (OpenStreamOutput, error)
 }
@@ -25,6 +28,7 @@ type openStreamUseCaseImpl struct {
 	cr repository.CircuitRepository
 }
 
+// NewOpenStreamUsecase returns a use case to open streams on circuits.
 func NewOpenStreamUsecase(cr repository.CircuitRepository) *openStreamUseCaseImpl {
 	return &openStreamUseCaseImpl{cr: cr}
 }

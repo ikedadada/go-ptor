@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"crypto/rsa"
+	"encoding/binary"
 	"errors"
 	"net"
 
@@ -22,6 +23,7 @@ type relayUsecaseImpl struct {
 	crypto service.CryptoService
 }
 
+// NewRelayUseCase returns a use case to process relay connections.
 func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c service.CryptoService) RelayUseCase {
 	return &relayUsecaseImpl{priv: priv, repo: repo, crypto: c}
 }
@@ -81,5 +83,16 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cell entity.Cell) error {
 		return err
 	}
 	st := entity.NewConnState(key, up, down)
-	return uc.repo.Add(cell.CircID, st)
+	if err := uc.repo.Add(cell.CircID, st); err != nil {
+		return err
+	}
+	return sendAck(up, cell.CircID)
+}
+
+func sendAck(w net.Conn, cid value_object.CircuitID) error {
+	var buf [20]byte
+	copy(buf[:16], cid.Bytes())
+	binary.BigEndian.PutUint16(buf[18:20], 0)
+	_, err := w.Write(buf[:])
+	return err
 }
