@@ -23,7 +23,9 @@ func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 
 	// prepare extend cell
 	key, _ := value_object.NewAESKey()
-	enc, _ := crypto.RSAEncrypt(&priv.PublicKey, key[:])
+	nonce, _ := value_object.NewNonce()
+	msg := append(key[:], nonce[:]...)
+	enc, _ := crypto.RSAEncrypt(&priv.PublicKey, msg)
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer ln.Close()
 	go func() { ln.Accept() }()
@@ -68,9 +70,10 @@ func TestRelayUseCase_Connect(t *testing.T) {
 	uc := usecase.NewRelayUseCase(priv, repo, crypto)
 
 	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
 	cid := value_object.NewCircuitID()
 	up1, up2 := net.Pipe()
-	st := entity.NewConnState(key, up1, nil)
+	st := entity.NewConnState(key, nonce, up1, nil)
 	repo.Add(cid, st)
 
 	t.Run("ok", func(t *testing.T) {
