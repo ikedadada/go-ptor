@@ -12,22 +12,30 @@ import (
 )
 
 type mockRepoDestroy struct {
-	err  error
-	del  value_object.CircuitID
-	circ *entity.Circuit
+	err    error
+	del    value_object.CircuitID
+	circ   *entity.Circuit
+	events *[]string
 }
 
 func (m *mockRepoDestroy) Find(id value_object.CircuitID) (*entity.Circuit, error) {
 	return m.circ, nil
 }
-func (m *mockRepoDestroy) Save(*entity.Circuit) error             { return nil }
-func (m *mockRepoDestroy) Delete(id value_object.CircuitID) error { m.del = id; return m.err }
+func (m *mockRepoDestroy) Save(*entity.Circuit) error { return nil }
+func (m *mockRepoDestroy) Delete(id value_object.CircuitID) error {
+	m.del = id
+	if m.events != nil {
+		*m.events = append(*m.events, "delete")
+	}
+	return m.err
+}
 func (m *mockRepoDestroy) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
 type mockTxDestroy struct {
 	err     error
 	destroy value_object.CircuitID
 	ends    []value_object.StreamID
+	events  *[]string
 }
 
 func (m *mockTxDestroy) SendData(value_object.CircuitID, value_object.StreamID, []byte) error {
@@ -38,6 +46,9 @@ func (m *mockTxDestroy) SendEnd(_ value_object.CircuitID, s value_object.StreamI
 	return nil
 }
 func (m *mockTxDestroy) SendDestroy(c value_object.CircuitID) error {
+	if m.events != nil {
+		*m.events = append(*m.events, "destroy")
+	}
 	m.destroy = c
 	return m.err
 }
@@ -100,6 +111,9 @@ func TestDestroyCircuitUsecase(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected error")
 		}
+		if repo.del != (value_object.CircuitID{}) {
+			t.Errorf("delete should not be called on tx error")
+		}
 	})
 
 	t.Run("delete error", func(t *testing.T) {
@@ -109,6 +123,19 @@ func TestDestroyCircuitUsecase(t *testing.T) {
 		_, err := uc.Handle(usecase.DestroyCircuitInput{CircuitID: cid})
 		if err == nil {
 			t.Errorf("expected error")
+		}
+	})
+
+	t.Run("order", func(t *testing.T) {
+		events := []string{}
+		repo := &mockRepoDestroy{circ: cir, events: &events}
+		tx := &mockTxDestroy{events: &events}
+		uc := usecase.NewDestroyCircuitUsecase(repo, tx)
+		if _, err := uc.Handle(usecase.DestroyCircuitInput{CircuitID: cid}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(events) != 2 || events[0] != "destroy" || events[1] != "delete" {
+			t.Errorf("wrong call order: %v", events)
 		}
 	})
 }

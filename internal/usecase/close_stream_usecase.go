@@ -52,5 +52,10 @@ func (uc *closeStreamUsecaseImpl) Handle(in CloseStreamInput) (CloseStreamOutput
 	if err := uc.tx.SendEnd(cid, sid); err != nil { // END セル送信
 		return CloseStreamOutput{}, err
 	}
+	if len(cir.ActiveStreams()) == 0 { // 最後のストリームなら制御 END
+		if err := uc.tx.SendEnd(cid, 0); err != nil {
+			return CloseStreamOutput{}, err
+		}
+	}
 	return CloseStreamOutput{Closed: true}, nil
 }

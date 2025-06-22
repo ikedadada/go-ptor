@@ -43,6 +43,16 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 
 	switch cell.Cmd {
 	case value_object.CmdEnd:
+		if st.Down() != nil {
+			_ = forwardCell(st.Down(), cid, cell)
+		}
+		_ = uc.repo.Delete(cid)
+		return nil
+	case value_object.CmdDestroy:
+		if st.Down() != nil {
+			c := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.Version}
+			_ = forwardCell(st.Down(), cid, c)
+		}
 		_ = uc.repo.Delete(cid)
 		return nil
 	case value_object.CmdConnect:
@@ -122,5 +132,15 @@ func sendAck(w net.Conn, cid value_object.CircuitID) error {
 	copy(buf[:16], cid.Bytes())
 	binary.BigEndian.PutUint16(buf[18:20], 0)
 	_, err := w.Write(buf[:])
+	return err
+}
+
+func forwardCell(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
+	buf, err := value_object.Encode(*cell)
+	if err != nil {
+		return err
+	}
+	out := append(cid.Bytes(), buf...)
+	_, err = w.Write(out)
 	return err
 }
