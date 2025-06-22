@@ -22,6 +22,7 @@ type relayUsecaseImpl struct {
 	crypto service.CryptoService
 }
 
+// NewRelayUseCase returns a use case to process relay connections.
 func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c service.CryptoService) RelayUseCase {
 	return &relayUsecaseImpl{priv: priv, repo: repo, crypto: c}
 }

@@ -8,15 +8,18 @@ import (
 	"ikedadada/go-ptor/internal/usecase/service"
 )
 
+// CloseStreamInput identifies the stream to close on a circuit.
 type CloseStreamInput struct {
 	CircuitID string
 	StreamID  uint16
 }
 
+// CloseStreamOutput indicates whether the close operation succeeded.
 type CloseStreamOutput struct {
 	Closed bool `json:"closed"`
 }
 
+// CloseStreamUseCase terminates an existing stream.
 type CloseStreamUseCase interface {
 	Handle(in CloseStreamInput) (CloseStreamOutput, error)
 }
@@ -26,6 +29,7 @@ type closeStreamUsecaseImpl struct {
 	tx service.CircuitTransmitter
 }
 
+// NewCloseStreamUsecase creates a use case for closing streams.
 func NewCloseStreamUsecase(cr repository.CircuitRepository, tx service.CircuitTransmitter) CloseStreamUseCase {
 	return &closeStreamUsecaseImpl{cr: cr, tx: tx}
 }
