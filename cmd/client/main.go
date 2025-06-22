@@ -135,7 +135,9 @@ func main() {
 		}
 	}
 
-	builder := useSvc.NewCircuitBuildService(relayRepository, circuitRepository)
+	dialer := infraSvc.NewMemDialer()
+	cryptoSvc := infraSvc.NewCryptoService()
+	builder := useSvc.NewCircuitBuildService(relayRepository, circuitRepository, dialer, cryptoSvc)
 	buildUC := usecase.NewBuildCircuitUseCase(builder)
 
 	out, err := buildUC.Handle(usecase.BuildCircuitInput{Hops: *hops})

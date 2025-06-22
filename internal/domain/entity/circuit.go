@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 
 	"ikedadada/go-ptor/internal/domain/value_object"
@@ -26,6 +27,7 @@ type Circuit struct {
 	keys   map[int]value_object.AESKey // per-hop AES key
 	nonces map[int]value_object.Nonce  // per-hop Nonce
 	priv   *rsa.PrivateKey
+	conns  []net.Conn
 	strmMu sync.RWMutex
 	stream map[value_object.StreamID]*StreamState
 }
@@ -52,6 +54,7 @@ func NewCircuit(id value_object.CircuitID, relays []value_object.RelayID,
 		keys:   keyMap,
 		nonces: ncMap,
 		priv:   priv,
+		conns:  make([]net.Conn, len(relays)),
 		stream: make(map[value_object.StreamID]*StreamState),
 	}, nil
 }
@@ -115,6 +118,21 @@ func (c *Circuit) ActiveStreams() []value_object.StreamID {
 		}
 	}
 	return out
+}
+
+// Conn returns the connection for the given hop index.
+func (c *Circuit) Conn(i int) net.Conn {
+	if i < len(c.conns) {
+		return c.conns[i]
+	}
+	return nil
+}
+
+// SetConn stores the connection for a hop.
+func (c *Circuit) SetConn(i int, cconn net.Conn) {
+	if i < len(c.conns) {
+		c.conns[i] = cconn
+	}
 }
 
 // ----------------------------------------------------------------------------
