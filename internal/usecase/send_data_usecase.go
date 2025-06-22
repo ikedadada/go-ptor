@@ -7,16 +7,19 @@ import (
 	"ikedadada/go-ptor/internal/usecase/service"
 )
 
+// SendDataInput represents application data to forward on a circuit.
 type SendDataInput struct {
 	CircuitID string
 	StreamID  uint16
 	Data      []byte
 }
 
+// SendDataOutput reports how many bytes were sent.
 type SendDataOutput struct {
 	BytesSent int `json:"bytes_sent"`
 }
 
+// SendDataUseCase forwards data through a circuit.
 type SendDataUseCase interface {
 	Handle(in SendDataInput) (SendDataOutput, error)
 }
@@ -26,6 +29,7 @@ type sendDataUseCaseImpl struct {
 	tx service.CircuitTransmitter
 }
 
+// NewSendDataUsecase returns a use case for sending data cells.
 func NewSendDataUsecase(cr repository.CircuitRepository, tx service.CircuitTransmitter) SendDataUseCase {
 	return &sendDataUseCaseImpl{cr: cr, tx: tx}
 }

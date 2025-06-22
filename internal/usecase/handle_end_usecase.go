@@ -13,10 +13,12 @@ type HandleEndInput struct {
 	StreamID  uint16 // 0 means control END
 }
 
+// HandleEndOutput reports the result of closing streams.
 type HandleEndOutput struct {
 	Closed bool `json:"closed"`
 }
 
+// HandleEndUseCase processes incoming END cells.
 type HandleEndUseCase interface {
 	Handle(in HandleEndInput) (HandleEndOutput, error)
 }
@@ -25,6 +27,7 @@ type handleEndUsecaseImpl struct {
 	repo repository.CircuitRepository
 }
 
+// NewHandleEndUsecase creates a use case for handling END cells.
 func NewHandleEndUsecase(r repository.CircuitRepository) HandleEndUseCase {
 	return &handleEndUsecaseImpl{repo: r}
 }

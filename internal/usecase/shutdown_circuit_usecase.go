@@ -8,14 +8,17 @@ import (
 	"ikedadada/go-ptor/internal/usecase/service"
 )
 
+// ShutdownCircuitInput specifies which circuit to close gracefully.
 type ShutdownCircuitInput struct {
 	CircuitID string
 }
 
+// ShutdownCircuitOutput reports whether shutdown succeeded.
 type ShutdownCircuitOutput struct {
 	Success bool `json:"success"`
 }
 
+// ShutdownCircuitUseCase closes all streams and removes the circuit.
 type ShutdownCircuitUseCase interface {
 	Handle(in ShutdownCircuitInput) (ShutdownCircuitOutput, error)
 }
@@ -25,6 +28,7 @@ type shutdownCircuitUseCaseImpl struct {
 	tx   service.CircuitTransmitter
 }
 
+// NewShutdownCircuitUsecase returns a use case for orderly circuit shutdown.
 func NewShutdownCircuitUsecase(cr repository.CircuitRepository, tx service.CircuitTransmitter) ShutdownCircuitUseCase {
 	return &shutdownCircuitUseCaseImpl{repo: cr, tx: tx}
 }

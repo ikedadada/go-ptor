@@ -13,10 +13,12 @@ type DestroyCircuitInput struct {
 	CircuitID string
 }
 
+// DestroyCircuitOutput is returned after a circuit is aborted.
 type DestroyCircuitOutput struct {
 	Aborted bool `json:"aborted"`
 }
 
+// DestroyCircuitUseCase aborts an existing circuit.
 type DestroyCircuitUseCase interface {
 	Handle(in DestroyCircuitInput) (DestroyCircuitOutput, error)
 }
@@ -26,6 +28,7 @@ type destroyCircuitUsecaseImpl struct {
 	tx   service.CircuitTransmitter
 }
 
+// NewDestroyCircuitUsecase returns a use case to abort circuits.
 func NewDestroyCircuitUsecase(r repository.CircuitRepository, tx service.CircuitTransmitter) DestroyCircuitUseCase {
 	return &destroyCircuitUsecaseImpl{repo: r, tx: tx}
 }
