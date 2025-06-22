@@ -1,9 +1,9 @@
 package service_test
 
 import (
-        "net"
-        "testing"
-        "time"
+	"net"
+	"testing"
+	"time"
 
 	"ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/infrastructure/service"
@@ -53,66 +53,66 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	sid := value_object.NewStreamIDAuto()
 	data := []byte("hello")
 
-        err = tx.SendData(cid, sid, data)
-        if err != nil {
-                t.Fatalf("SendData error: %v", err)
-        }
-        select {
-        case msg := <-received:
-                if len(msg) != value_object.MaxCellSize {
-                        t.Fatalf("unexpected cell size %d", len(msg))
-                }
-                cell, err := value_object.Decode(msg)
-                if err != nil {
-                        t.Fatalf("decode: %v", err)
-                }
-                if cell.Cmd != value_object.CmdData {
-                        t.Errorf("unexpected cmd %d", cell.Cmd)
-                }
-                p, err := value_object.DecodeDataPayload(cell.Payload)
-                if err != nil {
-                        t.Fatalf("payload: %v", err)
-                }
-                if string(p.Data) != string(data) || p.StreamID != sid.UInt16() {
-                        t.Errorf("payload mismatch")
-                }
-        case <-time.After(time.Second):
-                t.Fatal("timeout waiting for SendData")
-        }
+	err = tx.SendData(cid, sid, data)
+	if err != nil {
+		t.Fatalf("SendData error: %v", err)
+	}
+	select {
+	case msg := <-received:
+		if len(msg) != value_object.MaxCellSize {
+			t.Fatalf("unexpected cell size %d", len(msg))
+		}
+		cell, err := value_object.Decode(msg)
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if cell.Cmd != value_object.CmdData {
+			t.Errorf("unexpected cmd %d", cell.Cmd)
+		}
+		p, err := value_object.DecodeDataPayload(cell.Payload)
+		if err != nil {
+			t.Fatalf("payload: %v", err)
+		}
+		if string(p.Data) != string(data) || p.StreamID != sid.UInt16() {
+			t.Errorf("payload mismatch")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for SendData")
+	}
 
-        err = tx.SendEnd(cid, sid)
-        if err != nil {
-                t.Fatalf("SendEnd error: %v", err)
-        }
-        select {
-        case msg := <-received:
-                cell, err := value_object.Decode(msg)
-                if err != nil {
-                        t.Fatalf("decode: %v", err)
-                }
-                if cell.Cmd != value_object.CmdEnd {
-                        t.Errorf("expected END cmd, got %d", cell.Cmd)
-                }
-        case <-time.After(time.Second):
-                t.Fatal("timeout waiting for SendEnd")
-        }
+	err = tx.SendEnd(cid, sid)
+	if err != nil {
+		t.Fatalf("SendEnd error: %v", err)
+	}
+	select {
+	case msg := <-received:
+		cell, err := value_object.Decode(msg)
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if cell.Cmd != value_object.CmdEnd {
+			t.Errorf("expected END cmd, got %d", cell.Cmd)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for SendEnd")
+	}
 
-        err = tx.SendDestroy(cid)
-        if err != nil {
-                t.Fatalf("SendDestroy error: %v", err)
-        }
-        select {
-        case msg := <-received:
-                cell, err := value_object.Decode(msg)
-                if err != nil {
-                        t.Fatalf("decode: %v", err)
-                }
-                if cell.Cmd != value_object.CmdDestroy {
-                        t.Errorf("expected DESTROY cmd, got %d", cell.Cmd)
-                }
-        case <-time.After(time.Second):
-                t.Fatal("timeout waiting for SendDestroy")
-        }
+	err = tx.SendDestroy(cid)
+	if err != nil {
+		t.Fatalf("SendDestroy error: %v", err)
+	}
+	select {
+	case msg := <-received:
+		cell, err := value_object.Decode(msg)
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if cell.Cmd != value_object.CmdDestroy {
+			t.Errorf("expected DESTROY cmd, got %d", cell.Cmd)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for SendDestroy")
+	}
 }
 
 func TestTCPTransmitter_SendData_tooBig_realConn(t *testing.T) {
@@ -124,7 +124,7 @@ func TestTCPTransmitter_SendData_tooBig_realConn(t *testing.T) {
 	}
 	cid := value_object.NewCircuitID()
 	sid := value_object.NewStreamIDAuto()
-        big := make([]byte, value_object.MaxPayloadSize+1)
+	big := make([]byte, value_object.MaxPayloadSize+1)
 	err = tx.SendData(cid, sid, big)
 	if err == nil || err.Error() != "data too big" {
 		t.Errorf("expected data too big error, got %v", err)

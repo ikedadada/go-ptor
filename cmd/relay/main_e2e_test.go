@@ -1,17 +1,17 @@
 package main
 
 import (
-        "bytes"
-        "context"
-        "net"
-        "os/exec"
-        "path/filepath"
-        "strings"
-        "testing"
-        "time"
+	"bytes"
+	"context"
+	"net"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 
-        "github.com/google/uuid"
-        "ikedadada/go-ptor/internal/domain/value_object"
+	"github.com/google/uuid"
+	"ikedadada/go-ptor/internal/domain/value_object"
 )
 
 func freePort(t *testing.T) string {
@@ -65,14 +65,14 @@ func TestRelayMain_E2E(t *testing.T) {
 		t.Fatalf("dial relay: %v", err)
 	}
 
-        cid := uuid.New()
-        sid := uint16(1)
-        data := []byte("ok")
-        inner, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid, Data: data})
-        cellBuf, _ := value_object.Encode(value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: inner})
-        outBuf := append(cid[:], cellBuf...)
-        c.Write(outBuf)
-        c.Close()
+	cid := uuid.New()
+	sid := uint16(1)
+	data := []byte("ok")
+	inner, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid, Data: data})
+	cellBuf, _ := value_object.Encode(value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: inner})
+	outBuf := append(cid[:], cellBuf...)
+	c.Write(outBuf)
+	c.Close()
 
 	time.Sleep(100 * time.Millisecond)
 	cancel()
