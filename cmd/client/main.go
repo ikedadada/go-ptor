@@ -141,7 +141,7 @@ func main() {
 		}
 	}
 
-	dialer := infraSvc.NewMemDialer()
+	dialer := infraSvc.NewTCPDialer()
 	cryptoSvc := infraSvc.NewCryptoService()
 	builder := useSvc.NewCircuitBuildService(relayRepository, circuitRepository, dialer, cryptoSvc)
 	buildUC := usecase.NewBuildCircuitUseCase(builder)
