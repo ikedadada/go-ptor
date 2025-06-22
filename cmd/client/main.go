@@ -118,40 +118,49 @@ func handleSOCKS(conn net.Conn, circuitID string, open usecase.OpenStreamUseCase
 
 	var buf [262]byte
 	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+		log.Println("read SOCKS version:", err)
 		return
 	}
 	n := int(buf[1])
 	if _, err := io.ReadFull(conn, buf[:n]); err != nil {
+		log.Println("read SOCKS methods:", err)
 		return
 	}
 	conn.Write([]byte{5, 0})
 
 	if _, err := io.ReadFull(conn, buf[:4]); err != nil {
+		log.Println("read SOCKS request:", err)
 		return
 	}
 	if buf[1] != 1 {
+		log.Println("unsupported SOCKS command:", buf[1])
 		return
 	}
 	var host string
 	switch buf[3] {
 	case 1:
 		if _, err := io.ReadFull(conn, buf[:4]); err != nil {
+			log.Println("read IPv4 address:", err)
 			return
 		}
 		host = net.IP(buf[:4]).String()
 	case 3:
 		if _, err := io.ReadFull(conn, buf[:1]); err != nil {
+			log.Println("read hostname length:", err)
 			return
 		}
 		l := int(buf[0])
 		if _, err := io.ReadFull(conn, buf[:l]); err != nil {
+			log.Println("read hostname:", err)
 			return
 		}
 		host = string(buf[:l])
 	default:
+		log.Println("unsupported address type:", buf[3])
 		return
 	}
 	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+		log.Println("read port:", err)
 		return
 	}
 	port := int(buf[0])<<8 | int(buf[1])
@@ -166,12 +175,14 @@ func handleSOCKS(conn net.Conn, circuitID string, open usecase.OpenStreamUseCase
 
 	stOut, err := open.Handle(usecase.OpenStreamInput{CircuitID: circuitID})
 	if err != nil {
+		log.Println("open stream:", err)
 		return
 	}
 	sid := stOut.StreamID
 
 	target, err := net.Dial("tcp", addr)
 	if err != nil {
+		log.Println("dial target:", err)
 		conn.Write([]byte{5, 1, 0, 1, 0, 0, 0, 0, 0, 0})
 		return
 	}
