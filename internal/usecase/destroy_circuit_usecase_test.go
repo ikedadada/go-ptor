@@ -41,6 +41,9 @@ type mockTxDestroy struct {
 func (m *mockTxDestroy) SendData(value_object.CircuitID, value_object.StreamID, []byte) error {
 	return nil
 }
+func (m *mockTxDestroy) SendBegin(value_object.CircuitID, value_object.StreamID, []byte) error {
+	return nil
+}
 func (m *mockTxDestroy) SendEnd(_ value_object.CircuitID, s value_object.StreamID) error {
 	m.ends = append(m.ends, s)
 	return nil

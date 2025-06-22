@@ -46,6 +46,13 @@ func (t *TCPTransmitter) SendData(_ value_object.CircuitID, s value_object.Strea
 	return t.send(value_object.CmdData, p)
 }
 
+func (t *TCPTransmitter) SendBegin(_ value_object.CircuitID, _ value_object.StreamID, d []byte) error {
+	if len(d) > value_object.MaxPayloadSize {
+		return fmt.Errorf("data too big")
+	}
+	return t.send(value_object.CmdBegin, d)
+}
+
 func (t *TCPTransmitter) SendEnd(_ value_object.CircuitID, s value_object.StreamID) error {
 	p, err := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: s.UInt16()})
 	if err != nil {

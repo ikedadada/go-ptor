@@ -31,6 +31,9 @@ type mockTransmitterSend struct {
 func (m *mockTransmitterSend) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return m.err
 }
+func (m *mockTransmitterSend) SendBegin(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+	return m.err
+}
 func (m *mockTransmitterSend) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
 	return nil
 }
@@ -54,6 +57,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 		expectsErr bool
 	}{
 		{"ok", &mockCircuitRepoSend{circuit: circuit}, &mockTransmitterSend{}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, false},
+		{"begin", &mockCircuitRepoSend{circuit: circuit}, &mockTransmitterSend{}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("target"), Cmd: value_object.CmdBegin}, false},
 		{"circuit not found", &mockCircuitRepoSend{circuit: nil, err: errors.New("not found")}, &mockTransmitterSend{}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
 		{"bad id", &mockCircuitRepoSend{circuit: nil}, &mockTransmitterSend{}, usecase.SendDataInput{CircuitID: "bad-uuid", StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
 		{"tx error", &mockCircuitRepoSend{circuit: circuit}, &mockTransmitterSend{err: errors.New("fail")}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},

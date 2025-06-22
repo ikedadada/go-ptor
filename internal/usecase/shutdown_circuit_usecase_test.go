@@ -42,6 +42,9 @@ func (m *mockTransmitterShutdown) SendEnd(c value_object.CircuitID, s value_obje
 	}{c, s})
 	return nil
 }
+func (m *mockTransmitterShutdown) SendBegin(value_object.CircuitID, value_object.StreamID, []byte) error {
+	return nil
+}
 func (m *mockTransmitterShutdown) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return nil
 }
