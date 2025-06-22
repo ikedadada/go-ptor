@@ -15,7 +15,7 @@ import (
 func TestCircuitTableRepo_AddFindDelete(t *testing.T) {
 	tbl := repoimpl.NewCircuitTableRepository(time.Second)
 	id := value_object.NewCircuitID()
-	st := entity.NewConnState(value_object.AESKey{}, nil, nil)
+	st := entity.NewConnState(value_object.AESKey{}, value_object.Nonce{}, nil, nil)
 	if err := tbl.Add(id, st); err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestCircuitTableRepo_GC(t *testing.T) {
 	tbl := repoimpl.NewCircuitTableRepository(500 * time.Millisecond)
 	id := value_object.NewCircuitID()
 	up, down := net.Pipe()
-	st := entity.NewConnState(value_object.AESKey{}, up, down)
+	st := entity.NewConnState(value_object.AESKey{}, value_object.Nonce{}, up, down)
 	if err := tbl.Add(id, st); err != nil {
 		t.Fatalf("add: %v", err)
 	}

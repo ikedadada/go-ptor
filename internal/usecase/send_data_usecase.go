@@ -25,13 +25,14 @@ type SendDataUseCase interface {
 }
 
 type sendDataUseCaseImpl struct {
-	cr repository.CircuitRepository
-	tx service.CircuitTransmitter
+	cr     repository.CircuitRepository
+	tx     service.CircuitTransmitter
+	crypto service.CryptoService
 }
 
 // NewSendDataUsecase returns a use case for sending data cells.
-func NewSendDataUsecase(cr repository.CircuitRepository, tx service.CircuitTransmitter) SendDataUseCase {
-	return &sendDataUseCaseImpl{cr: cr, tx: tx}
+func NewSendDataUsecase(cr repository.CircuitRepository, tx service.CircuitTransmitter, c service.CryptoService) SendDataUseCase {
+	return &sendDataUseCaseImpl{cr: cr, tx: tx, crypto: c}
 }
 
 func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) {
@@ -61,8 +62,21 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 		return SendDataOutput{}, fmt.Errorf("stream not active")
 	}
 
-	// 送信
-	if err := uc.tx.SendData(cid, sid, in.Data); err != nil {
+	// onion encrypt payload
+	plain := in.Data
+	keys := make([][32]byte, 0, len(cir.Hops()))
+	nonces := make([][12]byte, 0, len(cir.Hops()))
+	for i := range cir.Hops() {
+		keys = append(keys, cir.HopKey(i))
+		nonces = append(nonces, cir.HopNonce(i))
+	}
+
+	enc, err := uc.crypto.AESMultiSeal(keys, nonces, plain)
+	if err != nil {
+		return SendDataOutput{}, err
+	}
+
+	if err := uc.tx.SendData(cid, sid, enc); err != nil {
 		return SendDataOutput{}, err
 	}
 	return SendDataOutput{BytesSent: len(in.Data)}, nil

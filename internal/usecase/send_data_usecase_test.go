@@ -7,6 +7,7 @@ import (
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
@@ -61,7 +62,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewSendDataUsecase(tt.repo, tt.tx)
+			uc := usecase.NewSendDataUsecase(tt.repo, tt.tx, infraSvc.NewCryptoService())
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")

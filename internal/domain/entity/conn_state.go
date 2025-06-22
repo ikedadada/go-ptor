@@ -9,19 +9,21 @@ import (
 
 // ConnState represents per-circuit connection information held by a relay.
 type ConnState struct {
-	key  value_object.AESKey
-	up   net.Conn
-	down net.Conn
-	last time.Time
+	key   value_object.AESKey
+	nonce value_object.Nonce
+	up    net.Conn
+	down  net.Conn
+	last  time.Time
 }
 
 // NewConnState returns a new ConnState instance.
-func NewConnState(key value_object.AESKey, up, down net.Conn) *ConnState {
-	return &ConnState{key: key, up: up, down: down, last: time.Now()}
+func NewConnState(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn) *ConnState {
+	return &ConnState{key: key, nonce: nonce, up: up, down: down, last: time.Now()}
 }
 
 // Key returns the symmetric key for this circuit hop.
-func (s *ConnState) Key() value_object.AESKey { return s.key }
+func (s *ConnState) Key() value_object.AESKey  { return s.key }
+func (s *ConnState) Nonce() value_object.Nonce { return s.nonce }
 
 // Up returns the upstream connection.
 func (s *ConnState) Up() net.Conn { return s.up }

@@ -48,12 +48,7 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 	case value_object.CmdConnect:
 		return uc.connect(st, cid, cell)
 	case value_object.CmdData:
-		if len(cell.Payload) < 12 {
-			return nil
-		}
-		var nonce [12]byte
-		copy(nonce[:], cell.Payload[:12])
-		dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload[12:])
+		dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
 		if err != nil {
 			return err
 		}
@@ -83,7 +78,7 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 	if st.Down() != nil {
 		st.Down().Close()
 	}
-	newSt := entity.NewConnState(st.Key(), st.Up(), down)
+	newSt := entity.NewConnState(st.Key(), st.Nonce(), st.Up(), down)
 	if err := uc.repo.Add(cid, newSt); err != nil {
 		down.Close()
 		return err
@@ -100,10 +95,14 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell
 	if err != nil {
 		return err
 	}
-	if len(dec) < 32 {
+	if len(dec) < 44 {
 		return nil
 	}
 	key, err := value_object.AESKeyFrom(dec[:32])
+	if err != nil {
+		return err
+	}
+	nonce, err := value_object.NonceFrom(dec[32:44])
 	if err != nil {
 		return err
 	}
@@ -111,7 +110,7 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell
 	if err != nil {
 		return err
 	}
-	st := entity.NewConnState(key, up, down)
+	st := entity.NewConnState(key, nonce, up, down)
 	if err := uc.repo.Add(cid, st); err != nil {
 		return err
 	}
