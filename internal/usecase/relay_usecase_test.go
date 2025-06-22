@@ -8,8 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+        "ikedadada/go-ptor/internal/domain/value_object"
 	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
@@ -29,10 +28,10 @@ func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 	go func() { ln.Accept() }()
 	payload, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{NextHop: ln.Addr().String(), EncKey: enc})
 	cid := value_object.NewCircuitID()
-	cell := entity.Cell{CircID: cid, StreamID: 0, Data: payload}
+        cell := &value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.Version, Payload: payload}
 
 	up1, up2 := net.Pipe()
-	go uc.Handle(up1, cell)
+        go uc.Handle(up1, cid, cell)
 
 	buf := make([]byte, 20)
 	if _, err := io.ReadFull(up2, buf); err != nil {
@@ -55,8 +54,8 @@ func TestRelayUseCase_EndUnknown(t *testing.T) {
 	crypto := infraSvc.NewCryptoService()
 	uc := usecase.NewRelayUseCase(priv, repo, crypto)
 	cid := value_object.NewCircuitID()
-	cell := entity.Cell{CircID: cid, StreamID: 1, End: true}
-	if err := uc.Handle(nil, cell); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+        cell := &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.Version, Payload: nil}
+        if err := uc.Handle(nil, cid, cell); err != nil {
+                t.Fatalf("unexpected error: %v", err)
+        }
 }

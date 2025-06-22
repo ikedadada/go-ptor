@@ -1,20 +1,20 @@
 package usecase
 
 import (
-	"crypto/rsa"
-	"encoding/binary"
-	"errors"
-	"net"
+        "crypto/rsa"
+        "encoding/binary"
+        "errors"
+        "net"
 
-	"ikedadada/go-ptor/internal/domain/entity"
-	repoif "ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/usecase/service"
+        "ikedadada/go-ptor/internal/domain/entity"
+        repoif "ikedadada/go-ptor/internal/domain/repository"
+        "ikedadada/go-ptor/internal/domain/value_object"
+        "ikedadada/go-ptor/internal/usecase/service"
 )
 
 // RelayUseCase processes cells for a single relay connection.
 type RelayUseCase interface {
-	Handle(up net.Conn, cell entity.Cell) error
+        Handle(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error
 }
 
 type relayUsecaseImpl struct {
@@ -28,45 +28,45 @@ func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c
 	return &relayUsecaseImpl{priv: priv, repo: repo, crypto: c}
 }
 
-func (uc *relayUsecaseImpl) Handle(up net.Conn, cell entity.Cell) error {
-	st, err := uc.repo.Find(cell.CircID)
-	switch {
-	case errors.Is(err, repoif.ErrNotFound) && cell.End:
-		// End for an unknown circuit is ignored
-		return nil
-	case errors.Is(err, repoif.ErrNotFound) && cell.StreamID.UInt16() == 0:
-		// new circuit request
-		return uc.extend(up, cell)
-	case err != nil:
-		return err
-	}
+func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
+        st, err := uc.repo.Find(cid)
+        switch {
+        case errors.Is(err, repoif.ErrNotFound) && cell.Cmd == value_object.CmdEnd:
+                // End for an unknown circuit is ignored
+                return nil
+        case errors.Is(err, repoif.ErrNotFound) && cell.Cmd == value_object.CmdExtend:
+                // new circuit request
+                return uc.extend(up, cid, cell)
+        case err != nil:
+                return err
+        }
 
-	if cell.End {
-		// graceful shutdown of an existing circuit
-		_ = uc.repo.Delete(cell.CircID)
-		return nil
-	}
-
-	if len(cell.Data) < 12 {
-		// ignore malformed payload
-		return nil
-	}
-
-	var nonce [12]byte
-	copy(nonce[:], cell.Data[:12])
-	dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Data[12:])
-	if err != nil {
-		return err
-	}
-	_, err = st.Down().Write(dec)
-	return err
+        switch cell.Cmd {
+        case value_object.CmdEnd:
+                _ = uc.repo.Delete(cid)
+                return nil
+        case value_object.CmdData:
+                if len(cell.Payload) < 12 {
+                        return nil
+                }
+                var nonce [12]byte
+                copy(nonce[:], cell.Payload[:12])
+                dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload[12:])
+                if err != nil {
+                        return err
+                }
+                _, err = st.Down().Write(dec)
+                return err
+        default:
+                return nil
+        }
 }
 
-func (uc *relayUsecaseImpl) extend(up net.Conn, cell entity.Cell) error {
-	p, err := value_object.DecodeExtendPayload(cell.Data)
-	if err != nil {
-		return err
-	}
+func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
+        p, err := value_object.DecodeExtendPayload(cell.Payload)
+        if err != nil {
+                return err
+        }
 	dec, err := uc.crypto.RSADecrypt(uc.priv, p.EncKey)
 	if err != nil {
 		return err
@@ -82,11 +82,11 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cell entity.Cell) error {
 	if err != nil {
 		return err
 	}
-	st := entity.NewConnState(key, up, down)
-	if err := uc.repo.Add(cell.CircID, st); err != nil {
-		return err
-	}
-	return sendAck(up, cell.CircID)
+        st := entity.NewConnState(key, up, down)
+        if err := uc.repo.Add(cid, st); err != nil {
+                return err
+        }
+        return sendAck(up, cid)
 }
 
 func sendAck(w net.Conn, cid value_object.CircuitID) error {
