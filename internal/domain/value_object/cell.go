@@ -9,11 +9,13 @@ import (
 const (
 	Version byte = 0x01
 
-	CmdExtend  byte = 0x01
-	CmdConnect byte = 0x02
-	CmdData    byte = 0x03
-	CmdEnd     byte = 0x04
-	CmdDestroy byte = 0x05
+	CmdExtend   byte = 0x01
+	CmdConnect  byte = 0x02
+	CmdData     byte = 0x03
+	CmdEnd      byte = 0x04
+	CmdDestroy  byte = 0x05
+	CmdBegin    byte = 0x06
+	CmdBeginAck byte = 0x07
 
 	MaxPayloadSize = MaxCellSize - headerOverhead
 )
