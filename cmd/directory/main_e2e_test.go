@@ -5,14 +5,16 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+
+	"ikedadada/go-ptor/internal/domain/entity"
 )
 
 func TestDirectoryServer(t *testing.T) {
-	data := Directory{
-		Relays: map[string]RelayInfo{
+	data := entity.Directory{
+		Relays: map[string]entity.RelayInfo{
 			"r1": {Endpoint: "127.0.0.1:5000", PubKey: "pk"},
 		},
-		HiddenServices: map[string]HiddenServiceInfo{
+		HiddenServices: map[string]entity.HiddenServiceInfo{
 			"h1": {Relay: "r1", PubKey: "hpk"},
 		},
 	}
@@ -39,7 +41,7 @@ func TestDirectoryServer(t *testing.T) {
 	}
 	defer res.Body.Close()
 
-	var got Directory
+	var got entity.Directory
 	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
