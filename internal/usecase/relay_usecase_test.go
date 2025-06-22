@@ -63,6 +63,64 @@ func TestRelayUseCase_EndUnknown(t *testing.T) {
 	}
 }
 
+func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	crypto := infraSvc.NewCryptoService()
+	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+
+	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
+	cid := value_object.NewCircuitID()
+
+	t.Run("end", func(t *testing.T) {
+		up1, _ := net.Pipe()
+		down1, down2 := net.Pipe()
+		st := entity.NewConnState(key, nonce, up1, down1)
+		repo.Add(cid, st)
+		cell := &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.Version}
+		errCh := make(chan error, 1)
+		go func() { errCh <- uc.Handle(up1, cid, cell) }()
+		buf := make([]byte, 528)
+		if _, err := io.ReadFull(down2, buf); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if err := <-errCh; err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if buf[16] != value_object.CmdEnd {
+			t.Errorf("forwarded cmd %d", buf[16])
+		}
+		if _, err := repo.Find(cid); err == nil {
+			t.Errorf("entry not removed")
+		}
+	})
+
+	t.Run("destroy", func(t *testing.T) {
+		cid2 := value_object.NewCircuitID()
+		up1, _ := net.Pipe()
+		down1, down2 := net.Pipe()
+		st := entity.NewConnState(key, nonce, up1, down1)
+		repo.Add(cid2, st)
+		cell := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.Version}
+		errCh := make(chan error, 1)
+		go func() { errCh <- uc.Handle(up1, cid2, cell) }()
+		buf := make([]byte, 528)
+		if _, err := io.ReadFull(down2, buf); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if err := <-errCh; err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if buf[16] != value_object.CmdDestroy {
+			t.Errorf("forwarded cmd %d", buf[16])
+		}
+		if _, err := repo.Find(cid2); err == nil {
+			t.Errorf("entry not removed")
+		}
+	})
+}
+
 func TestRelayUseCase_Connect(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)

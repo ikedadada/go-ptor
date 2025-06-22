@@ -24,10 +24,18 @@ func (m *mockCircuitRepoClose) Delete(value_object.CircuitID) error    { return 
 func (m *mockCircuitRepoClose) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
 type mockTransmitterClose struct {
-	err error
+	err  error
+	ends []struct {
+		cid value_object.CircuitID
+		sid value_object.StreamID
+	}
 }
 
 func (m *mockTransmitterClose) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
+	m.ends = append(m.ends, struct {
+		cid value_object.CircuitID
+		sid value_object.StreamID
+	}{c, s})
 	return m.err
 }
 func (m *mockTransmitterClose) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
@@ -70,4 +78,19 @@ func TestCloseStreamInteractor_Handle(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("control end on last stream", func(t *testing.T) {
+		tx := &mockTransmitterClose{}
+		repo := &mockCircuitRepoClose{circuit: circuit}
+		uc := usecase.NewCloseStreamUsecase(repo, tx)
+		if _, err := uc.Handle(usecase.CloseStreamInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16()}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(tx.ends) != 2 {
+			t.Fatalf("expected 2 SendEnd calls, got %d", len(tx.ends))
+		}
+		if tx.ends[1].sid.UInt16() != 0 {
+			t.Errorf("second SendEnd should be control END")
+		}
+	})
 }
