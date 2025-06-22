@@ -6,7 +6,9 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"encoding/pem"
+	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -111,5 +113,20 @@ func loadRSAPriv(path string) (*rsa.PrivateKey, error) {
 	if blk == nil {
 		return nil, io.ErrUnexpectedEOF
 	}
-	return x509.ParsePKCS1PrivateKey(blk.Bytes)
+	switch blk.Type {
+	case "RSA PRIVATE KEY":
+		return x509.ParsePKCS1PrivateKey(blk.Bytes)
+	case "PRIVATE KEY":
+		key, err := x509.ParsePKCS8PrivateKey(blk.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		rsaKey, ok := key.(*rsa.PrivateKey)
+		if !ok {
+			return nil, errors.New("not RSA private key")
+		}
+		return rsaKey, nil
+	default:
+		return nil, fmt.Errorf("unsupported key type %q", blk.Type)
+	}
 }
