@@ -19,20 +19,48 @@ import (
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
-func fetchDirectory(url string) (entity.Directory, error) {
-	res, err := http.Get(url)
+func fetchRelays(base string) (map[string]entity.RelayInfo, error) {
+	res, err := http.Get(strings.TrimRight(base, "/") + "/relays.json")
 	if err != nil {
-		return entity.Directory{}, err
+		return nil, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return entity.Directory{}, fmt.Errorf("unexpected status: %s", res.Status)
+		return nil, fmt.Errorf("unexpected status: %s", res.Status)
 	}
 	var d entity.Directory
 	if err := json.NewDecoder(res.Body).Decode(&d); err != nil {
+		return nil, err
+	}
+	return d.Relays, nil
+}
+
+func fetchHidden(base string) (map[string]entity.HiddenServiceInfo, error) {
+	res, err := http.Get(strings.TrimRight(base, "/") + "/hidden.json")
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %s", res.Status)
+	}
+	var d entity.Directory
+	if err := json.NewDecoder(res.Body).Decode(&d); err != nil {
+		return nil, err
+	}
+	return d.HiddenServices, nil
+}
+
+func fetchDirectory(base string) (entity.Directory, error) {
+	relays, err := fetchRelays(base)
+	if err != nil {
 		return entity.Directory{}, err
 	}
-	return d, nil
+	hidden, err := fetchHidden(base)
+	if err != nil {
+		return entity.Directory{}, err
+	}
+	return entity.Directory{Relays: relays, HiddenServices: hidden}, nil
 }
 
 // resolveAddress returns the dial address for the given host and port.
@@ -59,7 +87,7 @@ func resolveAddress(dir entity.Directory, host string, port int) (string, error)
 func main() {
 	hops := flag.Int("hops", 3, "number of hops")
 	socks := flag.String("socks", ":9050", "SOCKS5 listen address")
-	dirURL := flag.String("dir", "", "directory service URL")
+	dirURL := flag.String("dir", "", "base directory URL")
 	flag.Parse()
 
 	// --- repositories & services ---
@@ -67,7 +95,7 @@ func main() {
 	circuitRepository := infraRepo.NewCircuitRepository()
 
 	if *dirURL == "" {
-		log.Fatal("directory URL required")
+		log.Fatal("base directory URL required")
 	}
 
 	dir, err := fetchDirectory(*dirURL)

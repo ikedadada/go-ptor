@@ -76,10 +76,16 @@ func TestClientMain_E2E(t *testing.T) {
 			uuid.NewString(): {Endpoint: "127.0.0.1:5000", PubKey: pem},
 		},
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/relays.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(dirData)
-	}))
+		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays})
+	})
+	mux.HandleFunc("/hidden.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(entity.Directory{HiddenServices: map[string]entity.HiddenServiceInfo{}})
+	})
+	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	exe := buildBin(t)
