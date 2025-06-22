@@ -1,20 +1,20 @@
 package usecase
 
 import (
-        "crypto/rsa"
-        "encoding/binary"
-        "errors"
-        "net"
+	"crypto/rsa"
+	"encoding/binary"
+	"errors"
+	"net"
 
-        "ikedadada/go-ptor/internal/domain/entity"
-        repoif "ikedadada/go-ptor/internal/domain/repository"
-        "ikedadada/go-ptor/internal/domain/value_object"
-        "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/domain/entity"
+	repoif "ikedadada/go-ptor/internal/domain/repository"
+	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 // RelayUseCase processes cells for a single relay connection.
 type RelayUseCase interface {
-        Handle(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error
+	Handle(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error
 }
 
 type relayUsecaseImpl struct {
@@ -29,44 +29,73 @@ func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c
 }
 
 func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
-        st, err := uc.repo.Find(cid)
-        switch {
-        case errors.Is(err, repoif.ErrNotFound) && cell.Cmd == value_object.CmdEnd:
-                // End for an unknown circuit is ignored
-                return nil
-        case errors.Is(err, repoif.ErrNotFound) && cell.Cmd == value_object.CmdExtend:
-                // new circuit request
-                return uc.extend(up, cid, cell)
-        case err != nil:
-                return err
-        }
+	st, err := uc.repo.Find(cid)
+	switch {
+	case errors.Is(err, repoif.ErrNotFound) && cell.Cmd == value_object.CmdEnd:
+		// End for an unknown circuit is ignored
+		return nil
+	case errors.Is(err, repoif.ErrNotFound) && cell.Cmd == value_object.CmdExtend:
+		// new circuit request
+		return uc.extend(up, cid, cell)
+	case err != nil:
+		return err
+	}
 
-        switch cell.Cmd {
-        case value_object.CmdEnd:
-                _ = uc.repo.Delete(cid)
-                return nil
-        case value_object.CmdData:
-                if len(cell.Payload) < 12 {
-                        return nil
-                }
-                var nonce [12]byte
-                copy(nonce[:], cell.Payload[:12])
-                dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload[12:])
-                if err != nil {
-                        return err
-                }
-                _, err = st.Down().Write(dec)
-                return err
-        default:
-                return nil
-        }
+	switch cell.Cmd {
+	case value_object.CmdEnd:
+		_ = uc.repo.Delete(cid)
+		return nil
+	case value_object.CmdConnect:
+		return uc.connect(st, cid, cell)
+	case value_object.CmdData:
+		if len(cell.Payload) < 12 {
+			return nil
+		}
+		var nonce [12]byte
+		copy(nonce[:], cell.Payload[:12])
+		dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload[12:])
+		if err != nil {
+			return err
+		}
+		_, err = st.Down().Write(dec)
+		return err
+	default:
+		return nil
+	}
+}
+
+func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
+	addr := "127.0.0.1:5003"
+	if len(cell.Payload) > 0 {
+		p, err := value_object.DecodeConnectPayload(cell.Payload)
+		if err != nil {
+			return err
+		}
+		if p.Target != "" {
+			addr = p.Target
+		}
+	}
+
+	down, err := net.Dial("tcp", addr)
+	if err != nil {
+		return err
+	}
+	if st.Down() != nil {
+		st.Down().Close()
+	}
+	newSt := entity.NewConnState(st.Key(), st.Up(), down)
+	if err := uc.repo.Add(cid, newSt); err != nil {
+		down.Close()
+		return err
+	}
+	return sendAck(newSt.Up(), cid)
 }
 
 func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
-        p, err := value_object.DecodeExtendPayload(cell.Payload)
-        if err != nil {
-                return err
-        }
+	p, err := value_object.DecodeExtendPayload(cell.Payload)
+	if err != nil {
+		return err
+	}
 	dec, err := uc.crypto.RSADecrypt(uc.priv, p.EncKey)
 	if err != nil {
 		return err
@@ -82,11 +111,11 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell
 	if err != nil {
 		return err
 	}
-        st := entity.NewConnState(key, up, down)
-        if err := uc.repo.Add(cid, st); err != nil {
-                return err
-        }
-        return sendAck(up, cid)
+	st := entity.NewConnState(key, up, down)
+	if err := uc.repo.Add(cid, st); err != nil {
+		return err
+	}
+	return sendAck(up, cid)
 }
 
 func sendAck(w net.Conn, cid value_object.CircuitID) error {
