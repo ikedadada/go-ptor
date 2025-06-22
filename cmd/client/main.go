@@ -40,7 +40,7 @@ func fetchDirectory(url string) (entity.Directory, error) {
 // and returns the endpoint of the designated exit relay.
 func resolveAddress(dir entity.Directory, host string, port int) (string, error) {
 	if strings.HasSuffix(host, ".ptor") {
-		hs, ok := dir.HiddenServices[strings.ToUpper(host)]
+		hs, ok := dir.HiddenServices[host]
 		if !ok {
 			return "", fmt.Errorf("hidden service not found: %s", host)
 		}
