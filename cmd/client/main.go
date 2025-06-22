@@ -36,7 +36,7 @@ func fetchDirectory(url string) (entity.Directory, error) {
 
 func main() {
 	hops := flag.Int("hops", 3, "number of hops")
-	socks := flag.String("socks", "127.0.0.1:9050", "SOCKS5 listen address")
+	socks := flag.String("socks", ":9050", "SOCKS5 listen address")
 	dirURL := flag.String("dir", "", "directory service URL")
 	flag.Parse()
 
@@ -106,6 +106,7 @@ func main() {
 	for {
 		c, err := ln.Accept()
 		if err != nil {
+			log.Println("accept error:", err)
 			continue
 		}
 		go handleSOCKS(c, out.CircuitID, openUC, closeUC)
