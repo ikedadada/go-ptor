@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"fmt"
 
 	"ikedadada/go-ptor/internal/usecase/service"
 )
@@ -46,4 +47,35 @@ func (*cryptoServiceImpl) AESOpen(key [32]byte, nonce [12]byte, enc []byte) ([]b
 		return nil, err
 	}
 	return gcm.Open(nil, nonce[:], enc, nil)
+}
+
+func (c *cryptoServiceImpl) AESMultiSeal(keys [][32]byte, nonces [][12]byte, plain []byte) ([]byte, error) {
+	if len(keys) != len(nonces) {
+		return nil, fmt.Errorf("keys/nonces length mismatch")
+	}
+	out := make([]byte, len(plain))
+	copy(out, plain)
+	var err error
+	for i := len(keys) - 1; i >= 0; i-- {
+		out, err = c.AESSeal(keys[i], nonces[i], out)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func (c *cryptoServiceImpl) AESMultiOpen(keys [][32]byte, nonces [][12]byte, enc []byte) ([]byte, error) {
+	if len(keys) != len(nonces) {
+		return nil, fmt.Errorf("keys/nonces length mismatch")
+	}
+	out := enc
+	var err error
+	for i := 0; i < len(keys); i++ {
+		out, err = c.AESOpen(keys[i], nonces[i], out)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
