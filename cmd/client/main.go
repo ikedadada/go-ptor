@@ -155,6 +155,8 @@ func main() {
 	tx := infraSvc.NewMemTransmitter(make(chan string, 10))
 	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
 	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, tx)
+	sendUC := usecase.NewSendDataUsecase(circuitRepository, tx, cryptoSvc)
+	endUC := usecase.NewHandleEndUsecase(circuitRepository)
 
 	ln, err := net.Listen("tcp", *socks)
 	if err != nil {
@@ -169,13 +171,13 @@ func main() {
 		}
 		log.Printf("request connection from %s", c.RemoteAddr())
 		go func(conn net.Conn) {
-			handleSOCKS(conn, dir, out.CircuitID, openUC, closeUC)
+			handleSOCKS(conn, dir, out.CircuitID, openUC, closeUC, sendUC, endUC)
 			log.Printf("response connection closed %s", conn.RemoteAddr())
 		}(c)
 	}
 }
 
-func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase) {
+func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase) {
 	defer conn.Close()
 
 	var buf [262]byte
@@ -241,17 +243,33 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open use
 	}
 	sid := stOut.StreamID
 
-	target, err := net.Dial("tcp", addr)
+	payload, err := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: sid, Target: addr})
 	if err != nil {
-		log.Println("dial target:", err)
-		conn.Write([]byte{5, 1, 0, 1, 0, 0, 0, 0, 0, 0})
+		log.Println("encode begin:", err)
 		return
 	}
-	defer target.Close()
+	if _, err := send.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: sid, Data: payload, Cmd: value_object.CmdBegin}); err != nil {
+		log.Println("send begin:", err)
+		return
+	}
 	conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
 
-	go io.Copy(target, conn)
-	io.Copy(conn, target)
+	bufLocal := make([]byte, 4096)
+	for {
+		n, err := conn.Read(bufLocal)
+		if n > 0 {
+			if _, err2 := send.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: sid, Data: bufLocal[:n]}); err2 != nil {
+				log.Println("send data:", err2)
+				break
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				_, _ = end.Handle(usecase.HandleEndInput{CircuitID: circuitID, StreamID: sid})
+			}
+			break
+		}
+	}
 
 	if _, err := close.Handle(usecase.CloseStreamInput{CircuitID: circuitID, StreamID: sid}); err != nil {
 		log.Println("close stream:", err)

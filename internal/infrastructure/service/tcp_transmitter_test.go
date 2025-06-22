@@ -80,6 +80,23 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 		t.Fatal("timeout waiting for SendData")
 	}
 
+	err = tx.SendBegin(cid, sid, data)
+	if err != nil {
+		t.Fatalf("SendBegin error: %v", err)
+	}
+	select {
+	case msg := <-received:
+		cell, err := value_object.Decode(msg)
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if cell.Cmd != value_object.CmdBegin {
+			t.Errorf("unexpected cmd %d", cell.Cmd)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for SendBegin")
+	}
+
 	err = tx.SendEnd(cid, sid)
 	if err != nil {
 		t.Fatalf("SendEnd error: %v", err)

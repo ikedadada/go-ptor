@@ -12,6 +12,7 @@ type SendDataInput struct {
 	CircuitID string
 	StreamID  uint16
 	Data      []byte
+	Cmd       byte // default CmdData
 }
 
 // SendDataOutput reports how many bytes were sent.
@@ -75,9 +76,21 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	if err != nil {
 		return SendDataOutput{}, err
 	}
-
-	if err := uc.tx.SendData(cid, sid, enc); err != nil {
-		return SendDataOutput{}, err
+	cmd := in.Cmd
+	if cmd == 0 {
+		cmd = value_object.CmdData
+	}
+	switch cmd {
+	case value_object.CmdData:
+		if err := uc.tx.SendData(cid, sid, enc); err != nil {
+			return SendDataOutput{}, err
+		}
+	case value_object.CmdBegin:
+		if err := uc.tx.SendBegin(cid, sid, enc); err != nil {
+			return SendDataOutput{}, err
+		}
+	default:
+		return SendDataOutput{}, fmt.Errorf("unsupported cmd")
 	}
 	return SendDataOutput{BytesSent: len(in.Data)}, nil
 }
