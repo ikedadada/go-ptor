@@ -50,7 +50,11 @@ func main() {
 		if err != nil {
 			continue
 		}
-		go handleConn(c, uc)
+		log.Printf("request connection from %s", c.RemoteAddr())
+		go func(conn net.Conn) {
+			handleConn(conn, uc)
+			log.Printf("response connection closed %s", conn.RemoteAddr())
+		}(c)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"encoding/binary"
 	"errors"
+	"log"
 	"net"
 
 	"ikedadada/go-ptor/internal/domain/entity"
@@ -132,7 +133,11 @@ func sendAck(w net.Conn, cid value_object.CircuitID) error {
 	copy(buf[:16], cid.Bytes())
 	binary.BigEndian.PutUint16(buf[18:20], 0)
 	_, err := w.Write(buf[:])
-	return err
+	if err != nil {
+		return err
+	}
+	log.Printf("response ack cid=%s", cid.String())
+	return nil
 }
 
 func forwardCell(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
@@ -142,5 +147,9 @@ func forwardCell(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell
 	}
 	out := append(cid.Bytes(), buf...)
 	_, err = w.Write(out)
-	return err
+	if err != nil {
+		return err
+	}
+	log.Printf("response forward cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
+	return nil
 }

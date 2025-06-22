@@ -20,11 +20,14 @@ import (
 )
 
 func fetchRelays(base string) (map[string]entity.RelayInfo, error) {
-	res, err := http.Get(strings.TrimRight(base, "/") + "/relays.json")
+	url := strings.TrimRight(base, "/") + "/relays.json"
+	log.Printf("request GET %s", url)
+	res, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer res.Body.Close()
+	log.Printf("response GET %s status=%s", url, res.Status)
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status: %s", res.Status)
 	}
@@ -36,11 +39,14 @@ func fetchRelays(base string) (map[string]entity.RelayInfo, error) {
 }
 
 func fetchHidden(base string) (map[string]entity.HiddenServiceInfo, error) {
-	res, err := http.Get(strings.TrimRight(base, "/") + "/hidden.json")
+	url := strings.TrimRight(base, "/") + "/hidden.json"
+	log.Printf("request GET %s", url)
+	res, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer res.Body.Close()
+	log.Printf("response GET %s status=%s", url, res.Status)
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status: %s", res.Status)
 	}
@@ -161,7 +167,11 @@ func main() {
 			log.Println("accept error:", err)
 			continue
 		}
-		go handleSOCKS(c, dir, out.CircuitID, openUC, closeUC)
+		log.Printf("request connection from %s", c.RemoteAddr())
+		go func(conn net.Conn) {
+			handleSOCKS(conn, dir, out.CircuitID, openUC, closeUC)
+			log.Printf("response connection closed %s", conn.RemoteAddr())
+		}(c)
 	}
 }
 

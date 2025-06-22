@@ -25,12 +25,16 @@ func loadDirectory(path string) (entity.Directory, error) {
 func newMux(d entity.Directory) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/relays.json", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("request %s %s", r.Method, r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(entity.Directory{Relays: d.Relays})
+		log.Printf("response %s %s %d", r.Method, r.URL.Path, http.StatusOK)
 	})
 	mux.HandleFunc("/hidden.json", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("request %s %s", r.Method, r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(entity.Directory{HiddenServices: d.HiddenServices})
+		log.Printf("response %s %s %d", r.Method, r.URL.Path, http.StatusOK)
 	})
 	return mux
 }

@@ -57,7 +57,11 @@ func main() {
 		if err != nil {
 			continue
 		}
-		go io.Copy(c, c)
+		log.Printf("request connection from %s", c.RemoteAddr())
+		go func(conn net.Conn) {
+			io.Copy(conn, conn)
+			log.Printf("response connection closed %s", conn.RemoteAddr())
+		}(c)
 	}
 }
 
