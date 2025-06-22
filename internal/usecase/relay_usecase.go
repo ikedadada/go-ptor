@@ -43,12 +43,10 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 	}
 
 	switch cell.Cmd {
+	case value_object.CmdBegin:
+		return uc.begin(st, cid, cell)
 	case value_object.CmdEnd:
-		if st.Down() != nil {
-			_ = forwardCell(st.Down(), cid, cell)
-		}
-		_ = uc.repo.Delete(cid)
-		return nil
+		return uc.endStream(st, cid, cell)
 	case value_object.CmdDestroy:
 		if st.Down() != nil {
 			c := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.Version}
@@ -59,12 +57,7 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 	case value_object.CmdConnect:
 		return uc.connect(st, cid, cell)
 	case value_object.CmdData:
-		dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
-		if err != nil {
-			return err
-		}
-		_, err = st.Down().Write(dec)
-		return err
+		return uc.data(st, cid, cell)
 	default:
 		return nil
 	}
@@ -95,6 +88,89 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 		return err
 	}
 	return sendAck(newSt.Up(), cid)
+}
+
+func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
+	p, err := value_object.DecodeBeginPayload(cell.Payload)
+	if err != nil {
+		return err
+	}
+	sid, err := value_object.StreamIDFrom(p.StreamID)
+	if err != nil {
+		return err
+	}
+	down, err := net.Dial("tcp", p.Target)
+	if err != nil {
+		c := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.Version}
+		_ = forwardCell(st.Up(), cid, c)
+		return err
+	}
+	if err := st.Streams().Add(sid, down); err != nil {
+		if errors.Is(err, entity.ErrDuplicate) {
+			_ = st.Streams().Remove(sid)
+			_ = st.Streams().Add(sid, down)
+		} else {
+			down.Close()
+			return err
+		}
+	}
+	ack := &value_object.Cell{Cmd: value_object.CmdBeginAck, Version: value_object.Version}
+	return forwardCell(st.Up(), cid, ack)
+}
+
+func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
+	p, err := value_object.DecodeDataPayload(cell.Payload)
+	if err != nil {
+		return err
+	}
+	sid, err := value_object.StreamIDFrom(p.StreamID)
+	if err != nil {
+		return err
+	}
+	conn, err := st.Streams().Get(sid)
+	if err != nil {
+		c := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.Version}
+		_ = forwardCell(st.Up(), cid, c)
+		return nil
+	}
+	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), p.Data)
+	if err != nil {
+		return err
+	}
+	if _, err := conn.Write(dec); err != nil {
+		_ = st.Streams().Remove(sid)
+		c := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.Version}
+		_ = forwardCell(st.Up(), cid, c)
+		return err
+	}
+	return nil
+}
+
+func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
+	var p *value_object.DataPayload
+	var err error
+	if len(cell.Payload) > 0 {
+		p, err = value_object.DecodeDataPayload(cell.Payload)
+		if err != nil {
+			return err
+		}
+	} else {
+		p = &value_object.DataPayload{}
+	}
+	if p.StreamID == 0 {
+		st.Streams().DestroyAll()
+		if st.Down() != nil {
+			_ = forwardCell(st.Down(), cid, cell)
+		}
+		_ = uc.repo.Delete(cid)
+		return nil
+	}
+	sid, err := value_object.StreamIDFrom(p.StreamID)
+	if err != nil {
+		return err
+	}
+	_ = st.Streams().Remove(sid)
+	return forwardCell(st.Down(), cid, cell)
 }
 
 func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
