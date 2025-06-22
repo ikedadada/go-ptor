@@ -8,6 +8,7 @@ services:
       - "5000:5000"
     volumes:
       - ./docker/relay/relay1.pem:/relay.pem:ro
+    command: ["-priv", "/relay.pem"]
     networks:
       - ptor
 
@@ -19,6 +20,7 @@ services:
       - "5001:5000"
     volumes:
       - ./docker/relay/relay2.pem:/relay.pem:ro
+    command: ["-priv", "/relay.pem"]
     networks:
       - ptor
 
@@ -30,6 +32,7 @@ services:
       - "5002:5000"
     volumes:
       - ./docker/relay/relay3.pem:/relay.pem:ro
+    command: ["-priv", "/relay.pem"]
     networks:
       - ptor
 
