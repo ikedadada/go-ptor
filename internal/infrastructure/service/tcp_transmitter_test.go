@@ -45,10 +45,11 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	addr, received, closeFn := startTestTCPServer(t)
 	defer closeFn()
 
-	tx, err := service.NewTCPTransmitter(addr)
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
 	}
+	tx := service.NewTCPTransmitter(conn)
 	cid := value_object.NewCircuitID()
 	sid := value_object.NewStreamIDAuto()
 	data := []byte("hello")
@@ -135,10 +136,11 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 func TestTCPTransmitter_SendData_tooBig_realConn(t *testing.T) {
 	addr, _, closeFn := startTestTCPServer(t)
 	defer closeFn()
-	tx, err := service.NewTCPTransmitter(addr)
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
 	}
+	tx := service.NewTCPTransmitter(conn)
 	cid := value_object.NewCircuitID()
 	sid := value_object.NewStreamIDAuto()
 	big := make([]byte, value_object.MaxPayloadSize+1)

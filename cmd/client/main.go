@@ -152,10 +152,10 @@ func main() {
 	}
 	fmt.Println("Circuit built:", out.CircuitID)
 
-	tx := infraSvc.NewMemTransmitter(make(chan string, 10))
+	factory := infraSvc.TCPTransmitterFactory{}
 	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
-	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, tx)
-	sendUC := usecase.NewSendDataUsecase(circuitRepository, tx, cryptoSvc)
+	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, factory)
+	sendUC := usecase.NewSendDataUsecase(circuitRepository, factory, cryptoSvc)
 	endUC := usecase.NewHandleEndUsecase(circuitRepository)
 
 	ln, err := net.Listen("tcp", *socks)
