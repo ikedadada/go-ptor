@@ -48,7 +48,7 @@ func makeCircuitForDestroy() (*entity.Circuit, error) {
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	c, err := entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce})
+	c, err := entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, err
 	}
