@@ -3,12 +3,14 @@ package usecase_test
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"net"
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 type recordTx struct{ data []byte }
@@ -23,6 +25,10 @@ func (r *recordTx) SendBegin(c value_object.CircuitID, s value_object.StreamID, 
 }
 func (r *recordTx) SendEnd(value_object.CircuitID, value_object.StreamID) error { return nil }
 func (r *recordTx) SendDestroy(value_object.CircuitID) error                    { return nil }
+
+type recordFactory struct{ tx *recordTx }
+
+func (m recordFactory) New(net.Conn) service.CircuitTransmitter { return m.tx }
 
 func TestSendData_OnionRoundTrip(t *testing.T) {
 	hops := 3
@@ -47,7 +53,7 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 	repo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewSendDataUsecase(repo, tx, crypto)
+	uc := usecase.NewSendDataUsecase(repo, recordFactory{tx}, crypto)
 	data := []byte("hello")
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: data}); err != nil {
 		t.Fatalf("handle: %v", err)
@@ -91,7 +97,7 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 	repo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewSendDataUsecase(repo, tx, crypto)
+	uc := usecase.NewSendDataUsecase(repo, recordFactory{tx}, crypto)
 	payload, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: st.ID.UInt16(), Target: "example.com:80"})
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: payload, Cmd: value_object.CmdBegin}); err != nil {
 		t.Fatalf("handle: %v", err)

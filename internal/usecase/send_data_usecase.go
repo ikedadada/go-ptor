@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/usecase/service"
+	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
+	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
 // SendDataInput represents application data to forward on a circuit.
@@ -26,14 +27,14 @@ type SendDataUseCase interface {
 }
 
 type sendDataUseCaseImpl struct {
-	cr     repository.CircuitRepository
-	tx     service.CircuitTransmitter
-	crypto service.CryptoService
+	cr      repository.CircuitRepository
+	factory infraSvc.TransmitterFactory
+	crypto  useSvc.CryptoService
 }
 
 // NewSendDataUsecase returns a use case for sending data cells.
-func NewSendDataUsecase(cr repository.CircuitRepository, tx service.CircuitTransmitter, c service.CryptoService) SendDataUseCase {
-	return &sendDataUseCaseImpl{cr: cr, tx: tx, crypto: c}
+func NewSendDataUsecase(cr repository.CircuitRepository, f infraSvc.TransmitterFactory, c useSvc.CryptoService) SendDataUseCase {
+	return &sendDataUseCaseImpl{cr: cr, factory: f, crypto: c}
 }
 
 func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) {
@@ -80,13 +81,14 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	if cmd == 0 {
 		cmd = value_object.CmdData
 	}
+	tx := uc.factory.New(cir.Conn(0))
 	switch cmd {
 	case value_object.CmdData:
-		if err := uc.tx.SendData(cid, sid, enc); err != nil {
+		if err := tx.SendData(cid, sid, enc); err != nil {
 			return SendDataOutput{}, err
 		}
 	case value_object.CmdBegin:
-		if err := uc.tx.SendBegin(cid, sid, enc); err != nil {
+		if err := tx.SendBegin(cid, sid, enc); err != nil {
 			return SendDataOutput{}, err
 		}
 	default:

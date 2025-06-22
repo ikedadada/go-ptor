@@ -14,12 +14,10 @@ type TCPTransmitter struct {
 	conn net.Conn
 }
 
-func NewTCPTransmitter(addr string) (service.CircuitTransmitter, error) {
-	c, err := net.Dial("tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	return &TCPTransmitter{conn: c}, nil
+// NewTCPTransmitter wraps an already-connected net.Conn.
+// The caller is responsible for establishing the connection.
+func NewTCPTransmitter(conn net.Conn) service.CircuitTransmitter {
+	return &TCPTransmitter{conn: conn}
 }
 
 func (t *TCPTransmitter) send(cmd byte, payload []byte) error {
