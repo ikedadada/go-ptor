@@ -6,10 +6,14 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"io"
+	"net"
 	"testing"
+	"time"
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -38,6 +42,42 @@ func (m *mockCircuitRepo) Save(c *entity.Circuit) error {
 func (m *mockCircuitRepo) Find(_ value_object.CircuitID) (*entity.Circuit, error) { return nil, nil }
 func (m *mockCircuitRepo) Delete(_ value_object.CircuitID) error                  { return nil }
 func (m *mockCircuitRepo) ListActive() ([]*entity.Circuit, error)                 { return nil, nil }
+
+// --- Mock Dialer ---
+type dummyConn struct{}
+
+func (dummyConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (dummyConn) Write(b []byte) (int, error)      { return len(b), nil }
+func (dummyConn) Close() error                     { return nil }
+func (dummyConn) LocalAddr() net.Addr              { return nil }
+func (dummyConn) RemoteAddr() net.Addr             { return nil }
+func (dummyConn) SetDeadline(time.Time) error      { return nil }
+func (dummyConn) SetReadDeadline(time.Time) error  { return nil }
+func (dummyConn) SetWriteDeadline(time.Time) error { return nil }
+
+type mockDialer struct {
+	dialCalled    int
+	sendCalled    int
+	ackCalled     int
+	destroyCalled int
+}
+
+func (m *mockDialer) Dial(string) (net.Conn, error) {
+	m.dialCalled++
+	return dummyConn{}, nil
+}
+func (m *mockDialer) SendCell(net.Conn, entity.Cell) error {
+	m.sendCalled++
+	return nil
+}
+func (m *mockDialer) WaitAck(net.Conn) error {
+	m.ackCalled++
+	return nil
+}
+func (m *mockDialer) SendDestroy(net.Conn, value_object.CircuitID) error {
+	m.destroyCalled++
+	return nil
+}
 
 func makeTestRelay() (*entity.Relay, error) {
 	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
@@ -87,7 +127,9 @@ func TestCircuitBuildService_Build_Table(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rr := &mockRelayRepo{online: tt.online, err: tt.relayErr}
 			cr := &mockCircuitRepo{err: tt.saveErr}
-			builder := service.NewCircuitBuildService(rr, cr)
+			dial := &mockDialer{}
+			crypto := infraSvc.NewCryptoService()
+			builder := service.NewCircuitBuildService(rr, cr, dial, crypto)
 			circuit, err := builder.Build(tt.hops)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")
@@ -102,5 +144,30 @@ func TestCircuitBuildService_Build_Table(t *testing.T) {
 				t.Errorf("expected rsa key")
 			}
 		})
+	}
+}
+
+func TestCircuitBuildService_Build_DialerUsage(t *testing.T) {
+	relay, err := makeTestRelay()
+	if err != nil {
+		t.Fatalf("setup relay: %v", err)
+	}
+	rr := &mockRelayRepo{online: []*entity.Relay{relay, relay, relay}}
+	cr := &mockCircuitRepo{}
+	d := &mockDialer{}
+	crypto := infraSvc.NewCryptoService()
+
+	builder := service.NewCircuitBuildService(rr, cr, d, crypto)
+	if _, err := builder.Build(3); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if d.dialCalled != 1 {
+		t.Errorf("dial called %d", d.dialCalled)
+	}
+	if d.sendCalled != 3 {
+		t.Errorf("send called %d", d.sendCalled)
+	}
+	if d.ackCalled != 3 {
+		t.Errorf("ack called %d", d.ackCalled)
 	}
 }
