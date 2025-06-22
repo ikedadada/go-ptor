@@ -178,30 +178,55 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell
 	if err != nil {
 		return err
 	}
-	dec, err := uc.crypto.RSADecrypt(uc.priv, p.EncKey)
+	relayPriv, relayPub, err := uc.crypto.X25519Generate()
 	if err != nil {
 		return err
 	}
-	if len(dec) < 44 {
-		return nil
-	}
-	key, err := value_object.AESKeyFrom(dec[:32])
+	secret, err := uc.crypto.X25519Shared(relayPriv, p.ClientPub[:])
 	if err != nil {
 		return err
 	}
-	nonce, err := value_object.NonceFrom(dec[32:44])
+	key, nonce, err := uc.crypto.DeriveKeyNonce(secret)
 	if err != nil {
 		return err
 	}
-	down, err := net.Dial("tcp", p.NextHop)
-	if err != nil {
-		return err
+	var down net.Conn
+	if p.NextHop != "" {
+		down, err = net.Dial("tcp", p.NextHop)
+		if err != nil {
+			return err
+		}
 	}
 	st := entity.NewConnState(key, nonce, up, down)
 	if err := uc.repo.Add(cid, st); err != nil {
 		return err
 	}
-	return sendAck(up, cid)
+	createdPayload, err := value_object.EncodeCreatedPayload(&value_object.CreatedPayload{RelayPub: to32(relayPub)})
+	if err != nil {
+		return err
+	}
+	return sendCreated(up, cid, createdPayload)
+}
+
+func to32(b []byte) [32]byte {
+	var a [32]byte
+	copy(a[:], b)
+	return a
+}
+
+func sendCreated(w net.Conn, cid value_object.CircuitID, payload []byte) error {
+	var hdr [20]byte
+	copy(hdr[:16], cid.Bytes())
+	binary.BigEndian.PutUint16(hdr[18:20], uint16(len(payload)))
+	if _, err := w.Write(hdr[:]); err != nil {
+		return err
+	}
+	_, err := w.Write(payload)
+	if err != nil {
+		return err
+	}
+	log.Printf("response created cid=%s", cid.String())
+	return nil
 }
 
 func sendAck(w net.Conn, cid value_object.CircuitID) error {

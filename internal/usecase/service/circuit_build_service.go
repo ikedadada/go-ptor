@@ -52,23 +52,11 @@ func (b *circuitBuildServiceImpl) Build(hops int) (*entity.Circuit, error) {
 	selected := relays[:hops]
 
 	relayIDs := make([]value_object.RelayID, 0, hops)
-	keys := make([]value_object.AESKey, 0, hops)
-	nonces := make([]value_object.Nonce, 0, hops)
+	keys := make([]value_object.AESKey, hops)
+	nonces := make([]value_object.Nonce, hops)
 
 	for _, r := range selected {
 		relayIDs = append(relayIDs, r.ID())
-
-		k, err := value_object.NewAESKey() // 32B ランダム
-		if err != nil {
-			return nil, fmt.Errorf("generate AES key: %w", err)
-		}
-		keys = append(keys, k)
-
-		n, err := value_object.NewNonce() // 12B ランダム
-		if err != nil {
-			return nil, fmt.Errorf("generate nonce: %w", err)
-		}
-		nonces = append(nonces, n)
 	}
 
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -79,36 +67,28 @@ func (b *circuitBuildServiceImpl) Build(hops int) (*entity.Circuit, error) {
 	// 3. CircuitID 生成
 	cid := value_object.NewCircuitID()
 
-	// 4. Circuit エンティティ生成
-	circuit, err := entity.NewCircuit(cid, relayIDs, keys, nonces, priv)
-	if err != nil {
-		return nil, err
-	}
-
 	// --- build circuit over the network ---
 	conn, err := b.dialer.Dial(selected[0].Endpoint().String())
 	if err != nil {
 		return nil, err
 	}
-	circuit.SetConn(0, conn)
 
 	for i := 0; i < hops; i++ {
 		next := ""
 		if i+1 < hops {
 			next = selected[i+1].Endpoint().String()
 		}
-		var msg []byte
-		msg = append(msg, keys[i][:]...)
-		msg = append(msg, nonces[i][:]...)
-		enc, err := b.crypto.RSAEncrypt(selected[i].PubKey().PublicKey, msg)
+		cliPriv, cliPub, err := b.crypto.X25519Generate()
 		if err != nil {
 			_ = b.dialer.SendDestroy(conn, cid)
 			conn.Close()
 			return nil, err
 		}
+		var pubArr [32]byte
+		copy(pubArr[:], cliPub)
 		payload, err := value_object.EncodeExtendPayload(&value_object.ExtendPayload{
-			NextHop: next,
-			EncKey:  enc,
+			NextHop:   next,
+			ClientPub: pubArr,
 		})
 		if err != nil {
 			_ = b.dialer.SendDestroy(conn, cid)
@@ -121,12 +101,41 @@ func (b *circuitBuildServiceImpl) Build(hops int) (*entity.Circuit, error) {
 			conn.Close()
 			return nil, err
 		}
-		if err := b.dialer.WaitAck(conn); err != nil {
+		resp, err := b.dialer.WaitCreated(conn)
+		if err != nil {
 			_ = b.dialer.SendDestroy(conn, cid)
 			conn.Close()
 			return nil, err
 		}
+		created, err := value_object.DecodeCreatedPayload(resp)
+		if err != nil {
+			_ = b.dialer.SendDestroy(conn, cid)
+			conn.Close()
+			return nil, err
+		}
+		secret, err := b.crypto.X25519Shared(cliPriv, created.RelayPub[:])
+		if err != nil {
+			_ = b.dialer.SendDestroy(conn, cid)
+			conn.Close()
+			return nil, err
+		}
+		key, nonce, err := b.crypto.DeriveKeyNonce(secret)
+		if err != nil {
+			_ = b.dialer.SendDestroy(conn, cid)
+			conn.Close()
+			return nil, err
+		}
+		keys[i] = key
+		nonces[i] = nonce
 	}
+
+	circuit, err := entity.NewCircuit(cid, relayIDs, keys, nonces, priv)
+	if err != nil {
+		_ = b.dialer.SendDestroy(conn, cid)
+		conn.Close()
+		return nil, err
+	}
+	circuit.SetConn(0, conn)
 
 	// 5. 保存
 	if err := b.cr.Save(circuit); err != nil {

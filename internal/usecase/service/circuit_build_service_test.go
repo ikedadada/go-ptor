@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -58,7 +59,7 @@ func (dummyConn) SetWriteDeadline(time.Time) error { return nil }
 type mockDialer struct {
 	dialCalled    int
 	sendCalled    int
-	ackCalled     int
+	createdCalled int
 	destroyCalled int
 }
 
@@ -70,9 +71,13 @@ func (m *mockDialer) SendCell(net.Conn, entity.Cell) error {
 	m.sendCalled++
 	return nil
 }
-func (m *mockDialer) WaitAck(net.Conn) error {
-	m.ackCalled++
-	return nil
+func (m *mockDialer) WaitCreated(net.Conn) ([]byte, error) {
+	m.createdCalled++
+	kp, _ := ecdh.X25519().GenerateKey(rand.Reader)
+	var pub [32]byte
+	copy(pub[:], kp.PublicKey().Bytes())
+	b, _ := value_object.EncodeCreatedPayload(&value_object.CreatedPayload{RelayPub: pub})
+	return b, nil
 }
 func (m *mockDialer) SendDestroy(net.Conn, value_object.CircuitID) error {
 	m.destroyCalled++
@@ -167,7 +172,32 @@ func TestCircuitBuildService_Build_DialerUsage(t *testing.T) {
 	if d.sendCalled != 3 {
 		t.Errorf("send called %d", d.sendCalled)
 	}
-	if d.ackCalled != 3 {
-		t.Errorf("ack called %d", d.ackCalled)
+	if d.createdCalled != 3 {
+		t.Errorf("created called %d", d.createdCalled)
+	}
+}
+
+func TestCircuitBuildService_Build_KeyGeneration(t *testing.T) {
+	relay, err := makeTestRelay()
+	if err != nil {
+		t.Fatalf("setup relay: %v", err)
+	}
+	rr := &mockRelayRepo{online: []*entity.Relay{relay, relay, relay}}
+	cr := &mockCircuitRepo{}
+	d := &mockDialer{}
+	crypto := infraSvc.NewCryptoService()
+
+	builder := service.NewCircuitBuildService(rr, cr, d, crypto)
+	circuit, err := builder.Build(3)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if circuit.HopKey(i) == (value_object.AESKey{}) {
+			t.Errorf("key %d empty", i)
+		}
+		if circuit.HopNonce(i) == (value_object.Nonce{}) {
+			t.Errorf("nonce %d empty", i)
+		}
 	}
 }

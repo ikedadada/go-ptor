@@ -3,6 +3,7 @@ package usecase_test
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/binary"
 	"io"
 	"net"
 	"testing"
@@ -22,23 +23,27 @@ func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 	uc := usecase.NewRelayUseCase(priv, repo, crypto)
 
 	// prepare extend cell
-	key, _ := value_object.NewAESKey()
-	nonce, _ := value_object.NewNonce()
-	msg := append(key[:], nonce[:]...)
-	enc, _ := crypto.RSAEncrypt(&priv.PublicKey, msg)
+	_, pub, _ := crypto.X25519Generate()
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer ln.Close()
 	go func() { ln.Accept() }()
-	payload, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{NextHop: ln.Addr().String(), EncKey: enc})
+	var pubArr [32]byte
+	copy(pubArr[:], pub)
+	payload, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{NextHop: ln.Addr().String(), ClientPub: pubArr})
 	cid := value_object.NewCircuitID()
 	cell := &value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.Version, Payload: payload}
 
 	up1, up2 := net.Pipe()
 	go uc.Handle(up1, cid, cell)
 
-	buf := make([]byte, 20)
-	if _, err := io.ReadFull(up2, buf); err != nil {
-		t.Fatalf("read ack: %v", err)
+	hdr := make([]byte, 20)
+	if _, err := io.ReadFull(up2, hdr); err != nil {
+		t.Fatalf("read header: %v", err)
+	}
+	l := binary.BigEndian.Uint16(hdr[18:20])
+	body := make([]byte, l)
+	if _, err := io.ReadFull(up2, body); err != nil {
+		t.Fatalf("read body: %v", err)
 	}
 
 	// ensure entry created
