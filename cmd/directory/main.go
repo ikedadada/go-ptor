@@ -22,11 +22,17 @@ func loadDirectory(path string) (entity.Directory, error) {
 	return d, nil
 }
 
-func handler(d entity.Directory) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func newMux(d entity.Directory) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/relays.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(d)
+		json.NewEncoder(w).Encode(entity.Directory{Relays: d.Relays})
 	})
+	mux.HandleFunc("/hidden.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(entity.Directory{HiddenServices: d.HiddenServices})
+	})
+	return mux
 }
 
 func main() {
@@ -40,5 +46,5 @@ func main() {
 	}
 
 	log.Println("directory server listening on", *listen)
-	log.Fatal(http.ListenAndServe(*listen, handler(dir)))
+	log.Fatal(http.ListenAndServe(*listen, newMux(dir)))
 }

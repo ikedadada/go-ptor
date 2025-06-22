@@ -32,12 +32,12 @@ func TestDirectoryServer(t *testing.T) {
 		t.Fatalf("loadDirectory: %v", err)
 	}
 
-	srv := httptest.NewServer(handler(dir))
+	srv := httptest.NewServer(newMux(dir))
 	defer srv.Close()
 
-	res, err := srv.Client().Get(srv.URL)
+	res, err := srv.Client().Get(srv.URL + "/relays.json")
 	if err != nil {
-		t.Fatalf("http get: %v", err)
+		t.Fatalf("http get relays: %v", err)
 	}
 	defer res.Body.Close()
 
@@ -48,7 +48,18 @@ func TestDirectoryServer(t *testing.T) {
 	if got.Relays["r1"].Endpoint != "127.0.0.1:5000" {
 		t.Errorf("relay endpoint mismatch")
 	}
-	if got.HiddenServices["h1"].Relay != "r1" {
+
+	res2, err := srv.Client().Get(srv.URL + "/hidden.json")
+	if err != nil {
+		t.Fatalf("http get hidden: %v", err)
+	}
+	defer res2.Body.Close()
+
+	var got2 entity.Directory
+	if err := json.NewDecoder(res2.Body).Decode(&got2); err != nil {
+		t.Fatalf("decode hidden: %v", err)
+	}
+	if got2.HiddenServices["h1"].Relay != "r1" {
 		t.Errorf("hidden relay mismatch")
 	}
 }
