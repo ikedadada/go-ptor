@@ -20,7 +20,7 @@ func NewTCPTransmitter(conn net.Conn) service.CircuitTransmitter {
 	return &TCPTransmitter{conn: conn}
 }
 
-func (t *TCPTransmitter) send(cmd byte, payload []byte) error {
+func (t *TCPTransmitter) send(cmd byte, cid value_object.CircuitID, payload []byte) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -29,11 +29,12 @@ func (t *TCPTransmitter) send(cmd byte, payload []byte) error {
 	if err != nil {
 		return err
 	}
-	_, err = t.conn.Write(buf)
+	packet := append(cid.Bytes(), buf...)
+	_, err = t.conn.Write(packet)
 	return err
 }
 
-func (t *TCPTransmitter) SendData(_ value_object.CircuitID, s value_object.StreamID, d []byte) error {
+func (t *TCPTransmitter) SendData(cid value_object.CircuitID, s value_object.StreamID, d []byte) error {
 	if len(d) > value_object.MaxPayloadSize {
 		return fmt.Errorf("data too big")
 	}
@@ -41,24 +42,24 @@ func (t *TCPTransmitter) SendData(_ value_object.CircuitID, s value_object.Strea
 	if err != nil {
 		return err
 	}
-	return t.send(value_object.CmdData, p)
+	return t.send(value_object.CmdData, cid, p)
 }
 
-func (t *TCPTransmitter) SendBegin(_ value_object.CircuitID, _ value_object.StreamID, d []byte) error {
+func (t *TCPTransmitter) SendBegin(cid value_object.CircuitID, _ value_object.StreamID, d []byte) error {
 	if len(d) > value_object.MaxPayloadSize {
 		return fmt.Errorf("data too big")
 	}
-	return t.send(value_object.CmdBegin, d)
+	return t.send(value_object.CmdBegin, cid, d)
 }
 
-func (t *TCPTransmitter) SendEnd(_ value_object.CircuitID, s value_object.StreamID) error {
+func (t *TCPTransmitter) SendEnd(cid value_object.CircuitID, s value_object.StreamID) error {
 	p, err := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: s.UInt16()})
 	if err != nil {
 		return err
 	}
-	return t.send(value_object.CmdEnd, p)
+	return t.send(value_object.CmdEnd, cid, p)
 }
 
-func (t *TCPTransmitter) SendDestroy(value_object.CircuitID) error {
-	return t.send(value_object.CmdDestroy, nil)
+func (t *TCPTransmitter) SendDestroy(cid value_object.CircuitID) error {
+	return t.send(value_object.CmdDestroy, cid, nil)
 }
