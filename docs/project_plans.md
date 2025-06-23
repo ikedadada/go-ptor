@@ -338,6 +338,12 @@ type ExtendPayload struct {
 → Go ではこれを encoding/gob や msgpack でシリアライズ
 → RSA 公開鍵で AESKey+Nonce を暗号化 → 署名省略（学習用）
 
+エントリノードで最初の `EXTEND` が処理された後は、
+それ以降の `EXTEND` セルは各リレーが単に次ホップへ転送します。
+最終ホップで生成された `CREATED` 応答は逆方向にリレーされ、
+クライアントまで戻ります。この転送処理は `RelayUseCase` に
+実装された新しいフォワードロジックにより実現しています。
+
 ### 2.5 DATA セル構造
 
 DATA セルのペイロードは「任意のバイト列」で OK（上位 TCP ストリーム）
