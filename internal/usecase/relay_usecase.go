@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"encoding/binary"
 	"errors"
+	"io"
 	"log"
 	"net"
 
@@ -54,6 +55,8 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 		}
 		_ = uc.repo.Delete(cid)
 		return nil
+	case value_object.CmdExtend:
+		return uc.forwardExtend(st, cid, cell)
 	case value_object.CmdConnect:
 		return uc.connect(st, cid, cell)
 	case value_object.CmdData:
@@ -206,6 +209,28 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell
 		return err
 	}
 	return sendCreated(up, cid, createdPayload)
+}
+
+func (uc *relayUsecaseImpl) forwardExtend(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
+	if st.Down() == nil {
+		return errors.New("no downstream connection")
+	}
+	if err := forwardCell(st.Down(), cid, cell); err != nil {
+		return err
+	}
+	var hdr [20]byte
+	if _, err := io.ReadFull(st.Down(), hdr[:]); err != nil {
+		return err
+	}
+	l := binary.BigEndian.Uint16(hdr[18:20])
+	if l == 0 {
+		return errors.New("malformed created payload")
+	}
+	payload := make([]byte, l)
+	if _, err := io.ReadFull(st.Down(), payload); err != nil {
+		return err
+	}
+	return sendCreated(st.Up(), cid, payload)
 }
 
 func to32(b []byte) [32]byte {
