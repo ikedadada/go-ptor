@@ -5,11 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/infrastructure/service"
 )
 
 func startTestTCPServer(t *testing.T) (addr string, received chan []byte, closeFn func()) {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
@@ -60,10 +63,21 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	}
 	select {
 	case msg := <-received:
-		if len(msg) != value_object.MaxCellSize {
+		if len(msg) != 16+value_object.MaxCellSize {
 			t.Fatalf("unexpected cell size %d", len(msg))
 		}
-		cell, err := value_object.Decode(msg)
+		var cidBuf [16]byte
+		copy(cidBuf[:], msg[:16])
+		var u uuid.UUID
+		copy(u[:], cidBuf[:])
+		gotCID, err := value_object.CircuitIDFrom(u.String())
+		if err != nil {
+			t.Fatalf("cid parse: %v", err)
+		}
+		if !gotCID.Equal(cid) {
+			t.Errorf("cid mismatch")
+		}
+		cell, err := value_object.Decode(msg[16:])
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -87,7 +101,10 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	}
 	select {
 	case msg := <-received:
-		cell, err := value_object.Decode(msg)
+		if len(msg) != 16+value_object.MaxCellSize {
+			t.Fatalf("unexpected cell size %d", len(msg))
+		}
+		cell, err := value_object.Decode(msg[16:])
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -104,7 +121,10 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	}
 	select {
 	case msg := <-received:
-		cell, err := value_object.Decode(msg)
+		if len(msg) != 16+value_object.MaxCellSize {
+			t.Fatalf("unexpected cell size %d", len(msg))
+		}
+		cell, err := value_object.Decode(msg[16:])
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -121,7 +141,10 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	}
 	select {
 	case msg := <-received:
-		cell, err := value_object.Decode(msg)
+		if len(msg) != 16+value_object.MaxCellSize {
+			t.Fatalf("unexpected cell size %d", len(msg))
+		}
+		cell, err := value_object.Decode(msg[16:])
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
