@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	repoif "ikedadada/go-ptor/internal/domain/repository"
@@ -67,7 +68,10 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 }
 
 func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
-	addr := "127.0.0.1:5003"
+	addr := os.Getenv("HIDDEN_ADDR")
+	if addr == "" {
+		addr = "hidden:5000"
+	}
 	if len(cell.Payload) > 0 {
 		p, err := value_object.DecodeConnectPayload(cell.Payload)
 		if err != nil {

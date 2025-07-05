@@ -17,7 +17,7 @@ import (
 
 func main() {
 	keyPath := flag.String("key", "hidden.pem", "ED25519 private key")
-	listen := flag.String("listen", "127.0.0.1:5000", "relay listen address (localhost only)")
+	listen := flag.String("listen", ":5000", "relay listen address")
 	httpAddr := flag.String("http", "127.0.0.1:8080", "HTTP service address")
 	flag.Parse()
 
@@ -29,13 +29,11 @@ func main() {
 		host = "0.0.0.0"
 	}
 	ip := net.ParseIP(host)
-	if ip == nil {
-		if strings.EqualFold(host, "localhost") {
-			ip = net.ParseIP("127.0.0.1")
-		}
+	if ip == nil && strings.EqualFold(host, "localhost") {
+		ip = net.ParseIP("127.0.0.1")
 	}
-	if ip == nil || !ip.IsLoopback() {
-		log.Fatal("hidden service must listen on localhost only")
+	if ip == nil || !(ip.IsLoopback() || ip.IsUnspecified()) {
+		log.Fatal("hidden service must listen on loopback or unspecified address")
 	}
 
 	priv, err := loadEDPriv(*keyPath)
