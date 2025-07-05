@@ -36,7 +36,8 @@ go run ./cmd/client
 
 When the client resolves a `.ptor` address, it sends a CONNECT cell once for the
 current circuit before any streams are opened. After the CONNECT succeeds,
-stream data continues to use BEGIN cells as before.
+stream data continues to use BEGIN cells as before. The CONNECT payload is onion
+encrypted across all hops so only the exit relay can read it.
 
 ### Environment variables
 
