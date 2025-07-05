@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/ed25519"
 	"encoding/pem"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,7 +49,12 @@ func buildBin(t *testing.T) string {
 
 func TestHiddenMain_E2E(t *testing.T) {
 	relayAddr := freePort(t)
-	httpAddr := freePort(t)
+	// start a simple HTTP server the hidden service will proxy to
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	httpAddr := srv.Listener.Addr().String()
 	key := ed25519.NewKeyFromSeed(make([]byte, 32))
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: key})
 	f, err := os.CreateTemp(t.TempDir(), "key.pem")
@@ -73,15 +81,20 @@ func TestHiddenMain_E2E(t *testing.T) {
 	}
 	defer c.Close()
 
-	msg := []byte("ping")
-	if _, err := c.Write(msg); err != nil {
-		t.Fatalf("write: %v", err)
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Host = "example"
+	req.Header.Set("Connection", "close")
+	if err := req.Write(c); err != nil {
+		t.Fatalf("write request: %v", err)
 	}
-	buf := make([]byte, len(msg))
-	if _, err := io.ReadFull(c, buf); err != nil {
-		t.Fatalf("read: %v", err)
+
+	res, err := http.ReadResponse(bufio.NewReader(c), req)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
 	}
-	if string(buf) != "ping" {
-		t.Errorf("echo mismatch: %q", buf)
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if string(body) != "ok" {
+		t.Errorf("unexpected body: %q", body)
 	}
 }

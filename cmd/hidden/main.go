@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"strings"
 
@@ -43,8 +42,6 @@ func main() {
 	addr := value_object.NewHiddenAddr(priv.Public().(ed25519.PublicKey))
 	fmt.Println("Hidden address:", addr.String())
 
-	go http.ListenAndServe(*httpAddr, demoMux())
-
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		log.Fatal(err)
@@ -57,7 +54,15 @@ func main() {
 		}
 		log.Printf("request connection from %s", c.RemoteAddr())
 		go func(conn net.Conn) {
-			io.Copy(conn, conn)
+			defer conn.Close()
+			upstream, err := net.Dial("tcp", *httpAddr)
+			if err != nil {
+				log.Printf("dial http service: %v", err)
+				return
+			}
+			defer upstream.Close()
+			go io.Copy(upstream, conn)
+			io.Copy(conn, upstream)
 			log.Printf("response connection closed %s", conn.RemoteAddr())
 		}(c)
 	}
@@ -73,12 +78,4 @@ func loadEDPriv(path string) (ed25519.PrivateKey, error) {
 		return nil, fmt.Errorf("no PEM data")
 	}
 	return ed25519.PrivateKey(blk.Bytes), nil
-}
-
-func demoMux() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("hello from hidden service"))
-	})
-	return mux
 }
