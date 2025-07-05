@@ -51,9 +51,19 @@ services:
     ports:
       - "5003:5000"
       - "8080:8080"
-    command: ["-listen", ":5000"]
+    command: ["-listen", ":5000", "-http", "httpdemo:8080"]
     depends_on:
       - relay3
+      - httpdemo
+    networks:
+      - ptor
+
+  httpdemo:
+    build:
+      context: .
+      dockerfile: docker/httpdemo/Dockerfile
+    ports:
+      - "8082:8080"
     networks:
       - ptor
 

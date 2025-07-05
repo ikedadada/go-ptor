@@ -45,6 +45,22 @@ when processing CONNECT cells. If not set, it falls back to `hidden:5000` (the
 Docker demo value). The older `HIDDEN_ADDR` variable is also checked for
 backward compatibility.
 
+### Hidden service
+
+The hidden service proxies incoming connections to an upstream HTTP server. Use
+the `-http` flag to specify the target address.
+
+The provided `docker compose` configuration starts a small demo server from
+`cmd/httpdemo` and points the hidden service at `httpdemo:8080`. Bring up the
+demo stack with:
+
+```bash
+docker compose up --build
+```
+
+The hidden service will print its `.ptor` address on startup. You can access it
+via the client once the stack is running.
+
 ## Testing
 
 Execute all unit tests with:
