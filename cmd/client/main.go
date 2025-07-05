@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/handler"
 	infraRepo "ikedadada/go-ptor/internal/infrastructure/repository"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
@@ -158,120 +158,10 @@ func main() {
 	sendUC := usecase.NewSendDataUsecase(circuitRepository, factory, cryptoSvc)
 	endUC := usecase.NewHandleEndUsecase(circuitRepository)
 
-	ln, err := net.Listen("tcp", *socks)
+	h := handler.NewClientHandler(dir, out.CircuitID, openUC, closeUC, sendUC, endUC)
+	_, err = h.StartSOCKS(*socks)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("SOCKS5 proxy listening on", ln.Addr())
-	for {
-		c, err := ln.Accept()
-		if err != nil {
-			log.Println("accept error:", err)
-			continue
-		}
-		log.Printf("request connection from %s", c.RemoteAddr())
-		go func(conn net.Conn) {
-			handleSOCKS(conn, dir, out.CircuitID, openUC, closeUC, sendUC, endUC)
-			log.Printf("response connection closed %s", conn.RemoteAddr())
-		}(c)
-	}
-}
-
-func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase) {
-	defer conn.Close()
-
-	var buf [262]byte
-	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
-		log.Println("read SOCKS version:", err)
-		return
-	}
-	n := int(buf[1])
-	if _, err := io.ReadFull(conn, buf[:n]); err != nil {
-		log.Println("read SOCKS methods:", err)
-		return
-	}
-	conn.Write([]byte{5, 0})
-
-	if _, err := io.ReadFull(conn, buf[:4]); err != nil {
-		log.Println("read SOCKS request:", err)
-		return
-	}
-	if buf[1] != 1 {
-		log.Println("unsupported SOCKS command:", buf[1])
-		return
-	}
-	var host string
-	switch buf[3] {
-	case 1:
-		if _, err := io.ReadFull(conn, buf[:4]); err != nil {
-			log.Println("read IPv4 address:", err)
-			return
-		}
-		host = net.IP(buf[:4]).String()
-	case 3:
-		if _, err := io.ReadFull(conn, buf[:1]); err != nil {
-			log.Println("read hostname length:", err)
-			return
-		}
-		l := int(buf[0])
-		if _, err := io.ReadFull(conn, buf[:l]); err != nil {
-			log.Println("read hostname:", err)
-			return
-		}
-		host = string(buf[:l])
-	default:
-		log.Println("unsupported address type:", buf[3])
-		return
-	}
-	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
-		log.Println("read port:", err)
-		return
-	}
-	port := int(buf[0])<<8 | int(buf[1])
-
-	addr, err := resolveAddress(dir, host, port)
-	if err != nil {
-		log.Println("resolve address:", err)
-		conn.Write([]byte{5, 4, 0, 1, 0, 0, 0, 0, 0, 0})
-		return
-	}
-
-	stOut, err := open.Handle(usecase.OpenStreamInput{CircuitID: circuitID})
-	if err != nil {
-		log.Println("open stream:", err)
-		return
-	}
-	sid := stOut.StreamID
-
-	payload, err := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: sid, Target: addr})
-	if err != nil {
-		log.Println("encode begin:", err)
-		return
-	}
-	if _, err := send.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: sid, Data: payload, Cmd: value_object.CmdBegin}); err != nil {
-		log.Println("send begin:", err)
-		return
-	}
-	conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
-
-	bufLocal := make([]byte, 4096)
-	for {
-		n, err := conn.Read(bufLocal)
-		if n > 0 {
-			if _, err2 := send.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: sid, Data: bufLocal[:n]}); err2 != nil {
-				log.Println("send data:", err2)
-				break
-			}
-		}
-		if err != nil {
-			if err == io.EOF {
-				_, _ = end.Handle(usecase.HandleEndInput{CircuitID: circuitID, StreamID: sid})
-			}
-			break
-		}
-	}
-
-	if _, err := close.Handle(usecase.CloseStreamInput{CircuitID: circuitID, StreamID: sid}); err != nil {
-		log.Println("close stream:", err)
-	}
+	select {}
 }
