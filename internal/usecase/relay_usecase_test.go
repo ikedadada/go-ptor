@@ -326,3 +326,88 @@ func TestRelayUseCase_BeginExit(t *testing.T) {
 	}
 	st2.Streams().DestroyAll()
 }
+
+func TestRelayUseCase_DataForwardExit(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	crypto := infraSvc.NewCryptoService()
+
+	repoMid := repoimpl.NewCircuitTableRepository(time.Second)
+	repoExit := repoimpl.NewCircuitTableRepository(time.Second)
+
+	ucMid := usecase.NewRelayUseCase(priv, repoMid, crypto)
+	ucExit := usecase.NewRelayUseCase(priv, repoExit, crypto)
+
+	keyMid, _ := value_object.NewAESKey()
+	nonceMid, _ := value_object.NewNonce()
+	keyExit, _ := value_object.NewAESKey()
+	nonceExit, _ := value_object.NewNonce()
+
+	cid := value_object.NewCircuitID()
+
+	// middle hop state
+	up1, _ := net.Pipe()
+	down1, up2 := net.Pipe()
+	stMid := entity.NewConnState(keyMid, nonceMid, up1, down1)
+	repoMid.Add(cid, stMid)
+
+	// exit hop state
+	stExit := entity.NewConnState(keyExit, nonceExit, up2, nil)
+	repoExit.Add(cid, stExit)
+	sid, _ := value_object.StreamIDFrom(1)
+	local1, local2 := net.Pipe()
+	stExit.Streams().Add(sid, local1)
+
+	// build data cell as received by middle (layered for exit)
+	plain := []byte("hello")
+	layerExit, _ := crypto.AESSeal(keyExit, nonceExit, plain)
+	layerMid, _ := crypto.AESSeal(keyMid, nonceMid, layerExit)
+	payload, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid.UInt16(), Data: layerMid})
+	cell := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: payload}
+
+	// handle at middle relay
+	errCh := make(chan error, 1)
+	go func() { errCh <- ucMid.Handle(up1, cid, cell) }()
+
+	// read forwarded cell to exit
+	buf := make([]byte, 528)
+	if _, err := io.ReadFull(up2, buf); err != nil {
+		t.Fatalf("read forward: %v", err)
+	}
+	fwd, err := value_object.Decode(buf[16:])
+	if err != nil {
+		t.Fatalf("decode forward: %v", err)
+	}
+	dp, err := value_object.DecodeDataPayload(fwd.Payload)
+	if err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if !bytes.Equal(dp.Data, layerExit) {
+		t.Fatalf("forwarded payload mismatch")
+	}
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("handle middle: %v", err)
+	}
+
+	// exit relay should decrypt and deliver to local connection
+	errCh2 := make(chan error, 1)
+	go func() { errCh2 <- ucExit.Handle(up2, cid, fwd) }()
+
+	out := make([]byte, len(plain))
+	if _, err := io.ReadFull(local2, out); err != nil {
+		t.Fatalf("read local: %v", err)
+	}
+	if string(out) != string(plain) {
+		t.Errorf("payload mismatch: %q", out)
+	}
+
+	if err := <-errCh2; err != nil {
+		t.Fatalf("handle exit: %v", err)
+	}
+
+	stMid.Up().Close()
+	stMid.Down().Close()
+	stExit.Up().Close()
+	local1.Close()
+	local2.Close()
+}
