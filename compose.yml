@@ -51,6 +51,7 @@ services:
     ports:
       - "5003:5000"
       - "8080:8080"
+    command: ["-listen", ":5000"]
     depends_on:
       - relay3
     networks:
