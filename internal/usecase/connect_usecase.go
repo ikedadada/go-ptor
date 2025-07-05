@@ -2,9 +2,11 @@ package usecase
 
 import (
 	"fmt"
+
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
+	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
 // ConnectInput triggers a CONNECT cell to the exit relay.
@@ -27,11 +29,12 @@ type ConnectUseCase interface {
 type connectUsecaseImpl struct {
 	repo    repository.CircuitRepository
 	factory infraSvc.TransmitterFactory
+	crypto  useSvc.CryptoService
 }
 
 // NewConnectUseCase creates a use case for CONNECT cells.
-func NewConnectUseCase(r repository.CircuitRepository, f infraSvc.TransmitterFactory) ConnectUseCase {
-	return &connectUsecaseImpl{repo: r, factory: f}
+func NewConnectUseCase(r repository.CircuitRepository, f infraSvc.TransmitterFactory, c useSvc.CryptoService) ConnectUseCase {
+	return &connectUsecaseImpl{repo: r, factory: f, crypto: c}
 }
 
 func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
@@ -50,9 +53,22 @@ func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
 			return ConnectOutput{}, err
 		}
 	}
+
+	keys := make([][32]byte, 0, len(cir.Hops()))
+	nonces := make([][12]byte, 0, len(cir.Hops()))
+	for i := range cir.Hops() {
+		keys = append(keys, cir.HopKey(i))
+		nonces = append(nonces, cir.HopNonce(i))
+	}
+
+	enc, err := uc.crypto.AESMultiSeal(keys, nonces, payload)
+	if err != nil {
+		return ConnectOutput{}, err
+	}
+
 	conn := cir.Conn(0)
 	tx := uc.factory.New(conn)
-	if err := tx.SendConnect(cid, payload); err != nil {
+	if err := tx.SendConnect(cid, enc); err != nil {
 		return ConnectOutput{}, err
 	}
 	return ConnectOutput{Sent: true}, nil

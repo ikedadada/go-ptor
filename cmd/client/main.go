@@ -255,7 +255,7 @@ func main() {
 	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
 	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, factory)
 	sendUC := usecase.NewSendDataUsecase(circuitRepository, factory, cryptoSvc)
-	connectUC := usecase.NewConnectUseCase(circuitRepository, factory)
+	connectUC := usecase.NewConnectUseCase(circuitRepository, factory, cryptoSvc)
 	endUC := usecase.NewHandleEndUsecase(circuitRepository)
 
 	ln, err := net.Listen("tcp", *socks)

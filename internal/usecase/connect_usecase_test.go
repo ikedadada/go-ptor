@@ -10,6 +10,7 @@ import (
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
@@ -83,7 +84,8 @@ func TestConnectUseCase_Handle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fac := connectFactory{tt.tx}
-			uc := usecase.NewConnectUseCase(tt.repo, fac)
+			crypto := infraSvc.NewCryptoService()
+			uc := usecase.NewConnectUseCase(tt.repo, fac, crypto)
 			_, err := uc.Handle(tt.input)
 			if tt.err {
 				if err == nil {
@@ -97,8 +99,21 @@ func TestConnectUseCase_Handle(t *testing.T) {
 			if tt.tx.cid.String() != cid {
 				t.Errorf("cid not passed")
 			}
-			if tt.input.Target != "" && string(tt.tx.payload) != string(payload) {
+			k := make([][32]byte, len(cir.Hops()))
+			n := make([][12]byte, len(cir.Hops()))
+			for i := range cir.Hops() {
+				k[i] = cir.HopKey(i)
+				n[i] = cir.HopNonce(i)
+			}
+			out, err := crypto.AESMultiOpen(k, n, tt.tx.payload)
+			if err != nil {
+				t.Fatalf("decrypt: %v", err)
+			}
+			if tt.input.Target != "" && string(out) != string(payload) {
 				t.Errorf("payload mismatch")
+			}
+			if tt.input.Target == "" && len(out) != 0 {
+				t.Errorf("payload should be empty")
 			}
 		})
 	}
