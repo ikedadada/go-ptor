@@ -265,9 +265,13 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		if err := <-errCh; err != nil {
 			t.Fatalf("handle: %v", err)
 		}
-		st.Up().Close()
-		if st.Down() != nil {
-			st.Down().Close()
+		st2, _ := repo.Find(cid)
+		if !st2.IsHidden() {
+			t.Errorf("hidden flag not set")
+		}
+		st2.Up().Close()
+		if st2.Down() != nil {
+			st2.Down().Close()
 		}
 	})
 
@@ -311,9 +315,13 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		if err := <-errCh; err != nil {
 			t.Fatalf("handle: %v", err)
 		}
-		st.Up().Close()
-		if st.Down() != nil {
-			st.Down().Close()
+		st2, _ := repo.Find(cid)
+		if !st2.IsHidden() {
+			t.Errorf("hidden flag not set")
+		}
+		st2.Up().Close()
+		if st2.Down() != nil {
+			st2.Down().Close()
 		}
 	})
 
@@ -628,4 +636,87 @@ func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 	hs.Close()
 	up1.Close()
 	up2.Close()
+}
+
+func TestRelayUseCase_BeginHidden(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	crypto := infraSvc.NewCryptoService()
+	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+
+	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
+	cid := value_object.NewCircuitID()
+	up1, up2 := net.Pipe()
+	down1, down2 := net.Pipe()
+	st := entity.NewConnState(key, nonce, up1, down1)
+	st.SetHidden(true)
+	repo.Add(cid, st)
+
+	plain, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: 1, Target: "svc"})
+	enc, _ := crypto.AESSeal(key, nonce, plain)
+	cell := &value_object.Cell{Cmd: value_object.CmdBegin, Version: value_object.Version, Payload: enc}
+
+	go uc.Handle(up1, cid, cell)
+
+	out := make([]byte, len(plain))
+	if _, err := io.ReadFull(down2, out); err != nil {
+		t.Fatalf("read down: %v", err)
+	}
+	if !bytes.Equal(out, plain) {
+		t.Fatalf("payload mismatch")
+	}
+
+	buf := make([]byte, 20)
+	if _, err := io.ReadFull(up2, buf); err != nil {
+		t.Fatalf("read ack: %v", err)
+	}
+	if buf[16] != value_object.CmdBeginAck {
+		t.Fatalf("ack cmd %d", buf[16])
+	}
+
+	up1.Close()
+	up2.Close()
+	down1.Close()
+	down2.Close()
+}
+
+func TestRelayUseCase_DataHidden(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	crypto := infraSvc.NewCryptoService()
+	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+
+	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
+	cid := value_object.NewCircuitID()
+	up1, up2 := net.Pipe()
+	down1, down2 := net.Pipe()
+	st := entity.NewConnState(key, nonce, up1, down1)
+	st.SetHidden(true)
+	repo.Add(cid, st)
+
+	data := []byte("hello")
+	enc, _ := crypto.AESSeal(key, nonce, data)
+	payload, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: 1, Data: enc})
+	cell := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: payload}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- uc.Handle(up1, cid, cell) }()
+
+	out := make([]byte, len(data))
+	if _, err := io.ReadFull(down2, out); err != nil {
+		t.Fatalf("read down: %v", err)
+	}
+	if !bytes.Equal(out, data) {
+		t.Fatalf("payload mismatch")
+	}
+	if err := <-errCh; err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	up1.Close()
+	up2.Close()
+	down1.Close()
+	down2.Close()
 }
