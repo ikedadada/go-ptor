@@ -57,6 +57,7 @@ func (m *mockTxDestroy) SendDestroy(c value_object.CircuitID) error {
 	m.destroy = c
 	return m.err
 }
+func (m *mockTxDestroy) SendConnect(value_object.CircuitID, []byte) error { return nil }
 
 type destroyFactory struct{ tx service.CircuitTransmitter }
 

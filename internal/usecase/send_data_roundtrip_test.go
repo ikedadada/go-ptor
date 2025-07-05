@@ -25,6 +25,7 @@ func (r *recordTx) SendBegin(c value_object.CircuitID, s value_object.StreamID, 
 }
 func (r *recordTx) SendEnd(value_object.CircuitID, value_object.StreamID) error { return nil }
 func (r *recordTx) SendDestroy(value_object.CircuitID) error                    { return nil }
+func (r *recordTx) SendConnect(value_object.CircuitID, []byte) error            { return nil }
 
 type recordFactory struct{ tx *recordTx }
 

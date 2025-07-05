@@ -36,7 +36,8 @@ func (m *mockTransmitterSend) SendBegin(c value_object.CircuitID, s value_object
 func (m *mockTransmitterSend) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
 	return nil
 }
-func (m *mockTransmitterSend) SendDestroy(value_object.CircuitID) error { return nil }
+func (m *mockTransmitterSend) SendDestroy(value_object.CircuitID) error         { return nil }
+func (m *mockTransmitterSend) SendConnect(value_object.CircuitID, []byte) error { return nil }
 
 type sendFactory struct{ tx service.CircuitTransmitter }
 

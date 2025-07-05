@@ -46,7 +46,8 @@ func (m *mockTransmitterClose) SendBegin(value_object.CircuitID, value_object.St
 func (m *mockTransmitterClose) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return nil
 }
-func (m *mockTransmitterClose) SendDestroy(value_object.CircuitID) error { return nil }
+func (m *mockTransmitterClose) SendDestroy(value_object.CircuitID) error         { return nil }
+func (m *mockTransmitterClose) SendConnect(value_object.CircuitID, []byte) error { return nil }
 
 type closeFactory struct{ tx service.CircuitTransmitter }
 
