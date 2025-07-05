@@ -34,6 +34,11 @@ For example, to start the client:
 go run ./cmd/client
 ```
 
+### Environment variables
+
+The relay uses the `PTOR_HIDDEN_ADDR` variable to locate the hidden HTTP service.
+If not set, it falls back to `hidden:5000`, which matches the Docker demo.
+
 ## Testing
 
 Execute all unit tests with:

@@ -68,7 +68,10 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 }
 
 func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
-	addr := os.Getenv("HIDDEN_ADDR")
+	addr := os.Getenv("PTOR_HIDDEN_ADDR")
+	if addr == "" {
+		addr = os.Getenv("HIDDEN_ADDR")
+	}
 	if addr == "" {
 		addr = "hidden:5000"
 	}
