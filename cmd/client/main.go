@@ -12,10 +12,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/google/uuid"
 	"ikedadada/go-ptor/internal/domain/entity"
 	repoif "ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/handler"
 	infraRepo "ikedadada/go-ptor/internal/infrastructure/repository"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
@@ -62,28 +62,6 @@ func (s *streamMap) closeAll() {
 	s.mu.Unlock()
 }
 
-func readCell(r io.Reader) (value_object.CircuitID, *value_object.Cell, error) {
-	var idBuf [16]byte
-	if _, err := io.ReadFull(r, idBuf[:]); err != nil {
-		return value_object.CircuitID{}, nil, err
-	}
-	var id uuid.UUID
-	copy(id[:], idBuf[:])
-	cid, err := value_object.CircuitIDFrom(id.String())
-	if err != nil {
-		return value_object.CircuitID{}, nil, err
-	}
-	var cellBuf [value_object.MaxCellSize]byte
-	if _, err := io.ReadFull(r, cellBuf[:]); err != nil {
-		return value_object.CircuitID{}, nil, err
-	}
-	cell, err := value_object.Decode(cellBuf[:])
-	if err != nil {
-		return value_object.CircuitID{}, nil, err
-	}
-	return cid, cell, nil
-}
-
 func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid value_object.CircuitID, sm *streamMap) {
 	cir, err := repo.Find(cid)
 	if err != nil {
@@ -102,7 +80,7 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 		nonces[i] = cir.HopNonce(i)
 	}
 	for {
-		_, cell, err := readCell(conn)
+		_, cell, err := handler.ReadCell(conn)
 		if err != nil {
 			if err != io.EOF {
 				log.Println("read cell:", err)
