@@ -210,7 +210,10 @@ func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid value_object.Cir
 		return err
 	}
 	_ = st.Streams().Remove(sid)
-	return forwardCell(st.Down(), cid, cell)
+	if st.Down() != nil {
+		return forwardCell(st.Down(), cid, cell)
+	}
+	return nil
 }
 
 func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
