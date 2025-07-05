@@ -186,19 +186,19 @@ func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 }
 
 func TestRelayUseCase_Connect(t *testing.T) {
-	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
-
-	key, _ := value_object.NewAESKey()
-	nonce, _ := value_object.NewNonce()
-	cid := value_object.NewCircuitID()
-	up1, up2 := net.Pipe()
-	st := entity.NewConnState(key, nonce, up1, nil)
-	repo.Add(cid, st)
-
 	t.Run("ok", func(t *testing.T) {
+		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+		repo := repoimpl.NewCircuitTableRepository(time.Second)
+		crypto := infraSvc.NewCryptoService()
+		uc := usecase.NewRelayUseCase(priv, repo, crypto)
+
+		key, _ := value_object.NewAESKey()
+		nonce, _ := value_object.NewNonce()
+		cid := value_object.NewCircuitID()
+		up1, up2 := net.Pipe()
+		st := entity.NewConnState(key, nonce, up1, nil)
+		repo.Add(cid, st)
+
 		ln, _ := net.Listen("tcp", "127.0.0.1:0")
 		defer ln.Close()
 		go func() {
@@ -218,9 +218,25 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		if err := <-errCh; err != nil {
 			t.Fatalf("handle: %v", err)
 		}
+		st.Up().Close()
+		if st.Down() != nil {
+			st.Down().Close()
+		}
 	})
 
 	t.Run("env addr", func(t *testing.T) {
+		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+		repo := repoimpl.NewCircuitTableRepository(time.Second)
+		crypto := infraSvc.NewCryptoService()
+		uc := usecase.NewRelayUseCase(priv, repo, crypto)
+
+		key, _ := value_object.NewAESKey()
+		nonce, _ := value_object.NewNonce()
+		cid := value_object.NewCircuitID()
+		up1, up2 := net.Pipe()
+		st := entity.NewConnState(key, nonce, up1, nil)
+		repo.Add(cid, st)
+
 		ln, _ := net.Listen("tcp", "127.0.0.1:0")
 		defer ln.Close()
 		go func() {
@@ -241,21 +257,32 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		if err := <-errCh; err != nil {
 			t.Fatalf("handle: %v", err)
 		}
+		st.Up().Close()
+		if st.Down() != nil {
+			st.Down().Close()
+		}
 	})
 
 	t.Run("fail dial", func(t *testing.T) {
+		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+		repo := repoimpl.NewCircuitTableRepository(time.Second)
+		crypto := infraSvc.NewCryptoService()
+		uc := usecase.NewRelayUseCase(priv, repo, crypto)
+
+		key, _ := value_object.NewAESKey()
+		nonce, _ := value_object.NewNonce()
+		cid := value_object.NewCircuitID()
+		up1, _ := net.Pipe()
+		st := entity.NewConnState(key, nonce, up1, nil)
+		repo.Add(cid, st)
+
 		payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: "127.0.0.1:1"})
 		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: payload}
 		if err := uc.Handle(up1, cid, cell); err == nil {
 			t.Errorf("expected error")
 		}
+		st.Up().Close()
 	})
-
-	st2, _ := repo.Find(cid)
-	st2.Up().Close()
-	if st2.Down() != nil {
-		st2.Down().Close()
-	}
 }
 
 func TestRelayUseCase_BeginForward(t *testing.T) {
@@ -437,4 +464,64 @@ func TestRelayUseCase_DataForwardExit(t *testing.T) {
 	stExit.Up().Close()
 	local1.Close()
 	local2.Close()
+}
+
+func TestRelayUseCase_ForwardConnectData(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	crypto := infraSvc.NewCryptoService()
+	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+
+	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
+	cid := value_object.NewCircuitID()
+	up1, up2 := net.Pipe()
+	st := entity.NewConnState(key, nonce, up1, nil)
+	repo.Add(cid, st)
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	connCh := make(chan net.Conn, 1)
+	go func() { c, _ := ln.Accept(); connCh <- c }()
+
+	payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
+	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: payload}
+	go uc.Handle(up1, cid, cell)
+
+	buf := make([]byte, 20)
+	if _, err := io.ReadFull(up2, buf); err != nil {
+		t.Fatalf("read ack: %v", err)
+	}
+
+	hs := <-connCh
+	if hs == nil {
+		t.Fatalf("no connection")
+	}
+
+	data := []byte("hello")
+	hs.Write(data)
+
+	out := make([]byte, 16+value_object.MaxCellSize)
+	if _, err := io.ReadFull(up2, out); err != nil {
+		t.Fatalf("read data: %v", err)
+	}
+	cell2, err := value_object.Decode(out[16:])
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if cell2.Cmd != value_object.CmdData {
+		t.Fatalf("cmd %d", cell2.Cmd)
+	}
+	dp, err := value_object.DecodeDataPayload(cell2.Payload)
+	if err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	enc, _ := crypto.AESSeal(key, nonce, data)
+	if dp.StreamID != 0 || !bytes.Equal(dp.Data, enc) {
+		t.Errorf("payload mismatch")
+	}
+
+	hs.Close()
+	up1.Close()
+	up2.Close()
 }

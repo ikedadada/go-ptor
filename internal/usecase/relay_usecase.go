@@ -97,7 +97,11 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 		down.Close()
 		return err
 	}
-	return sendAck(newSt.Up(), cid)
+	if err := sendAck(newSt.Up(), cid); err != nil {
+		return err
+	}
+	go uc.forwardUpstream(newSt, cid, 0, down)
+	return nil
 }
 
 func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
@@ -135,7 +139,11 @@ func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.Circuit
 		}
 	}
 	ack := &value_object.Cell{Cmd: value_object.CmdBeginAck, Version: value_object.Version}
-	return forwardCell(st.Up(), cid, ack)
+	if err := forwardCell(st.Up(), cid, ack); err != nil {
+		return err
+	}
+	go uc.forwardUpstream(st, cid, sid, down)
+	return nil
 }
 
 func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
@@ -307,4 +315,33 @@ func forwardCell(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell
 	}
 	log.Printf("response forward cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
 	return nil
+}
+
+func (uc *relayUsecaseImpl) forwardUpstream(st *entity.ConnState, cid value_object.CircuitID, sid value_object.StreamID, down net.Conn) {
+	defer down.Close()
+	buf := make([]byte, value_object.MaxDataLen)
+	for {
+		n, err := down.Read(buf)
+		if n > 0 {
+			enc, err2 := uc.crypto.AESSeal(st.Key(), st.Nonce(), buf[:n])
+			if err2 == nil {
+				payload, err3 := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid.UInt16(), Data: enc})
+				if err3 == nil {
+					c := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: payload}
+					_ = forwardCell(st.Up(), cid, c)
+				}
+			}
+		}
+		if err != nil {
+			if sid != 0 {
+				_ = st.Streams().Remove(sid)
+			}
+			endPayload := []byte{}
+			if sid != 0 {
+				endPayload, _ = value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid.UInt16()})
+			}
+			_ = forwardCell(st.Up(), cid, &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.Version, Payload: endPayload})
+			return
+		}
+	}
 }
