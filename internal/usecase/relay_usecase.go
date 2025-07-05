@@ -94,7 +94,17 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 }
 
 func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
-	p, err := value_object.DecodeBeginPayload(cell.Payload)
+	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
+	if err != nil {
+		return err
+	}
+
+	if st.Down() != nil {
+		c := &value_object.Cell{Cmd: value_object.CmdBegin, Version: value_object.Version, Payload: dec}
+		return forwardCell(st.Down(), cid, c)
+	}
+
+	p, err := value_object.DecodeBeginPayload(dec)
 	if err != nil {
 		return err
 	}
