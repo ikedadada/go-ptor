@@ -458,7 +458,7 @@ func TestRelayUseCase_BeginExit(t *testing.T) {
 
 	go uc.Handle(up1, cid, cell)
 
-	buf := make([]byte, 20)
+	buf := make([]byte, 16+value_object.MaxCellSize)
 	if _, err := io.ReadFull(up2, buf); err != nil {
 		t.Fatalf("read ack: %v", err)
 	}
@@ -613,24 +613,13 @@ func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 	data := []byte("hello")
 	hs.Write(data)
 
-	out := make([]byte, 16+value_object.MaxCellSize)
-	if _, err := io.ReadFull(up2, out); err != nil {
-		t.Fatalf("read data: %v", err)
+	up2.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
+	n, err := up2.Read(make([]byte, 1))
+	if n != 0 {
+		t.Fatalf("unexpected data forwarded")
 	}
-	cell2, err := value_object.Decode(out[16:])
-	if err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if cell2.Cmd != value_object.CmdData {
-		t.Fatalf("cmd %d", cell2.Cmd)
-	}
-	dp, err := value_object.DecodeDataPayload(cell2.Payload)
-	if err != nil {
-		t.Fatalf("payload: %v", err)
-	}
-	enc, _ := crypto.AESSeal(key, nonce, data)
-	if dp.StreamID != 0 || !bytes.Equal(dp.Data, enc) {
-		t.Errorf("payload mismatch")
+	if ne, ok := err.(net.Error); !ok || !ne.Timeout() {
+		t.Fatalf("expected timeout, got %v", err)
 	}
 
 	hs.Close()
@@ -659,20 +648,42 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 
 	go uc.Handle(up1, cid, cell)
 
-	out := make([]byte, len(plain))
-	if _, err := io.ReadFull(down2, out); err != nil {
-		t.Fatalf("read down: %v", err)
-	}
-	if !bytes.Equal(out, plain) {
-		t.Fatalf("payload mismatch")
+	down2.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
+	if n, err := down2.Read(make([]byte, 1)); n != 0 || err == nil {
+		t.Fatalf("unexpected bytes forwarded")
+	} else if ne, ok := err.(net.Error); !ok || !ne.Timeout() {
+		t.Fatalf("expected timeout, got %v", err)
 	}
 
-	buf := make([]byte, 20)
+	buf := make([]byte, 16+value_object.MaxCellSize)
 	if _, err := io.ReadFull(up2, buf); err != nil {
 		t.Fatalf("read ack: %v", err)
 	}
 	if buf[16] != value_object.CmdBeginAck {
 		t.Fatalf("ack cmd %d", buf[16])
+	}
+
+	// data from hidden service should be forwarded with stream ID
+	data := []byte("hi")
+	down2.Write(data)
+	out := make([]byte, 16+value_object.MaxCellSize)
+	if _, err := io.ReadFull(up2, out); err != nil {
+		t.Fatalf("read data: %v", err)
+	}
+	c, err := value_object.Decode(out[16:])
+	if err != nil {
+		t.Fatalf("decode data: %v", err)
+	}
+	if c.Cmd != value_object.CmdData {
+		t.Fatalf("cmd %d", c.Cmd)
+	}
+	dp, err := value_object.DecodeDataPayload(c.Payload)
+	if err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	enc2, _ := crypto.AESSeal(key, nonce, data)
+	if dp.StreamID != 1 || !bytes.Equal(dp.Data, enc2) {
+		t.Fatalf("payload mismatch")
 	}
 
 	up1.Close()
