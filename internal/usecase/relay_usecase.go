@@ -140,15 +140,27 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 	if err != nil {
 		return err
 	}
+	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), p.Data)
+	if err != nil {
+		return err
+	}
+
+	// middle relay: forward downstream with one layer removed
+	if st.Down() != nil {
+		payload, err := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: p.StreamID, Data: dec})
+		if err != nil {
+			return err
+		}
+		c := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: payload}
+		return forwardCell(st.Down(), cid, c)
+	}
+
+	// exit relay: write plaintext to the local stream
 	conn, err := st.Streams().Get(sid)
 	if err != nil {
 		c := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.Version}
 		_ = forwardCell(st.Up(), cid, c)
 		return nil
-	}
-	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), p.Data)
-	if err != nil {
-		return err
 	}
 	if _, err := conn.Write(dec); err != nil {
 		_ = st.Streams().Remove(sid)
