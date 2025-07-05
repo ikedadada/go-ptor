@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -213,6 +214,32 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		buf := make([]byte, 20)
 		if _, err := io.ReadFull(up2, buf); err != nil {
 			t.Fatalf("read ack: %v", err)
+		}
+		if err := <-errCh; err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+	})
+
+	t.Run("env addr", func(t *testing.T) {
+		ln, _ := net.Listen("tcp", "127.0.0.1:0")
+		defer ln.Close()
+		go func() {
+			c, _ := ln.Accept()
+			if c != nil {
+				c.Close()
+			}
+		}()
+		os.Setenv("PTOR_HIDDEN_ADDR", ln.Addr().String())
+		defer os.Unsetenv("PTOR_HIDDEN_ADDR")
+		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version}
+		errCh := make(chan error, 1)
+		go func() { errCh <- uc.Handle(up1, cid, cell) }()
+		buf := make([]byte, 20)
+		if _, err := io.ReadFull(up2, buf); err != nil {
+			t.Fatalf("read ack: %v", err)
+		}
+		if err := <-errCh; err != nil {
+			t.Fatalf("handle: %v", err)
 		}
 	})
 
