@@ -24,6 +24,10 @@ func (tx *MemTransmitter) SendBegin(c value_object.CircuitID, s value_object.Str
 	tx.Out <- fmt.Sprintf("BEGIN cid=%s sid=%d len=%d", c, s, len(d))
 	return nil
 }
+func (tx *MemTransmitter) SendConnect(c value_object.CircuitID, d []byte) error {
+	tx.Out <- fmt.Sprintf("CONNECT cid=%s len=%d", c, len(d))
+	return nil
+}
 func (tx *MemTransmitter) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
 	tx.Out <- fmt.Sprintf("END  cid=%s sid=%d", c, s)
 	return nil

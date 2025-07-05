@@ -50,7 +50,8 @@ func (m *mockTransmitterShutdown) SendBegin(value_object.CircuitID, value_object
 func (m *mockTransmitterShutdown) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return nil
 }
-func (m *mockTransmitterShutdown) SendDestroy(value_object.CircuitID) error { return nil }
+func (m *mockTransmitterShutdown) SendDestroy(value_object.CircuitID) error         { return nil }
+func (m *mockTransmitterShutdown) SendConnect(value_object.CircuitID, []byte) error { return nil }
 
 type shutdownFactory struct{ tx service.CircuitTransmitter }
 

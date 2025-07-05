@@ -261,7 +261,9 @@ func main() {
 	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
 	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, factory)
 	sendUC := usecase.NewSendDataUsecase(circuitRepository, factory, cryptoSvc)
+	connectUC := usecase.NewConnectUseCase(circuitRepository, factory)
 	endUC := usecase.NewHandleEndUsecase(circuitRepository)
+	var connectOnce sync.Once
 
 	ln, err := net.Listen("tcp", *socks)
 	if err != nil {
@@ -276,13 +278,13 @@ func main() {
 		}
 		log.Printf("request connection from %s", c.RemoteAddr())
 		go func(conn net.Conn) {
-			handleSOCKS(conn, dir, out.CircuitID, openUC, closeUC, sendUC, endUC, sm)
+			handleSOCKS(conn, dir, out.CircuitID, connectUC, openUC, closeUC, sendUC, endUC, sm, &connectOnce)
 			log.Printf("response connection closed %s", conn.RemoteAddr())
 		}(c)
 	}
 }
 
-func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase, sm *streamMap) {
+func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, connect usecase.ConnectUseCase, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase, sm *streamMap, once *sync.Once) {
 	defer conn.Close()
 
 	var buf [262]byte
@@ -334,11 +336,20 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open use
 	}
 	port := int(buf[0])<<8 | int(buf[1])
 
+	hidden := strings.HasSuffix(host, ".ptor")
 	addr, err := resolveAddress(dir, host, port)
 	if err != nil {
 		log.Println("resolve address:", err)
 		conn.Write([]byte{5, 4, 0, 1, 0, 0, 0, 0, 0, 0})
 		return
+	}
+
+	if hidden {
+		once.Do(func() {
+			if _, err := connect.Handle(usecase.ConnectInput{CircuitID: circuitID}); err != nil {
+				log.Println("connect hidden:", err)
+			}
+		})
 	}
 
 	stOut, err := open.Handle(usecase.OpenStreamInput{CircuitID: circuitID})

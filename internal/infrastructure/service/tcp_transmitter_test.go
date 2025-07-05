@@ -115,6 +115,26 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 		t.Fatal("timeout waiting for SendBegin")
 	}
 
+	err = tx.SendConnect(cid, []byte("target"))
+	if err != nil {
+		t.Fatalf("SendConnect error: %v", err)
+	}
+	select {
+	case msg := <-received:
+		if len(msg) != 16+value_object.MaxCellSize {
+			t.Fatalf("unexpected cell size %d", len(msg))
+		}
+		cell, err := value_object.Decode(msg[16:])
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if cell.Cmd != value_object.CmdConnect {
+			t.Errorf("expected CONNECT cmd, got %d", cell.Cmd)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for SendConnect")
+	}
+
 	err = tx.SendEnd(cid, sid)
 	if err != nil {
 		t.Fatalf("SendEnd error: %v", err)

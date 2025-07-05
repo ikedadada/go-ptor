@@ -34,10 +34,16 @@ For example, to start the client:
 go run ./cmd/client
 ```
 
+When the client resolves a `.ptor` address, it sends a CONNECT cell once for the
+current circuit before any streams are opened. After the CONNECT succeeds,
+stream data continues to use BEGIN cells as before.
+
 ### Environment variables
 
-The relay uses the `PTOR_HIDDEN_ADDR` variable to locate the hidden HTTP service.
-If not set, it falls back to `hidden:5000`, which matches the Docker demo.
+The relay uses the `PTOR_HIDDEN_ADDR` variable to locate the hidden HTTP service
+when processing CONNECT cells. If not set, it falls back to `hidden:5000` (the
+Docker demo value). The older `HIDDEN_ADDR` variable is also checked for
+backward compatibility.
 
 ## Testing
 

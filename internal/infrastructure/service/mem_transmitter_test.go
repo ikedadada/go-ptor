@@ -32,6 +32,15 @@ func TestMemTx_SendData_SendEnd_Destroy(t *testing.T) {
 		t.Errorf("unexpected SendBegin message: %q", msg)
 	}
 
+	err = tx.SendConnect(cid, []byte("target"))
+	if err != nil {
+		t.Fatalf("SendConnect error: %v", err)
+	}
+	msg = <-ch
+	if msg == "" || msg[:7] != "CONNECT" {
+		t.Errorf("unexpected SendConnect message: %q", msg)
+	}
+
 	err = tx.SendEnd(cid, sid)
 	if err != nil {
 		t.Fatalf("SendEnd error: %v", err)
