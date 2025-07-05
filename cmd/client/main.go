@@ -10,14 +10,137 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/google/uuid"
 	"ikedadada/go-ptor/internal/domain/entity"
+	repoif "ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	infraRepo "ikedadada/go-ptor/internal/infrastructure/repository"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
+
+type streamMap struct {
+	mu sync.Mutex
+	m  map[uint16]net.Conn
+}
+
+func newStreamMap() *streamMap { return &streamMap{m: make(map[uint16]net.Conn)} }
+
+func (s *streamMap) add(id uint16, c net.Conn) {
+	s.mu.Lock()
+	s.m[id] = c
+	s.mu.Unlock()
+}
+
+func (s *streamMap) get(id uint16) (net.Conn, bool) {
+	s.mu.Lock()
+	c, ok := s.m[id]
+	s.mu.Unlock()
+	return c, ok
+}
+
+func (s *streamMap) remove(id uint16) {
+	s.mu.Lock()
+	if c, ok := s.m[id]; ok {
+		c.Close()
+		delete(s.m, id)
+	}
+	s.mu.Unlock()
+}
+
+func (s *streamMap) closeAll() {
+	s.mu.Lock()
+	for id, c := range s.m {
+		if c != nil {
+			c.Close()
+		}
+		delete(s.m, id)
+	}
+	s.mu.Unlock()
+}
+
+func readCell(r io.Reader) (value_object.CircuitID, *value_object.Cell, error) {
+	var idBuf [16]byte
+	if _, err := io.ReadFull(r, idBuf[:]); err != nil {
+		return value_object.CircuitID{}, nil, err
+	}
+	var id uuid.UUID
+	copy(id[:], idBuf[:])
+	cid, err := value_object.CircuitIDFrom(id.String())
+	if err != nil {
+		return value_object.CircuitID{}, nil, err
+	}
+	var cellBuf [value_object.MaxCellSize]byte
+	if _, err := io.ReadFull(r, cellBuf[:]); err != nil {
+		return value_object.CircuitID{}, nil, err
+	}
+	cell, err := value_object.Decode(cellBuf[:])
+	if err != nil {
+		return value_object.CircuitID{}, nil, err
+	}
+	return cid, cell, nil
+}
+
+func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid value_object.CircuitID, sm *streamMap) {
+	cir, err := repo.Find(cid)
+	if err != nil {
+		log.Println("find circuit:", err)
+		return
+	}
+	conn := cir.Conn(0)
+	if conn == nil {
+		log.Println("no connection for circuit")
+		return
+	}
+	keys := make([][32]byte, len(cir.Hops()))
+	nonces := make([][12]byte, len(cir.Hops()))
+	for i := range cir.Hops() {
+		keys[i] = cir.HopKey(i)
+		nonces[i] = cir.HopNonce(i)
+	}
+	for {
+		_, cell, err := readCell(conn)
+		if err != nil {
+			if err != io.EOF {
+				log.Println("read cell:", err)
+			}
+			sm.closeAll()
+			return
+		}
+		switch cell.Cmd {
+		case value_object.CmdData:
+			dp, err := value_object.DecodeDataPayload(cell.Payload)
+			if err != nil {
+				continue
+			}
+			plain, err := crypto.AESMultiOpen(keys, nonces, dp.Data)
+			if err != nil {
+				continue
+			}
+			if c, ok := sm.get(dp.StreamID); ok {
+				c.Write(plain)
+			}
+		case value_object.CmdEnd:
+			sid := uint16(0)
+			if len(cell.Payload) > 0 {
+				if p, err := value_object.DecodeDataPayload(cell.Payload); err == nil {
+					sid = p.StreamID
+				}
+			}
+			if sid == 0 {
+				sm.closeAll()
+				return
+			}
+			sm.remove(sid)
+		case value_object.CmdDestroy:
+			sm.closeAll()
+			return
+		}
+	}
+}
 
 func fetchRelays(base string) (map[string]entity.RelayInfo, error) {
 	url := strings.TrimRight(base, "/") + "/relays.json"
@@ -152,6 +275,10 @@ func main() {
 	}
 	fmt.Println("Circuit built:", out.CircuitID)
 
+	cid, _ := value_object.CircuitIDFrom(out.CircuitID)
+	sm := newStreamMap()
+	go recvLoop(circuitRepository, cryptoSvc, cid, sm)
+
 	factory := infraSvc.TCPTransmitterFactory{}
 	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
 	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, factory)
@@ -171,13 +298,13 @@ func main() {
 		}
 		log.Printf("request connection from %s", c.RemoteAddr())
 		go func(conn net.Conn) {
-			handleSOCKS(conn, dir, out.CircuitID, openUC, closeUC, sendUC, endUC)
+			handleSOCKS(conn, dir, out.CircuitID, openUC, closeUC, sendUC, endUC, sm)
 			log.Printf("response connection closed %s", conn.RemoteAddr())
 		}(c)
 	}
 }
 
-func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase) {
+func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase, sm *streamMap) {
 	defer conn.Close()
 
 	var buf [262]byte
@@ -242,6 +369,8 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, open use
 		return
 	}
 	sid := stOut.StreamID
+	sm.add(uint16(sid), conn)
+	defer sm.remove(uint16(sid))
 
 	payload, err := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: sid, Target: addr})
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -85,12 +86,11 @@ func TestClientMain_E2E(t *testing.T) {
 		t.Fatalf("dial relay: %v", err)
 	}
 
-	targetLn, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("target listen: %v", err)
-	}
-	defer targetLn.Close()
-	targetAddr := targetLn.Addr().(*net.TCPAddr)
+	targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer targetSrv.Close()
+	targetAddr := targetSrv.Listener.Addr().(*net.TCPAddr)
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -139,13 +139,6 @@ func TestClientMain_E2E(t *testing.T) {
 	}
 	defer c.Close()
 
-	go func() {
-		conn, err := targetLn.Accept()
-		if err == nil {
-			conn.Close()
-		}
-	}()
-
 	w := bufio.NewWriter(c)
 	r := bufio.NewReader(c)
 	w.Write([]byte{5, 1, 0})
@@ -159,4 +152,15 @@ func TestClientMain_E2E(t *testing.T) {
 	w.Write(req)
 	w.Flush()
 	io.ReadFull(r, make([]byte, 10))
+
+	fmt.Fprintf(w, "GET / HTTP/1.0\r\nHost: %s\r\n\r\n", targetAddr.IP.String())
+	w.Flush()
+	resp, err := http.ReadResponse(r, nil)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "ok" {
+		t.Fatalf("unexpected body: %q", body)
+	}
 }
