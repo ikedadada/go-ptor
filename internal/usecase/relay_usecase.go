@@ -295,11 +295,8 @@ func sendCreated(w net.Conn, cid value_object.CircuitID, payload []byte) error {
 }
 
 func sendAck(w net.Conn, cid value_object.CircuitID) error {
-	var buf [20]byte
-	copy(buf[:16], cid.Bytes())
-	binary.BigEndian.PutUint16(buf[18:20], 0)
-	_, err := w.Write(buf[:])
-	if err != nil {
+	c := &value_object.Cell{Cmd: value_object.CmdBeginAck, Version: value_object.Version}
+	if err := forwardCell(w, cid, c); err != nil {
 		return err
 	}
 	log.Printf("response ack cid=%s", cid.String())
