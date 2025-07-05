@@ -10,17 +10,20 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	"github.com/google/uuid"
 	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/domain/value_object"
 )
 
 func freePort(t *testing.T) string {
@@ -59,6 +62,15 @@ func buildRelayBin(t *testing.T) string {
 	cmd := exec.Command("go", "build", "-o", exe, "../relay")
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("build relay: %v", err)
+	}
+	return exe
+}
+
+func buildHiddenBin(t *testing.T) string {
+	exe := filepath.Join(t.TempDir(), "hidden")
+	cmd := exec.Command("go", "build", "-o", exe, "../hidden")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("build hidden: %v", err)
 	}
 	return exe
 }
@@ -162,5 +174,106 @@ func TestClientMain_E2E(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "ok" {
 		t.Fatalf("unexpected body: %q", body)
+	}
+}
+
+func TestClientMain_HiddenService(t *testing.T) {
+	socks := freePort(t)
+	relayAddr := freePort(t)
+	hiddenAddr := freePort(t)
+
+	hiddenExe := buildHiddenBin(t)
+	// simple HTTP server the hidden service will proxy to
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	key := ed25519.NewKeyFromSeed(make([]byte, 32))
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: key})
+	f, err := os.CreateTemp(t.TempDir(), "key.pem")
+	if err != nil {
+		t.Fatalf("temp key: %v", err)
+	}
+	f.Write(pemBytes)
+	f.Close()
+
+	hctx, hcancel := context.WithCancel(context.Background())
+	hcmd := exec.CommandContext(hctx, hiddenExe, "-key", f.Name(), "-listen", hiddenAddr, "-http", srv.Listener.Addr().String())
+	if err := hcmd.Start(); err != nil {
+		t.Fatalf("start hidden: %v", err)
+	}
+	defer func() {
+		hcancel()
+		hcmd.Wait()
+	}()
+
+	if _, err := waitDial(hiddenAddr, 5*time.Second); err != nil {
+		t.Fatalf("dial hidden: %v", err)
+	}
+
+	relayExe := buildRelayBin(t)
+	rctx, rcancel := context.WithCancel(context.Background())
+	rcmd := exec.CommandContext(rctx, relayExe, "-listen", relayAddr)
+	rcmd.Env = append(os.Environ(), "PTOR_HIDDEN_ADDR="+hiddenAddr)
+	if err := rcmd.Start(); err != nil {
+		t.Fatalf("start relay: %v", err)
+	}
+	defer func() {
+		rcancel()
+		rcmd.Wait()
+	}()
+
+	if _, err := waitDial(relayAddr, 5*time.Second); err != nil {
+		t.Fatalf("dial relay: %v", err)
+	}
+
+	der, _ := x509.MarshalPKIXPublicKey(key.Public())
+	hidPem := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
+	relKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	relDer, _ := x509.MarshalPKIXPublicKey(&relKey.PublicKey)
+	relPem := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: relDer}))
+	hidAddr := value_object.NewHiddenAddr(key.Public().(ed25519.PublicKey)).String()
+	dirData := entity.Directory{
+		Relays: map[string]entity.RelayInfo{
+			uuid.NewString(): {Endpoint: relayAddr, PubKey: relPem},
+		},
+		HiddenServices: map[string]entity.HiddenServiceInfo{
+			hidAddr: {Relay: uuid.NewString(), PubKey: hidPem},
+		},
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/relays.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays})
+	})
+	mux.HandleFunc("/hidden.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(entity.Directory{HiddenServices: dirData.HiddenServices})
+	})
+	dirSrv := httptest.NewServer(mux)
+	defer dirSrv.Close()
+
+	exe := buildBin(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, exe, "-hops", "1", "-socks", socks, "-dir", dirSrv.URL)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start client: %v", err)
+	}
+	defer func() {
+		cancel()
+		cmd.Wait()
+	}()
+
+	if _, err := waitDial(socks, 5*time.Second); err != nil {
+		t.Fatalf("dial socks: %v", err)
+	}
+
+	curl := exec.Command("curl", "--socks5-hostname", socks, "http://"+hidAddr)
+	out, err := curl.CombinedOutput()
+	if err != nil {
+		t.Skipf("curl failed: %v\n%s", err, out)
+	}
+	if !bytes.Contains(out, []byte("ok")) {
+		t.Fatalf("unexpected response: %s", out)
 	}
 }

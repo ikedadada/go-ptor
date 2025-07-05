@@ -175,15 +175,9 @@ func fetchDirectory(base string) (entity.Directory, error) {
 // and returns the endpoint of the designated exit relay.
 func resolveAddress(dir entity.Directory, host string, port int) (string, error) {
 	if strings.HasSuffix(host, ".ptor") {
-		hs, ok := dir.HiddenServices[host]
-		if !ok {
+		if _, ok := dir.HiddenServices[host]; !ok {
 			return "", fmt.Errorf("hidden service not found: %s", host)
 		}
-		rel, ok := dir.Relays[hs.Relay]
-		if !ok {
-			return "", fmt.Errorf("relay %s not found", hs.Relay)
-		}
-		return rel.Endpoint, nil
 	}
 	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
 		return fmt.Sprintf("[%s]:%d", host, port), nil
@@ -263,7 +257,6 @@ func main() {
 	sendUC := usecase.NewSendDataUsecase(circuitRepository, factory, cryptoSvc)
 	connectUC := usecase.NewConnectUseCase(circuitRepository, factory)
 	endUC := usecase.NewHandleEndUsecase(circuitRepository)
-	var connectOnce sync.Once
 
 	ln, err := net.Listen("tcp", *socks)
 	if err != nil {
@@ -278,13 +271,13 @@ func main() {
 		}
 		log.Printf("request connection from %s", c.RemoteAddr())
 		go func(conn net.Conn) {
-			handleSOCKS(conn, dir, out.CircuitID, connectUC, openUC, closeUC, sendUC, endUC, sm, &connectOnce)
+			handleSOCKS(conn, dir, out.CircuitID, connectUC, openUC, closeUC, sendUC, endUC, sm)
 			log.Printf("response connection closed %s", conn.RemoteAddr())
 		}(c)
 	}
 }
 
-func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, connect usecase.ConnectUseCase, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase, sm *streamMap, once *sync.Once) {
+func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, connect usecase.ConnectUseCase, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase, sm *streamMap) {
 	defer conn.Close()
 
 	var buf [262]byte
@@ -345,11 +338,9 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, connect 
 	}
 
 	if hidden {
-		once.Do(func() {
-			if _, err := connect.Handle(usecase.ConnectInput{CircuitID: circuitID}); err != nil {
-				log.Println("connect hidden:", err)
-			}
-		})
+		if _, err := connect.Handle(usecase.ConnectInput{CircuitID: circuitID}); err != nil {
+			log.Println("connect hidden:", err)
+		}
 	}
 
 	stOut, err := open.Handle(usecase.OpenStreamInput{CircuitID: circuitID})
