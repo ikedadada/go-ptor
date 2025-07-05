@@ -1,7 +1,9 @@
 package usecase
 
 import (
+	"encoding/binary"
 	"fmt"
+	"io"
 
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
@@ -51,9 +53,22 @@ func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
 			return ConnectOutput{}, err
 		}
 	}
-	tx := uc.factory.New(cir.Conn(0))
+	conn := cir.Conn(0)
+	tx := uc.factory.New(conn)
 	if err := tx.SendConnect(cid, payload); err != nil {
 		return ConnectOutput{}, err
+	}
+	if conn != nil {
+		var hdr [20]byte
+		if _, err := io.ReadFull(conn, hdr[:]); err != nil {
+			return ConnectOutput{}, err
+		}
+		l := binary.BigEndian.Uint16(hdr[18:20])
+		if l > 0 {
+			if _, err := io.ReadFull(conn, make([]byte, l)); err != nil {
+				return ConnectOutput{}, err
+			}
+		}
 	}
 	return ConnectOutput{Sent: true}, nil
 }
