@@ -93,6 +93,7 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 		st.Down().Close()
 	}
 	newSt := entity.NewConnState(st.Key(), st.Nonce(), st.Up(), down)
+	newSt.SetHidden(true)
 	if err := uc.repo.Add(cid, newSt); err != nil {
 		down.Close()
 		return err
@@ -108,6 +109,13 @@ func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.Circuit
 	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
 	if err != nil {
 		return err
+	}
+
+	if st.IsHidden() {
+		if _, err := st.Down().Write(dec); err != nil {
+			return err
+		}
+		return sendAck(st.Up(), cid)
 	}
 
 	if st.Down() != nil {
@@ -157,6 +165,11 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 	}
 	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), p.Data)
 	if err != nil {
+		return err
+	}
+
+	if st.IsHidden() {
+		_, err := st.Down().Write(dec)
 		return err
 	}
 

@@ -9,17 +9,18 @@ import (
 
 // ConnState represents per-circuit connection information held by a relay.
 type ConnState struct {
-	key   value_object.AESKey
-	nonce value_object.Nonce
-	up    net.Conn
-	down  net.Conn
-	last  time.Time
-	tbl   *StreamTable
+	key    value_object.AESKey
+	nonce  value_object.Nonce
+	up     net.Conn
+	down   net.Conn
+	last   time.Time
+	tbl    *StreamTable
+	hidden bool
 }
 
 // NewConnState returns a new ConnState instance.
 func NewConnState(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn) *ConnState {
-	return &ConnState{key: key, nonce: nonce, up: up, down: down, last: time.Now(), tbl: NewStreamTable()}
+	return &ConnState{key: key, nonce: nonce, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false}
 }
 
 // Key returns the symmetric key for this circuit hop.
@@ -40,6 +41,12 @@ func (s *ConnState) Touch() { s.last = time.Now() }
 
 // LastUsed reports the last time the state was accessed.
 func (s *ConnState) LastUsed() time.Time { return s.last }
+
+// SetHidden marks whether the downstream connection targets a hidden service.
+func (s *ConnState) SetHidden(v bool) { s.hidden = v }
+
+// IsHidden reports whether the downstream connection is for a hidden service.
+func (s *ConnState) IsHidden() bool { return s.hidden }
 
 // Close closes both sides of the connection.
 func (s *ConnState) Close() {
