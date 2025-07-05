@@ -741,7 +741,9 @@ func main() {
 
 #### ✅ 外部からの直接アクセスを防ぐには
 
-1. `ptor-hidden` は localhost 限定で Listen
+1. `ptor-hidden` は基本的に localhost で Listen。Docker 展開時は
+   `0.0.0.0` など未指定アドレスに公開してもよいが、
+   外部からの接続はファイアウォールで遮断する。
 2. `firewalld` / `ufw` で tcp/8080 などを外部ブロック
 3. `relay3` 以外からの接続は拒否（IP 制限 or 鍵認証）
 
