@@ -127,6 +127,46 @@ func TestRelayUseCase_EndUnknown(t *testing.T) {
 	}
 }
 
+func TestRelayUseCase_EndStreamNoDown(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	crypto := infraSvc.NewCryptoService()
+	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+
+	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
+	cid := value_object.NewCircuitID()
+	up1, up2 := net.Pipe()
+	st := entity.NewConnState(key, nonce, up1, nil)
+	repo.Add(cid, st)
+	sid, _ := value_object.StreamIDFrom(1)
+	local1, local2 := net.Pipe()
+	st.Streams().Add(sid, local1)
+
+	payload, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid.UInt16()})
+	cell := &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.Version, Payload: payload}
+	if err := uc.Handle(up1, cid, cell); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	buf := make([]byte, 1)
+	up2.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
+	n, err := up2.Read(buf)
+	if n != 0 {
+		t.Errorf("unexpected bytes forwarded")
+	}
+	if ne, ok := err.(net.Error); !ok || !ne.Timeout() {
+		t.Errorf("expected timeout, got %v", err)
+	}
+
+	local2.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
+	if _, err := local2.Read(buf); err == nil {
+		t.Errorf("stream not closed")
+	}
+
+	st.Up().Close()
+}
+
 func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
