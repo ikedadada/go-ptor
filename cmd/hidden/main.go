@@ -16,6 +16,8 @@ import (
 
 func main() {
 	keyPath := flag.String("key", "hidden.pem", "ED25519 private key")
+	// Default to all interfaces so Docker containers can bind. Validation
+	// below restricts to loopback or unspecified addresses.
 	listen := flag.String("listen", ":5000", "relay listen address")
 	httpAddr := flag.String("http", "127.0.0.1:8080", "HTTP service address")
 	flag.Parse()
