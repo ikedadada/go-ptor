@@ -101,7 +101,6 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 	if err := sendAck(newSt.Up(), cid); err != nil {
 		return err
 	}
-	go uc.forwardUpstream(newSt, cid, 0, down)
 	return nil
 }
 
@@ -112,9 +111,15 @@ func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.Circuit
 	}
 
 	if st.IsHidden() {
-		if _, err := st.Down().Write(dec); err != nil {
+		p, err := value_object.DecodeBeginPayload(dec)
+		if err != nil {
 			return err
 		}
+		sid, err := value_object.StreamIDFrom(p.StreamID)
+		if err != nil {
+			return err
+		}
+		go uc.forwardUpstream(st, cid, sid, st.Down())
 		return sendAck(st.Up(), cid)
 	}
 
