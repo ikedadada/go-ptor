@@ -8,6 +8,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/handler"
 	"ikedadada/go-ptor/internal/infrastructure/service"
 )
 
@@ -39,7 +40,7 @@ func TestSendCellWritesFixedPacket(t *testing.T) {
 		t.Fatalf("expected %d bytes, got %d", 16+value_object.MaxCellSize, conn.Len())
 	}
 
-	gotCID, gotCell, err := readCell(bytes.NewReader(conn.Bytes()))
+	gotCID, gotCell, err := handler.ReadCell(bytes.NewReader(conn.Bytes()))
 	if err != nil {
 		t.Fatalf("readCell: %v", err)
 	}

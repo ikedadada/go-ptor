@@ -14,12 +14,10 @@ import (
 	"os"
 	"time"
 
-	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/handler"
 	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
 	"ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
-
-	"github.com/google/uuid"
 )
 
 func main() {
@@ -61,7 +59,7 @@ func main() {
 func handleConn(c net.Conn, uc usecase.RelayUseCase) {
 	defer c.Close()
 	for {
-		cid, cell, err := readCell(c)
+		cid, cell, err := handler.ReadCell(c)
 		if err != nil {
 			if err != io.EOF {
 				log.Println("read cell:", err)
@@ -73,30 +71,6 @@ func handleConn(c net.Conn, uc usecase.RelayUseCase) {
 			log.Println("handle:", err)
 		}
 	}
-}
-
-// readCell reads the cell header and returns the payload as-is. The payload
-// may still be encrypted; decryption is performed by RelayUseCase.
-func readCell(r io.Reader) (value_object.CircuitID, *value_object.Cell, error) {
-	var idBuf [16]byte
-	if _, err := io.ReadFull(r, idBuf[:]); err != nil {
-		return value_object.CircuitID{}, nil, err
-	}
-	var id uuid.UUID
-	copy(id[:], idBuf[:])
-	cid, err := value_object.CircuitIDFrom(id.String())
-	if err != nil {
-		return value_object.CircuitID{}, nil, err
-	}
-	var cellBuf [value_object.MaxCellSize]byte
-	if _, err := io.ReadFull(r, cellBuf[:]); err != nil {
-		return value_object.CircuitID{}, nil, err
-	}
-	cell, err := value_object.Decode(cellBuf[:])
-	if err != nil {
-		return value_object.CircuitID{}, nil, err
-	}
-	return cid, cell, nil
 }
 
 // loadRSAPriv loads an RSA private key from a PEM file.
