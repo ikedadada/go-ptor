@@ -68,6 +68,21 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 }
 
 func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
+	// middle relay: peel one layer and forward the remaining ciphertext
+	if st.Down() != nil {
+		dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
+		if err != nil {
+			return err
+		}
+		c := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: dec}
+		return forwardCell(st.Down(), cid, c)
+	}
+
+	// exit relay: decode final payload and connect to the hidden service
+	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
+	if err != nil {
+		return err
+	}
 	addr := os.Getenv("PTOR_HIDDEN_ADDR")
 	if addr == "" {
 		addr = os.Getenv("HIDDEN_ADDR")
@@ -75,8 +90,8 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 	if addr == "" {
 		addr = "hidden:5000"
 	}
-	if len(cell.Payload) > 0 {
-		p, err := value_object.DecodeConnectPayload(cell.Payload)
+	if len(dec) > 0 {
+		p, err := value_object.DecodeConnectPayload(dec)
 		if err != nil {
 			return err
 		}
