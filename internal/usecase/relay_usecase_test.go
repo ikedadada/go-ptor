@@ -247,8 +247,9 @@ func TestRelayUseCase_Connect(t *testing.T) {
 				c.Close()
 			}
 		}()
-		payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
-		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: payload}
+               payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
+               enc, _ := crypto.AESSeal(key, nonce, payload)
+               cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 		errCh := make(chan error, 1)
 		go func() { errCh <- uc.Handle(up1, cid, cell) }()
 		ack := make([]byte, 16+value_object.MaxCellSize)
@@ -298,7 +299,8 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		}()
 		os.Setenv("PTOR_HIDDEN_ADDR", ln.Addr().String())
 		defer os.Unsetenv("PTOR_HIDDEN_ADDR")
-		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version}
+               enc, _ := crypto.AESSeal(key, nonce, []byte{})
+               cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 		errCh := make(chan error, 1)
 		go func() { errCh <- uc.Handle(up1, cid, cell) }()
 		ack := make([]byte, 16+value_object.MaxCellSize)
@@ -338,8 +340,9 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		st := entity.NewConnState(key, nonce, up1, nil)
 		repo.Add(cid, st)
 
-		payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: "127.0.0.1:1"})
-		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: payload}
+               payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: "127.0.0.1:1"})
+               enc, _ := crypto.AESSeal(key, nonce, payload)
+               cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 		if err := uc.Handle(up1, cid, cell); err == nil {
 			t.Errorf("expected error")
 		}
@@ -365,8 +368,9 @@ func TestRelayUseCase_ConnectAck(t *testing.T) {
 	connCh := make(chan net.Conn, 1)
 	go func() { c, _ := ln.Accept(); connCh <- c }()
 
-	payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
-	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: payload}
+       payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
+       enc, _ := crypto.AESSeal(key, nonce, payload)
+       cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 	go uc.Handle(up1, cid, cell)
 
 	ack := make([]byte, 16+value_object.MaxCellSize)
@@ -571,6 +575,98 @@ func TestRelayUseCase_DataForwardExit(t *testing.T) {
 	local2.Close()
 }
 
+func TestRelayUseCase_ForwardConnect(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	crypto := infraSvc.NewCryptoService()
+
+	repoMid := repoimpl.NewCircuitTableRepository(time.Second)
+	repoExit := repoimpl.NewCircuitTableRepository(time.Second)
+
+	ucMid := usecase.NewRelayUseCase(priv, repoMid, crypto)
+	ucExit := usecase.NewRelayUseCase(priv, repoExit, crypto)
+
+	keyMid, _ := value_object.NewAESKey()
+	nonceMid, _ := value_object.NewNonce()
+	keyExit, _ := value_object.NewAESKey()
+	nonceExit, _ := value_object.NewNonce()
+
+	cid := value_object.NewCircuitID()
+
+	// middle hop state
+	up1, _ := net.Pipe()
+	down1, up2 := net.Pipe()
+	stMid := entity.NewConnState(keyMid, nonceMid, up1, down1)
+	repoMid.Add(cid, stMid)
+
+	// exit hop state
+	stExit := entity.NewConnState(keyExit, nonceExit, up2, nil)
+	repoExit.Add(cid, stExit)
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	connCh := make(chan net.Conn, 1)
+	go func() { c, _ := ln.Accept(); connCh <- c }()
+
+	os.Setenv("PTOR_HIDDEN_ADDR", ln.Addr().String())
+	defer os.Unsetenv("PTOR_HIDDEN_ADDR")
+
+	plain, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
+	layerExit, _ := crypto.AESSeal(keyExit, nonceExit, plain)
+	layerMid, _ := crypto.AESSeal(keyMid, nonceMid, layerExit)
+	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: layerMid}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- ucMid.Handle(up1, cid, cell) }()
+
+	buf := make([]byte, 528)
+	if _, err := io.ReadFull(up2, buf); err != nil {
+		t.Fatalf("read forward: %v", err)
+	}
+	fwd, err := value_object.Decode(buf[16:])
+	if err != nil {
+		t.Fatalf("decode forward: %v", err)
+	}
+	if fwd.Cmd != value_object.CmdConnect {
+		t.Fatalf("cmd %d", fwd.Cmd)
+	}
+	if !bytes.Equal(fwd.Payload, layerExit) {
+		t.Fatalf("forwarded payload mismatch")
+	}
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("handle middle: %v", err)
+	}
+
+	errCh2 := make(chan error, 1)
+	go func() { errCh2 <- ucExit.Handle(up2, cid, fwd) }()
+
+	ackBuf := make([]byte, 16+value_object.MaxCellSize)
+	if _, err := io.ReadFull(down1, ackBuf); err != nil {
+		t.Fatalf("read ack: %v", err)
+	}
+	ack, err := value_object.Decode(ackBuf[16:])
+	if err != nil {
+		t.Fatalf("decode ack: %v", err)
+	}
+	if ack.Cmd != value_object.CmdBeginAck {
+		t.Fatalf("ack cmd %d", ack.Cmd)
+	}
+
+	hs := <-connCh
+	if hs == nil {
+		t.Fatalf("no connection")
+	}
+	hs.Close()
+
+	if err := <-errCh2; err != nil {
+		t.Fatalf("handle exit: %v", err)
+	}
+
+	stMid.Up().Close()
+	stMid.Down().Close()
+	stExit.Up().Close()
+}
+
 func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
@@ -589,8 +685,9 @@ func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 	connCh := make(chan net.Conn, 1)
 	go func() { c, _ := ln.Accept(); connCh <- c }()
 
-	payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
-	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: payload}
+       payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
+       enc, _ := crypto.AESSeal(key, nonce, payload)
+       cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 	go uc.Handle(up1, cid, cell)
 
 	ack := make([]byte, 16+value_object.MaxCellSize)

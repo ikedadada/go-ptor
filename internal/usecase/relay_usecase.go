@@ -68,40 +68,50 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 }
 
 func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
-	addr := os.Getenv("PTOR_HIDDEN_ADDR")
-	if addr == "" {
-		addr = os.Getenv("HIDDEN_ADDR")
-	}
-	if addr == "" {
-		addr = "hidden:5000"
-	}
-	if len(cell.Payload) > 0 {
-		p, err := value_object.DecodeConnectPayload(cell.Payload)
-		if err != nil {
-			return err
-		}
-		if p.Target != "" {
-			addr = p.Target
-		}
-	}
+    dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
+    if err != nil {
+            return err
+    }
 
-	down, err := net.Dial("tcp", addr)
-	if err != nil {
-		return err
-	}
-	if st.Down() != nil {
-		st.Down().Close()
-	}
-	newSt := entity.NewConnState(st.Key(), st.Nonce(), st.Up(), down)
-	newSt.SetHidden(true)
-	if err := uc.repo.Add(cid, newSt); err != nil {
-		down.Close()
-		return err
-	}
-	if err := sendAck(newSt.Up(), cid); err != nil {
-		return err
-	}
-	return nil
+    if st.Down() != nil {
+            c := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: dec}
+            return forwardCell(st.Down(), cid, c)
+    }
+
+    addr := os.Getenv("PTOR_HIDDEN_ADDR")
+    if addr == "" {
+            addr = os.Getenv("HIDDEN_ADDR")
+    }
+    if addr == "" {
+            addr = "hidden:5000"
+    }
+    if len(dec) > 0 {
+            p, err := value_object.DecodeConnectPayload(dec)
+            if err != nil {
+                    return err
+            }
+            if p.Target != "" {
+                    addr = p.Target
+            }
+    }
+
+    down, err := net.Dial("tcp", addr)
+    if err != nil {
+            return err
+    }
+    if st.Down() != nil {
+            st.Down().Close()
+    }
+    newSt := entity.NewConnState(st.Key(), st.Nonce(), st.Up(), down)
+    newSt.SetHidden(true)
+    if err := uc.repo.Add(cid, newSt); err != nil {
+            down.Close()
+            return err
+    }
+    if err := sendAck(newSt.Up(), cid); err != nil {
+            return err
+    }
+    return nil
 }
 
 func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
