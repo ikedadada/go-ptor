@@ -155,7 +155,11 @@ func fetchHidden(base string) (map[string]entity.HiddenServiceInfo, error) {
 	if err := json.NewDecoder(res.Body).Decode(&d); err != nil {
 		return nil, err
 	}
-	return d.HiddenServices, nil
+	m := make(map[string]entity.HiddenServiceInfo, len(d.HiddenServices))
+	for k, v := range d.HiddenServices {
+		m[strings.ToLower(k)] = v
+	}
+	return m, nil
 }
 
 func fetchDirectory(base string) (entity.Directory, error) {
@@ -174,18 +178,19 @@ func fetchDirectory(base string) (entity.Directory, error) {
 // If host ends with .ptor, it looks up the hidden service in the directory
 // and returns the endpoint of the designated exit relay.
 func resolveAddress(dir entity.Directory, host string, port int) (string, string, error) {
+	hostLower := strings.ToLower(host)
 	exit := ""
-	if strings.HasSuffix(host, ".ptor") {
-		hs, ok := dir.HiddenServices[host]
+	if strings.HasSuffix(hostLower, ".ptor") {
+		hs, ok := dir.HiddenServices[hostLower]
 		if !ok {
 			return "", "", fmt.Errorf("hidden service not found: %s", host)
 		}
 		exit = hs.Relay
 	}
-	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
-		return fmt.Sprintf("[%s]:%d", host, port), exit, nil
+	if ip := net.ParseIP(hostLower); ip != nil && ip.To4() == nil {
+		return fmt.Sprintf("[%s]:%d", hostLower, port), exit, nil
 	}
-	return fmt.Sprintf("%s:%d", host, port), exit, nil
+	return fmt.Sprintf("%s:%d", hostLower, port), exit, nil
 }
 
 func main() {
