@@ -14,7 +14,6 @@ import (
 	"os"
 	"time"
 
-	"ikedadada/go-ptor/internal/handler"
 	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
 	"ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
@@ -36,7 +35,8 @@ func main() {
 	}
 	tbl := repoimpl.NewCircuitTableRepository(time.Minute)
 	cryptoSvc := service.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, tbl, cryptoSvc)
+	reader := service.NewHandlerCellReader()
+	uc := usecase.NewRelayUseCase(priv, tbl, cryptoSvc, reader)
 
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
@@ -50,26 +50,9 @@ func main() {
 		}
 		log.Printf("request connection from %s", c.RemoteAddr())
 		go func(conn net.Conn) {
-			handleConn(conn, uc)
+			uc.ServeConn(conn)
 			log.Printf("response connection closed %s", conn.RemoteAddr())
 		}(c)
-	}
-}
-
-func handleConn(c net.Conn, uc usecase.RelayUseCase) {
-	defer c.Close()
-	for {
-		cid, cell, err := handler.ReadCell(c)
-		if err != nil {
-			if err != io.EOF {
-				log.Println("read cell:", err)
-			}
-			return
-		}
-		log.Printf("cell cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
-		if err := uc.Handle(c, cid, cell); err != nil {
-			log.Println("handle:", err)
-		}
 	}
 }
 
