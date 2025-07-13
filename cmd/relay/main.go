@@ -22,6 +22,7 @@ import (
 func main() {
 	listen := flag.String("listen", ":5000", "listen address")
 	privPath := flag.String("priv", "", "RSA private key")
+	ttl := flag.Duration("ttl", time.Minute, "circuit entry TTL")
 	flag.Parse()
 	var priv *rsa.PrivateKey
 	var err error
@@ -33,7 +34,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	tbl := repoimpl.NewCircuitTableRepository(time.Minute)
+	tbl := repoimpl.NewCircuitTableRepository(*ttl)
 	cryptoSvc := service.NewCryptoService()
 	reader := service.NewHandlerCellReader()
 	uc := usecase.NewRelayUseCase(priv, tbl, cryptoSvc, reader)

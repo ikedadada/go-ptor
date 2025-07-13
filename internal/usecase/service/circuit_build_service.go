@@ -1,10 +1,13 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/binary"
 	"fmt"
+	"net"
+	"time"
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
@@ -103,9 +106,27 @@ func (b *circuitBuildServiceImpl) Build(hops int, exit value_object.RelayID) (*e
 	cid := value_object.NewCircuitID()
 
 	// --- build circuit over the network ---
-	conn, err := b.dialer.Dial(selected[0].Endpoint().String())
-	if err != nil {
-		return nil, err
+	const ioTimeout = 10 * time.Second
+	dialCtx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+	defer cancel()
+	type dialRes struct {
+		c   net.Conn
+		err error
+	}
+	dch := make(chan dialRes, 1)
+	go func() {
+		c, err := b.dialer.Dial(selected[0].Endpoint().String())
+		dch <- dialRes{c: c, err: err}
+	}()
+	var conn net.Conn
+	select {
+	case <-dialCtx.Done():
+		return nil, fmt.Errorf("dial: %w", dialCtx.Err())
+	case res := <-dch:
+		if res.err != nil {
+			return nil, res.err
+		}
+		conn = res.c
 	}
 
 	for i := 0; i < hops; i++ {
@@ -131,6 +152,7 @@ func (b *circuitBuildServiceImpl) Build(hops int, exit value_object.RelayID) (*e
 			return nil, err
 		}
 		cell := entity.Cell{CircID: cid, StreamID: 0, Data: payload}
+		_ = conn.SetDeadline(time.Now().Add(ioTimeout))
 		if err := b.dialer.SendCell(conn, cell); err != nil {
 			_ = b.dialer.SendDestroy(conn, cid)
 			conn.Close()
@@ -142,6 +164,7 @@ func (b *circuitBuildServiceImpl) Build(hops int, exit value_object.RelayID) (*e
 			conn.Close()
 			return nil, err
 		}
+		_ = conn.SetDeadline(time.Time{})
 		created, err := value_object.DecodeCreatedPayload(resp)
 		if err != nil {
 			_ = b.dialer.SendDestroy(conn, cid)

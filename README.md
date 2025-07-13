@@ -48,6 +48,14 @@ when processing CONNECT cells. If not set, it falls back to `hidden:5000` (the
 Docker demo value). The older `HIDDEN_ADDR` variable is also checked for
 backward compatibility.
 
+Relay connections are kept in an in-memory table. The TTL can be configured
+with the `-ttl` flag when starting the relay. Increase this value when
+troubleshooting long-lived circuits.
+
+Additional logging now records failures when decoding EXTEND payloads,
+connecting to next hops, or forwarding cells so issues can be diagnosed more
+easily.
+
 ### Hidden service
 
 The hidden service proxies incoming connections to an upstream HTTP server. Use

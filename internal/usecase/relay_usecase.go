@@ -126,6 +126,7 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 
 	down, err := net.Dial("tcp", addr)
 	if err != nil {
+		log.Printf("dial hidden cid=%s addr=%s err=%v", cid.String(), addr, err)
 		return err
 	}
 	if st.Down() != nil {
@@ -179,6 +180,7 @@ func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.Circuit
 	if err != nil {
 		c := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.Version}
 		_ = forwardCell(st.Up(), cid, c)
+		log.Printf("dial begin target cid=%s addr=%s err=%v", cid.String(), p.Target, err)
 		return err
 	}
 	if err := st.Streams().Add(sid, down); err != nil {
@@ -276,6 +278,7 @@ func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid value_object.Cir
 func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
 	p, err := value_object.DecodeExtendPayload(cell.Payload)
 	if err != nil {
+		log.Printf("decode extend payload cid=%s err=%v", cid.String(), err)
 		return err
 	}
 	relayPriv, relayPub, err := uc.crypto.X25519Generate()
@@ -294,6 +297,7 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell
 	if p.NextHop != "" {
 		down, err = net.Dial("tcp", p.NextHop)
 		if err != nil {
+			log.Printf("dial next hop cid=%s hop=%s err=%v", cid.String(), p.NextHop, err)
 			return err
 		}
 	}
@@ -316,6 +320,7 @@ func (uc *relayUsecaseImpl) forwardExtend(st *entity.ConnState, cid value_object
 		return errors.New("no downstream connection")
 	}
 	if err := forwardCell(st.Down(), cid, cell); err != nil {
+		log.Printf("forward extend cid=%s err=%v", cid.String(), err)
 		return err
 	}
 	var hdr [20]byte
@@ -368,11 +373,13 @@ func sendAck(w net.Conn, cid value_object.CircuitID) error {
 func forwardCell(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
 	buf, err := value_object.Encode(*cell)
 	if err != nil {
+		log.Printf("forward encode cid=%s err=%v", cid.String(), err)
 		return err
 	}
 	out := append(cid.Bytes(), buf...)
 	_, err = w.Write(out)
 	if err != nil {
+		log.Printf("forward write cid=%s err=%v", cid.String(), err)
 		return err
 	}
 	log.Printf("response forward cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
