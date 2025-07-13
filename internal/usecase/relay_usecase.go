@@ -34,7 +34,12 @@ func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c
 }
 
 func (uc *relayUsecaseImpl) ServeConn(c net.Conn) {
-	defer c.Close()
+	log.Printf("ServeConn start local=%s remote=%s", c.LocalAddr(), c.RemoteAddr())
+	defer func() {
+		_ = c.Close()
+		log.Printf("ServeConn stop local=%s remote=%s", c.LocalAddr(), c.RemoteAddr())
+	}()
+
 	for {
 		cid, cell, err := uc.reader.ReadCell(c)
 		if err != nil {
