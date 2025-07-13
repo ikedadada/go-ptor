@@ -56,7 +56,16 @@ func (uc *relayUsecaseImpl) ServeConn(c net.Conn) {
 			}
 			return
 		}
-		log.Printf("cell cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
+
+		if cell.Cmd == value_object.CmdConnect {
+			st, err := uc.repo.Find(cid)
+			if err != nil || st.Down() == nil || c == st.Down() {
+				log.Printf("cell cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
+			}
+		} else {
+			log.Printf("cell cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
+		}
+
 		if err := uc.Handle(c, cid, cell); err != nil {
 			log.Println("handle:", err)
 		}
@@ -76,11 +85,13 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 		return err
 	}
 
+	fromDown := st != nil && st.Down() != nil && up == st.Down()
+
 	switch cell.Cmd {
 	case value_object.CmdBegin:
 		return uc.begin(st, cid, cell)
 	case value_object.CmdEnd:
-		return uc.endStream(st, cid, cell)
+		return uc.endStream(st, cid, cell, fromDown)
 	case value_object.CmdDestroy:
 		if st.Down() != nil {
 			c := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.Version}
@@ -93,7 +104,7 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 	case value_object.CmdConnect:
 		return uc.connect(st, cid, cell)
 	case value_object.CmdData:
-		return uc.data(st, cid, cell)
+		return uc.data(st, cid, cell, fromDown)
 	default:
 		return nil
 	}
@@ -108,7 +119,7 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 			return err
 		}
 		c := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: dec}
-		return forwardCell(st.Down(), cid, c)
+		return forwardCellNoLog(st.Down(), cid, c)
 	}
 
 	// exit relay: decode final payload and connect to the hidden service
@@ -210,7 +221,7 @@ func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.Circuit
 	return nil
 }
 
-func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
+func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell, fromDown bool) error {
 	p, err := value_object.DecodeDataPayload(cell.Payload)
 	if err != nil {
 		return err
@@ -219,6 +230,20 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 	if err != nil {
 		return err
 	}
+
+	if fromDown {
+		enc, err := uc.crypto.AESSeal(st.Key(), st.Nonce(), p.Data)
+		if err != nil {
+			return err
+		}
+		payload, err := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: p.StreamID, Data: enc})
+		if err != nil {
+			return err
+		}
+		c := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: payload}
+		return forwardCell(st.Up(), cid, c)
+	}
+
 	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), p.Data)
 	if err != nil {
 		return err
@@ -256,7 +281,7 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 	return nil
 }
 
-func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
+func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell, fromDown bool) error {
 	var p *value_object.DataPayload
 	var err error
 	if len(cell.Payload) > 0 {
@@ -267,6 +292,27 @@ func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid value_object.Cir
 	} else {
 		p = &value_object.DataPayload{}
 	}
+	if fromDown {
+		if len(cell.Payload) > 0 {
+			enc, err := uc.crypto.AESSeal(st.Key(), st.Nonce(), p.Data)
+			if err != nil {
+				return err
+			}
+			payload, err := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: p.StreamID, Data: enc})
+			if err != nil {
+				return err
+			}
+			cell = &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.Version, Payload: payload}
+		}
+		if p.StreamID == 0 {
+			err = forwardCell(st.Up(), cid, cell)
+			_ = uc.repo.Delete(cid)
+			st.Streams().DestroyAll()
+			return err
+		}
+		return forwardCell(st.Up(), cid, cell)
+	}
+
 	if p.StreamID == 0 {
 		st.Streams().DestroyAll()
 		if st.Down() != nil {
@@ -396,6 +442,21 @@ func forwardCell(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell
 		return err
 	}
 	log.Printf("response forward cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
+	return nil
+}
+
+func forwardCellNoLog(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
+	buf, err := value_object.Encode(*cell)
+	if err != nil {
+		log.Printf("forward encode cid=%s err=%v", cid.String(), err)
+		return err
+	}
+	out := append(cid.Bytes(), buf...)
+	_, err = w.Write(out)
+	if err != nil {
+		log.Printf("forward write cid=%s err=%v", cid.String(), err)
+		return err
+	}
 	return nil
 }
 

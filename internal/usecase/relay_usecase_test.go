@@ -809,3 +809,53 @@ func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 	upEntry.Close()
 	upClient.Close()
 }
+
+func TestRelayUseCase_UpstreamEncryption(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	crypto := infraSvc.NewCryptoService()
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+
+	keyMid, _ := value_object.NewAESKey()
+	nonceMid, _ := value_object.NewNonce()
+	keyExit, _ := value_object.NewAESKey()
+	nonceExit, _ := value_object.NewNonce()
+	cid := value_object.NewCircuitID()
+
+	upMid, upClient := net.Pipe()
+	downMid, upExit := net.Pipe()
+	stMid := entity.NewConnState(keyMid, nonceMid, upMid, downMid)
+	repo.Add(cid, stMid)
+
+	sid, _ := value_object.StreamIDFrom(1)
+	plain := []byte("hello")
+	layerExit, _ := crypto.AESSeal(keyExit, nonceExit, plain)
+	payload, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid.UInt16(), Data: layerExit})
+	cell := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: payload}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- uc.Handle(downMid, cid, cell) }()
+
+	buf := make([]byte, 528)
+	if _, err := io.ReadFull(upClient, buf); err != nil {
+		t.Fatalf("read forward: %v", err)
+	}
+	fwd, err := value_object.Decode(buf[16:])
+	if err != nil {
+		t.Fatalf("decode forward: %v", err)
+	}
+	dp, err := value_object.DecodeDataPayload(fwd.Payload)
+	if err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	layerMid, _ := crypto.AESSeal(keyMid, nonceMid, layerExit)
+	if !bytes.Equal(dp.Data, layerMid) {
+		t.Fatalf("forwarded payload mismatch")
+	}
+	if err := <-errCh; err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	stMid.Up().Close()
+	stMid.Down().Close()
+	upExit.Close()
+}
