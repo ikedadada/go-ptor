@@ -22,7 +22,7 @@ func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	// prepare extend cell
 	_, pub, _ := crypto.X25519Generate()
@@ -63,7 +63,7 @@ func TestRelayUseCase_ForwardExtendExisting(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -119,7 +119,7 @@ func TestRelayUseCase_EndUnknown(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 	cid := value_object.NewCircuitID()
 	cell := &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.Version, Payload: nil}
 	if err := uc.Handle(nil, cid, cell); err != nil {
@@ -131,7 +131,7 @@ func TestRelayUseCase_EndStreamNoDown(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -171,7 +171,7 @@ func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -230,7 +230,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 		repo := repoimpl.NewCircuitTableRepository(time.Second)
 		crypto := infraSvc.NewCryptoService()
-		uc := usecase.NewRelayUseCase(priv, repo, crypto)
+		uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 		key, _ := value_object.NewAESKey()
 		nonce, _ := value_object.NewNonce()
@@ -280,7 +280,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 		repo := repoimpl.NewCircuitTableRepository(time.Second)
 		crypto := infraSvc.NewCryptoService()
-		uc := usecase.NewRelayUseCase(priv, repo, crypto)
+		uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 		key, _ := value_object.NewAESKey()
 		nonce, _ := value_object.NewNonce()
@@ -331,7 +331,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 		repo := repoimpl.NewCircuitTableRepository(time.Second)
 		crypto := infraSvc.NewCryptoService()
-		uc := usecase.NewRelayUseCase(priv, repo, crypto)
+		uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 		key, _ := value_object.NewAESKey()
 		nonce, _ := value_object.NewNonce()
@@ -354,7 +354,7 @@ func TestRelayUseCase_ConnectAck(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -398,7 +398,7 @@ func TestRelayUseCase_BeginForward(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -442,7 +442,7 @@ func TestRelayUseCase_BeginExit(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -497,8 +497,8 @@ func TestRelayUseCase_DataForwardExit(t *testing.T) {
 	repoMid := repoimpl.NewCircuitTableRepository(10 * time.Second)
 	repoExit := repoimpl.NewCircuitTableRepository(10 * time.Second)
 
-	ucMid := usecase.NewRelayUseCase(priv, repoMid, crypto)
-	ucExit := usecase.NewRelayUseCase(priv, repoExit, crypto)
+	ucMid := usecase.NewRelayUseCase(priv, repoMid, crypto, infraSvc.NewHandlerCellReader())
+	ucExit := usecase.NewRelayUseCase(priv, repoExit, crypto, infraSvc.NewHandlerCellReader())
 
 	keyMid, _ := value_object.NewAESKey()
 	nonceMid, _ := value_object.NewNonce()
@@ -579,7 +579,7 @@ func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -636,7 +636,7 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -701,7 +701,7 @@ func TestRelayUseCase_DataHidden(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
 	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto)
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()

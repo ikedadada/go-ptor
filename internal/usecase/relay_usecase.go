@@ -18,17 +18,36 @@ import (
 // RelayUseCase processes cells for a single relay connection.
 type RelayUseCase interface {
 	Handle(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error
+	ServeConn(c net.Conn)
 }
 
 type relayUsecaseImpl struct {
 	priv   *rsa.PrivateKey
 	repo   repoif.CircuitTableRepository
 	crypto service.CryptoService
+	reader service.CellReader
 }
 
 // NewRelayUseCase returns a use case to process relay connections.
-func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c service.CryptoService) RelayUseCase {
-	return &relayUsecaseImpl{priv: priv, repo: repo, crypto: c}
+func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c service.CryptoService, r service.CellReader) RelayUseCase {
+	return &relayUsecaseImpl{priv: priv, repo: repo, crypto: c, reader: r}
+}
+
+func (uc *relayUsecaseImpl) ServeConn(c net.Conn) {
+	defer c.Close()
+	for {
+		cid, cell, err := uc.reader.ReadCell(c)
+		if err != nil {
+			if err != io.EOF {
+				log.Println("read cell:", err)
+			}
+			return
+		}
+		log.Printf("cell cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
+		if err := uc.Handle(c, cid, cell); err != nil {
+			log.Println("handle:", err)
+		}
+	}
 }
 
 func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell *value_object.Cell) error {
@@ -276,6 +295,9 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell
 	st := entity.NewConnState(key, nonce, up, down)
 	if err := uc.repo.Add(cid, st); err != nil {
 		return err
+	}
+	if down != nil {
+		go uc.ServeConn(down)
 	}
 	createdPayload, err := value_object.EncodeCreatedPayload(&value_object.CreatedPayload{RelayPub: to32(relayPub)})
 	if err != nil {
