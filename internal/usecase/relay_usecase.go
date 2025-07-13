@@ -337,6 +337,8 @@ func to32(b []byte) [32]byte {
 func sendCreated(w net.Conn, cid value_object.CircuitID, payload []byte) error {
 	var hdr [20]byte
 	copy(hdr[:16], cid.Bytes())
+	hdr[16] = value_object.CmdCreated
+	hdr[17] = value_object.Version
 	binary.BigEndian.PutUint16(hdr[18:20], uint16(len(payload)))
 	if _, err := w.Write(hdr[:]); err != nil {
 		return err
