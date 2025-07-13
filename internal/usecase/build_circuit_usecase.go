@@ -10,7 +10,8 @@ import (
 
 // BuildCircuitInput はユーザーが指定できるパラメータ
 type BuildCircuitInput struct {
-	Hops int // 省略時はデフォルト (3)
+	Hops        int    // 省略時はデフォルト (3)
+	ExitRelayID string // 任意。指定時は最終 hop をこのリレーに固定
 }
 
 // BuildCircuitOutput は UI / API に返すレスポンス
@@ -40,7 +41,15 @@ func NewBuildCircuitUseCase(b service.CircuitBuildService) BuildCircuitUseCase {
 
 func (uc *buildCircuitUseCaseImpl) Handle(in BuildCircuitInput) (BuildCircuitOutput, error) {
 	// hops 引数を service に渡して Circuit を生成
-	cir, err := uc.builder.Build(in.Hops) // Build(hops int) を想定
+	exitID := value_object.RelayID{}
+	if in.ExitRelayID != "" {
+		var err error
+		exitID, err = value_object.NewRelayID(in.ExitRelayID)
+		if err != nil {
+			return BuildCircuitOutput{}, err
+		}
+	}
+	cir, err := uc.builder.Build(in.Hops, exitID)
 	if err != nil {
 		return BuildCircuitOutput{}, err
 	}

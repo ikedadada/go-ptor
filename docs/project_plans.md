@@ -754,7 +754,8 @@ func main() {
 1. client は "xxxx...xxxx.ptor" を要求
 2. ptor-client は directory から対応する公開鍵を探す
 3. 対応する relay ノード（exit）と通信確立
-4. 最終 hop が hidden-service に接続
+4. CircuitBuildService へ exit の RelayID を渡して回線を構築
+5. 最終 hop が hidden-service に接続
 
 Directory は .ptor アドレス → Relay ID のマッピングを JSON で持つ。
 
