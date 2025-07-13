@@ -43,6 +43,12 @@ func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 	if _, err := io.ReadFull(up2, hdr); err != nil {
 		t.Fatalf("read header: %v", err)
 	}
+	if hdr[16] != value_object.CmdCreated {
+		t.Fatalf("created cmd %d", hdr[16])
+	}
+	if hdr[17] != value_object.Version {
+		t.Fatalf("created version %d", hdr[17])
+	}
 	l := binary.BigEndian.Uint16(hdr[18:20])
 	body := make([]byte, l)
 	if _, err := io.ReadFull(up2, body); err != nil {
@@ -100,6 +106,12 @@ func TestRelayUseCase_ForwardExtendExisting(t *testing.T) {
 	var respHdr [20]byte
 	if _, err := io.ReadFull(up2, respHdr[:]); err != nil {
 		t.Fatalf("read created hdr: %v", err)
+	}
+	if respHdr[16] != value_object.CmdCreated {
+		t.Fatalf("created cmd %d", respHdr[16])
+	}
+	if respHdr[17] != value_object.Version {
+		t.Fatalf("created version %d", respHdr[17])
 	}
 	l := binary.BigEndian.Uint16(respHdr[18:20])
 	resp := make([]byte, l)

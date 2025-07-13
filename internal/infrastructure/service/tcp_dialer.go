@@ -35,6 +35,9 @@ func (TCPDialer) WaitCreated(conn net.Conn) ([]byte, error) {
 	if _, err := io.ReadFull(conn, hdr[:]); err != nil {
 		return nil, err
 	}
+	if hdr[16] != value_object.CmdCreated || hdr[17] != value_object.Version {
+		return nil, fmt.Errorf("invalid created header")
+	}
 	l := binary.BigEndian.Uint16(hdr[18:20])
 	if l == 0 {
 		return nil, fmt.Errorf("no payload")
