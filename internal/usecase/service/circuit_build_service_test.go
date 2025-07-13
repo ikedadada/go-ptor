@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ikedadada/go-ptor/internal/domain/entity"
+	repoif "ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase/service"
@@ -27,8 +28,15 @@ type mockRelayRepo struct {
 func (m *mockRelayRepo) AllOnline() ([]*entity.Relay, error) {
 	return m.online, m.err
 }
-func (m *mockRelayRepo) FindByID(_ value_object.RelayID) (*entity.Relay, error) { return nil, nil }
-func (m *mockRelayRepo) Save(_ *entity.Relay) error                             { return nil }
+func (m *mockRelayRepo) FindByID(id value_object.RelayID) (*entity.Relay, error) {
+	for _, r := range m.online {
+		if r.ID().Equal(id) {
+			return r, nil
+		}
+	}
+	return nil, repoif.ErrNotFound
+}
+func (m *mockRelayRepo) Save(_ *entity.Relay) error { return nil }
 
 // --- Mock CircuitRepository ---
 type mockCircuitRepo struct {
@@ -107,7 +115,9 @@ func makeTestRelay() (*entity.Relay, error) {
 	if err != nil {
 		return nil, err
 	}
-	return entity.NewRelay(relayID, end, rsaPub), nil
+	r := entity.NewRelay(relayID, end, rsaPub)
+	r.SetOnline()
+	return r, nil
 }
 
 func TestCircuitBuildService_Build_Table(t *testing.T) {
@@ -135,7 +145,7 @@ func TestCircuitBuildService_Build_Table(t *testing.T) {
 			dial := &mockDialer{}
 			crypto := infraSvc.NewCryptoService()
 			builder := service.NewCircuitBuildService(rr, cr, dial, crypto)
-			circuit, err := builder.Build(tt.hops)
+			circuit, err := builder.Build(tt.hops, value_object.RelayID{})
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")
 			}
@@ -163,7 +173,7 @@ func TestCircuitBuildService_Build_DialerUsage(t *testing.T) {
 	crypto := infraSvc.NewCryptoService()
 
 	builder := service.NewCircuitBuildService(rr, cr, d, crypto)
-	if _, err := builder.Build(3); err != nil {
+	if _, err := builder.Build(3, value_object.RelayID{}); err != nil {
 		t.Fatalf("build: %v", err)
 	}
 	if d.dialCalled != 1 {
@@ -188,7 +198,7 @@ func TestCircuitBuildService_Build_KeyGeneration(t *testing.T) {
 	crypto := infraSvc.NewCryptoService()
 
 	builder := service.NewCircuitBuildService(rr, cr, d, crypto)
-	circuit, err := builder.Build(3)
+	circuit, err := builder.Build(3, value_object.RelayID{})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -199,5 +209,26 @@ func TestCircuitBuildService_Build_KeyGeneration(t *testing.T) {
 		if circuit.HopNonce(i) == (value_object.Nonce{}) {
 			t.Errorf("nonce %d empty", i)
 		}
+	}
+}
+
+func TestCircuitBuildService_Build_WithExit(t *testing.T) {
+	relay, err := makeTestRelay()
+	if err != nil {
+		t.Fatalf("setup relay: %v", err)
+	}
+	rr := &mockRelayRepo{online: []*entity.Relay{relay, relay, relay}}
+	cr := &mockCircuitRepo{}
+	d := &mockDialer{}
+	crypto := infraSvc.NewCryptoService()
+
+	builder := service.NewCircuitBuildService(rr, cr, d, crypto)
+	circuit, err := builder.Build(3, relay.ID())
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	hops := circuit.Hops()
+	if !hops[len(hops)-1].Equal(relay.ID()) {
+		t.Errorf("exit relay not last hop")
 	}
 }

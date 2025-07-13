@@ -34,10 +34,12 @@ For example, to start the client:
 go run ./cmd/client
 ```
 
-When the client resolves a `.ptor` address, it sends a CONNECT cell once for the
-current circuit before any streams are opened. After the CONNECT succeeds,
-stream data continues to use BEGIN cells as before. The CONNECT payload is onion
-encrypted across all hops so only the exit relay can read it.
+When the client resolves a `.ptor` address, it consults the directory to find
+the designated exit relay for that service. A new circuit is built so this relay
+is the final hop. The client then sends a CONNECT cell once for that circuit
+before any streams are opened. After the CONNECT succeeds, stream data continues
+to use BEGIN cells as before. The CONNECT payload is onion encrypted across all
+hops so only the exit relay can read it.
 
 ### Environment variables
 

@@ -173,16 +173,19 @@ func fetchDirectory(base string) (entity.Directory, error) {
 // resolveAddress returns the dial address for the given host and port.
 // If host ends with .ptor, it looks up the hidden service in the directory
 // and returns the endpoint of the designated exit relay.
-func resolveAddress(dir entity.Directory, host string, port int) (string, error) {
+func resolveAddress(dir entity.Directory, host string, port int) (string, string, error) {
+	exit := ""
 	if strings.HasSuffix(host, ".ptor") {
-		if _, ok := dir.HiddenServices[host]; !ok {
-			return "", fmt.Errorf("hidden service not found: %s", host)
+		hs, ok := dir.HiddenServices[host]
+		if !ok {
+			return "", "", fmt.Errorf("hidden service not found: %s", host)
 		}
+		exit = hs.Relay
 	}
 	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
-		return fmt.Sprintf("[%s]:%d", host, port), nil
+		return fmt.Sprintf("[%s]:%d", host, port), exit, nil
 	}
-	return fmt.Sprintf("%s:%d", host, port), nil
+	return fmt.Sprintf("%s:%d", host, port), exit, nil
 }
 
 func main() {
@@ -241,16 +244,6 @@ func main() {
 	builder := useSvc.NewCircuitBuildService(relayRepository, circuitRepository, dialer, cryptoSvc)
 	buildUC := usecase.NewBuildCircuitUseCase(builder)
 
-	out, err := buildUC.Handle(usecase.BuildCircuitInput{Hops: *hops})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("Circuit built:", out.CircuitID)
-
-	cid, _ := value_object.CircuitIDFrom(out.CircuitID)
-	sm := newStreamMap()
-	go recvLoop(circuitRepository, cryptoSvc, cid, sm)
-
 	factory := infraSvc.TCPTransmitterFactory{}
 	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
 	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, factory)
@@ -271,13 +264,13 @@ func main() {
 		}
 		log.Printf("request connection from %s", c.RemoteAddr())
 		go func(conn net.Conn) {
-			handleSOCKS(conn, dir, out.CircuitID, connectUC, openUC, closeUC, sendUC, endUC, sm)
+			handleSOCKS(conn, dir, *hops, buildUC, connectUC, openUC, closeUC, sendUC, endUC, circuitRepository, cryptoSvc)
 			log.Printf("response connection closed %s", conn.RemoteAddr())
 		}(c)
 	}
 }
 
-func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, connect usecase.ConnectUseCase, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase, sm *streamMap) {
+func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.BuildCircuitUseCase, connect usecase.ConnectUseCase, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase, repo repoif.CircuitRepository, crypto useSvc.CryptoService) {
 	defer conn.Close()
 
 	var buf [262]byte
@@ -329,13 +322,25 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, circuitID string, connect 
 	}
 	port := int(buf[0])<<8 | int(buf[1])
 
-	hidden := strings.HasSuffix(host, ".ptor")
-	addr, err := resolveAddress(dir, host, port)
+	addr, exitID, err := resolveAddress(dir, host, port)
+	hidden := exitID != ""
 	if err != nil {
 		log.Println("resolve address:", err)
 		conn.Write([]byte{5, 4, 0, 1, 0, 0, 0, 0, 0, 0})
 		return
 	}
+
+	buildOut, err := build.Handle(usecase.BuildCircuitInput{Hops: hops, ExitRelayID: exitID})
+	if err != nil {
+		log.Println("build circuit:", err)
+		conn.Write([]byte{5, 1, 0, 1, 0, 0, 0, 0, 0, 0})
+		return
+	}
+	circuitID := buildOut.CircuitID
+
+	cid, _ := value_object.CircuitIDFrom(circuitID)
+	sm := newStreamMap()
+	go recvLoop(repo, crypto, cid, sm)
 
 	if hidden {
 		if _, err := connect.Handle(usecase.ConnectInput{CircuitID: circuitID}); err != nil {

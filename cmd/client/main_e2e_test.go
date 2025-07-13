@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"strings"
 )
 
 func freePort(t *testing.T) string {
@@ -180,6 +181,7 @@ func TestClientMain_E2E(t *testing.T) {
 func TestClientMain_HiddenService(t *testing.T) {
 	socks := freePort(t)
 	relayAddr := freePort(t)
+	relay2Addr := freePort(t)
 	hiddenAddr := freePort(t)
 
 	hiddenExe := buildHiddenBin(t)
@@ -215,16 +217,37 @@ func TestClientMain_HiddenService(t *testing.T) {
 	rctx, rcancel := context.WithCancel(context.Background())
 	rcmd := exec.CommandContext(rctx, relayExe, "-listen", relayAddr)
 	rcmd.Env = append(os.Environ(), "PTOR_HIDDEN_ADDR="+hiddenAddr)
+	var rout bytes.Buffer
+	rcmd.Stdout = &rout
+	rcmd.Stderr = &rout
 	if err := rcmd.Start(); err != nil {
 		t.Fatalf("start relay: %v", err)
 	}
 	defer func() {
 		rcancel()
 		rcmd.Wait()
+		t.Log("relay log:", rout.String())
 	}()
 
 	if _, err := waitDial(relayAddr, 5*time.Second); err != nil {
 		t.Fatalf("dial relay: %v", err)
+	}
+
+	rctx2, cancel2 := context.WithCancel(context.Background())
+	rcmd2 := exec.CommandContext(rctx2, relayExe, "-listen", relay2Addr)
+	var rout2 bytes.Buffer
+	rcmd2.Stdout = &rout2
+	rcmd2.Stderr = &rout2
+	if err := rcmd2.Start(); err != nil {
+		t.Fatalf("start relay2: %v", err)
+	}
+	defer func() {
+		cancel2()
+		rcmd2.Wait()
+		t.Log("relay2 log:", rout2.String())
+	}()
+	if _, err := waitDial(relay2Addr, 5*time.Second); err != nil {
+		t.Fatalf("dial relay2: %v", err)
 	}
 
 	der, _ := x509.MarshalPKIXPublicKey(key.Public())
@@ -233,12 +256,15 @@ func TestClientMain_HiddenService(t *testing.T) {
 	relDer, _ := x509.MarshalPKIXPublicKey(&relKey.PublicKey)
 	relPem := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: relDer}))
 	hidAddr := value_object.NewHiddenAddr(key.Public().(ed25519.PublicKey)).String()
+	exitID := uuid.NewString()
+	midID := uuid.NewString()
 	dirData := entity.Directory{
 		Relays: map[string]entity.RelayInfo{
-			uuid.NewString(): {Endpoint: relayAddr, PubKey: relPem},
+			midID:  {Endpoint: relay2Addr, PubKey: relPem},
+			exitID: {Endpoint: relayAddr, PubKey: relPem},
 		},
 		HiddenServices: map[string]entity.HiddenServiceInfo{
-			hidAddr: {Relay: uuid.NewString(), PubKey: hidPem},
+			hidAddr: {Relay: exitID, PubKey: hidPem},
 		},
 	}
 	mux := http.NewServeMux()
@@ -255,7 +281,7 @@ func TestClientMain_HiddenService(t *testing.T) {
 
 	exe := buildBin(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, exe, "-hops", "1", "-socks", socks, "-dir", dirSrv.URL)
+	cmd := exec.CommandContext(ctx, exe, "-hops", "2", "-socks", socks, "-dir", dirSrv.URL)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start client: %v", err)
 	}
@@ -275,5 +301,11 @@ func TestClientMain_HiddenService(t *testing.T) {
 	}
 	if !bytes.Contains(out, []byte("ok")) {
 		t.Fatalf("unexpected response: %s", out)
+	}
+	if !strings.Contains(rout.String(), "cmd=2") {
+		t.Fatalf("exit relay did not see CONNECT")
+	}
+	if strings.Contains(rout2.String(), "cmd=2") {
+		t.Fatalf("middle relay received CONNECT")
 	}
 }

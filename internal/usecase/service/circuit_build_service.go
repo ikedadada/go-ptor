@@ -16,7 +16,8 @@ import (
 // CircuitBuilder は Circuit を生成するためのインターフェース。
 type CircuitBuildService interface {
 	// Build は新しい Circuit を生成してリポジトリに保存し、返す。
-	Build(hops int) (*entity.Circuit, error)
+	// exit がゼロ値でなければ、そのリレーを最終 hop とする。
+	Build(hops int, exit value_object.RelayID) (*entity.Circuit, error)
 }
 
 // CircuitBuilder はリレー選択・鍵生成・Circuit 保存をまとめたドメインサービス。
@@ -32,7 +33,7 @@ func NewCircuitBuildService(rr repository.RelayRepository, cr repository.Circuit
 }
 
 // Build は新しい Circuit を生成してリポジトリに保存し、返す。
-func (b *circuitBuildServiceImpl) Build(hops int) (*entity.Circuit, error) {
+func (b *circuitBuildServiceImpl) Build(hops int, exit value_object.RelayID) (*entity.Circuit, error) {
 	if hops <= 0 {
 		hops = 3
 	}
@@ -45,11 +46,45 @@ func (b *circuitBuildServiceImpl) Build(hops int) (*entity.Circuit, error) {
 		return nil, fmt.Errorf("not enough online relays (need %d)", hops)
 	}
 
+	var exitRelay *entity.Relay
+	if exit != (value_object.RelayID{}) {
+		r, err := b.rr.FindByID(exit)
+		if err != nil {
+			return nil, fmt.Errorf("exit relay not found: %w", err)
+		}
+		if r.Status() != entity.Online {
+			return nil, fmt.Errorf("exit relay not online")
+		}
+		for i, rel := range relays {
+			if rel.ID().Equal(exit) {
+				exitRelay = rel
+				relays = append(relays[:i], relays[i+1:]...)
+				break
+			}
+		}
+		if exitRelay == nil {
+			// exit relay was not in online list
+			return nil, fmt.Errorf("exit relay not in online list")
+		}
+		if hops == 1 {
+			relays = []*entity.Relay{}
+		}
+	}
+
 	// 2. 無作為に hops 個選出（重複なし）
 	if err := secureShuffle(relays); err != nil {
 		return nil, fmt.Errorf("shuffle relays: %w", err)
 	}
-	selected := relays[:hops]
+	var selected []*entity.Relay
+	if exitRelay == nil {
+		selected = relays[:hops]
+	} else {
+		if hops-1 > len(relays) {
+			return nil, fmt.Errorf("not enough online relays (need %d)", hops)
+		}
+		selected = append(selected, relays[:hops-1]...)
+		selected = append(selected, exitRelay)
+	}
 
 	relayIDs := make([]value_object.RelayID, 0, hops)
 	keys := make([]value_object.AESKey, hops)
