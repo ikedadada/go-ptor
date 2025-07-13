@@ -28,6 +28,14 @@ type relayUsecaseImpl struct {
 	reader service.CellReader
 }
 
+func (uc *relayUsecaseImpl) ensureServeDown(st *entity.ConnState) {
+	if st == nil || st.Down() == nil || st.IsServed() {
+		return
+	}
+	st.MarkServed()
+	go uc.ServeConn(st.Down())
+}
+
 // NewRelayUseCase returns a use case to process relay connections.
 func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c service.CryptoService, r service.CellReader) RelayUseCase {
 	return &relayUsecaseImpl{priv: priv, repo: repo, crypto: c, reader: r}
@@ -94,6 +102,7 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
 	// middle relay: peel one layer and forward the remaining ciphertext
 	if st.Down() != nil {
+		uc.ensureServeDown(st)
 		dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
 		if err != nil {
 			return err
@@ -164,6 +173,7 @@ func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.Circuit
 	}
 
 	if st.Down() != nil {
+		uc.ensureServeDown(st)
 		c := &value_object.Cell{Cmd: value_object.CmdBegin, Version: value_object.Version, Payload: dec}
 		return forwardCell(st.Down(), cid, c)
 	}
@@ -221,6 +231,7 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 
 	// middle relay: forward downstream with one layer removed
 	if st.Down() != nil {
+		uc.ensureServeDown(st)
 		payload, err := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: p.StreamID, Data: dec})
 		if err != nil {
 			return err
@@ -259,6 +270,7 @@ func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid value_object.Cir
 	if p.StreamID == 0 {
 		st.Streams().DestroyAll()
 		if st.Down() != nil {
+			uc.ensureServeDown(st)
 			_ = forwardCell(st.Down(), cid, cell)
 		}
 		_ = uc.repo.Delete(cid)
@@ -270,6 +282,7 @@ func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid value_object.Cir
 	}
 	_ = st.Streams().Remove(sid)
 	if st.Down() != nil {
+		uc.ensureServeDown(st)
 		return forwardCell(st.Down(), cid, cell)
 	}
 	return nil
@@ -306,7 +319,7 @@ func (uc *relayUsecaseImpl) extend(up net.Conn, cid value_object.CircuitID, cell
 		return err
 	}
 	if down != nil {
-		go uc.ServeConn(down)
+		// ServeConn will be started when the next downstream-forwarding command arrives
 	}
 	createdPayload, err := value_object.EncodeCreatedPayload(&value_object.CreatedPayload{RelayPub: to32(relayPub)})
 	if err != nil {

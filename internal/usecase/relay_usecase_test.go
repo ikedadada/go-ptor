@@ -748,3 +748,64 @@ func TestRelayUseCase_DataHidden(t *testing.T) {
 	down1.Close()
 	down2.Close()
 }
+
+func TestRelayUseCase_MultiHopExtend(t *testing.T) {
+	priv1, _ := rsa.GenerateKey(rand.Reader, 2048)
+	priv2, _ := rsa.GenerateKey(rand.Reader, 2048)
+	repo1 := repoimpl.NewCircuitTableRepository(time.Second)
+	repo2 := repoimpl.NewCircuitTableRepository(time.Second)
+	crypto := infraSvc.NewCryptoService()
+	uc1 := usecase.NewRelayUseCase(priv1, repo1, crypto, infraSvc.NewHandlerCellReader())
+	uc2 := usecase.NewRelayUseCase(priv2, repo2, crypto, infraSvc.NewHandlerCellReader())
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	go func() {
+		conn, _ := ln.Accept()
+		if conn != nil {
+			go uc2.ServeConn(conn)
+		}
+	}()
+
+	_, pub1, _ := crypto.X25519Generate()
+	var pubArr1 [32]byte
+	copy(pubArr1[:], pub1)
+	payload1, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{NextHop: ln.Addr().String(), ClientPub: pubArr1})
+	cid := value_object.NewCircuitID()
+	cell1 := &value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.Version, Payload: payload1}
+
+	upEntry, upClient := net.Pipe()
+	go uc1.Handle(upEntry, cid, cell1)
+
+	hdr := make([]byte, 20)
+	if _, err := io.ReadFull(upClient, hdr); err != nil {
+		t.Fatalf("read created1 hdr: %v", err)
+	}
+	l := binary.BigEndian.Uint16(hdr[18:20])
+	buf1 := make([]byte, l)
+	if _, err := io.ReadFull(upClient, buf1); err != nil {
+		t.Fatalf("read created1 body: %v", err)
+	}
+
+	_, pub2, _ := crypto.X25519Generate()
+	var pubArr2 [32]byte
+	copy(pubArr2[:], pub2)
+	payload2, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{ClientPub: pubArr2})
+	cell2 := &value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.Version, Payload: payload2}
+	go uc1.Handle(upEntry, cid, cell2)
+
+	hdr2 := make([]byte, 20)
+	if _, err := io.ReadFull(upClient, hdr2); err != nil {
+		t.Fatalf("read created2 hdr: %v", err)
+	}
+	l2 := binary.BigEndian.Uint16(hdr2[18:20])
+	buf2 := make([]byte, l2)
+	if _, err := io.ReadFull(upClient, buf2); err != nil {
+		t.Fatalf("read created2 body: %v", err)
+	}
+	if hdr2[16] != value_object.CmdCreated {
+		t.Fatalf("second created cmd %d", hdr2[16])
+	}
+	upEntry.Close()
+	upClient.Close()
+}

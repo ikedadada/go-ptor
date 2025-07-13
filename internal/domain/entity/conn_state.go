@@ -16,11 +16,12 @@ type ConnState struct {
 	last   time.Time
 	tbl    *StreamTable
 	hidden bool
+	served bool
 }
 
 // NewConnState returns a new ConnState instance.
 func NewConnState(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn) *ConnState {
-	return &ConnState{key: key, nonce: nonce, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false}
+	return &ConnState{key: key, nonce: nonce, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
 }
 
 // Key returns the symmetric key for this circuit hop.
@@ -47,6 +48,12 @@ func (s *ConnState) SetHidden(v bool) { s.hidden = v }
 
 // IsHidden reports whether the downstream connection is for a hidden service.
 func (s *ConnState) IsHidden() bool { return s.hidden }
+
+// MarkServed records that the downstream ServeConn loop has started.
+func (s *ConnState) MarkServed() { s.served = true }
+
+// IsServed reports whether the downstream ServeConn loop has started.
+func (s *ConnState) IsServed() bool { return s.served }
 
 // Close closes both sides of the connection.
 func (s *ConnState) Close() {
