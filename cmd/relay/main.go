@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
@@ -22,7 +23,7 @@ import (
 func main() {
 	listen := flag.String("listen", ":5000", "listen address")
 	privPath := flag.String("priv", "", "RSA private key")
-	ttl := flag.Duration("ttl", time.Minute, "circuit entry TTL")
+	ttl := flag.Duration("ttl", defaultTTL(), "circuit entry TTL")
 	flag.Parse()
 	var priv *rsa.PrivateKey
 	var err error
@@ -83,4 +84,16 @@ func loadRSAPriv(path string) (*rsa.PrivateKey, error) {
 	default:
 		return nil, fmt.Errorf("unsupported key type %q", blk.Type)
 	}
+}
+
+// defaultTTL returns the TTL for circuit entries derived from the
+// PTOR_TTL_SECONDS environment variable or 1 minute if unset/invalid.
+func defaultTTL() time.Duration {
+	ttl := time.Minute
+	if v := os.Getenv("PTOR_TTL_SECONDS"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			ttl = time.Duration(secs) * time.Second
+		}
+	}
+	return ttl
 }

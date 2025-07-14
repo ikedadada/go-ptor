@@ -50,7 +50,9 @@ backward compatibility.
 
 Relay connections are kept in an in-memory table. The TTL can be configured
 with the `-ttl` flag when starting the relay. Increase this value when
-troubleshooting long-lived circuits.
+troubleshooting long-lived circuits. A default TTL can also be provided via the
+`PTOR_TTL_SECONDS` environment variable which specifies the number of seconds
+to keep each circuit entry.
 
 Additional logging now records failures when decoding EXTEND payloads,
 connecting to next hops, or forwarding cells so issues can be diagnosed more
