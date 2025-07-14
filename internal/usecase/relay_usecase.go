@@ -79,6 +79,8 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 	switch cell.Cmd {
 	case value_object.CmdBegin:
 		return uc.begin(st, cid, cell)
+	case value_object.CmdBeginAck:
+		return forwardCell(st.Up(), cid, cell)
 	case value_object.CmdEnd:
 		return uc.endStream(st, cid, cell)
 	case value_object.CmdDestroy:
