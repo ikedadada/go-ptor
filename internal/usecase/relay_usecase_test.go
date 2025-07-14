@@ -749,6 +749,45 @@ func TestRelayUseCase_DataHidden(t *testing.T) {
 	down2.Close()
 }
 
+func TestRelayUseCase_ForwardAck(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	crypto := infraSvc.NewCryptoService()
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+
+	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
+	cid := value_object.NewCircuitID()
+	up1, up2 := net.Pipe()
+	down1, down2 := net.Pipe()
+	st := entity.NewConnState(key, nonce, up1, down1)
+	repo.Add(cid, st)
+
+	cell := &value_object.Cell{Cmd: value_object.CmdBeginAck, Version: value_object.Version}
+	errCh := make(chan error, 1)
+	go func() { errCh <- uc.Handle(down1, cid, cell) }()
+
+	buf := make([]byte, 16+value_object.MaxCellSize)
+	if _, err := io.ReadFull(up2, buf); err != nil {
+		t.Fatalf("read forward: %v", err)
+	}
+	fwd, err := value_object.Decode(buf[16:])
+	if err != nil {
+		t.Fatalf("decode forward: %v", err)
+	}
+	if fwd.Cmd != value_object.CmdBeginAck {
+		t.Fatalf("cmd %d", fwd.Cmd)
+	}
+	if err := <-errCh; err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	up1.Close()
+	up2.Close()
+	down1.Close()
+	down2.Close()
+}
+
 func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 	priv1, _ := rsa.GenerateKey(rand.Reader, 2048)
 	priv2, _ := rsa.GenerateKey(rand.Reader, 2048)
