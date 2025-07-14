@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -107,7 +108,7 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 		uc.ensureServeDown(st)
 		dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
 		if err != nil {
-			return err
+			return fmt.Errorf("AESOpen connect cid=%s: %w", cid.String(), err)
 		}
 		c := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: dec}
 		return forwardCell(st.Down(), cid, c)
@@ -116,7 +117,7 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 	// exit relay: decode final payload and connect to the hidden service
 	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("AESOpen connect cid=%s: %w", cid.String(), err)
 	}
 	addr := os.Getenv("PTOR_HIDDEN_ADDR")
 	if addr == "" {
@@ -158,7 +159,7 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
 	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), cell.Payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("AESOpen begin cid=%s: %w", cid.String(), err)
 	}
 
 	if st.IsHidden() {
@@ -223,7 +224,7 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 	}
 	dec, err := uc.crypto.AESOpen(st.Key(), st.Nonce(), p.Data)
 	if err != nil {
-		return err
+		return fmt.Errorf("AESOpen data cid=%s: %w", cid.String(), err)
 	}
 
 	if st.IsHidden() {

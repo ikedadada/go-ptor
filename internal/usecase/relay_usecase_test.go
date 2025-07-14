@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -847,4 +848,28 @@ func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 	}
 	upEntry.Close()
 	upClient.Close()
+}
+
+func TestRelayUseCase_AESOpenErrorContext(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	crypto := infraSvc.NewCryptoService()
+	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+
+	key, _ := value_object.NewAESKey()
+	nonce, _ := value_object.NewNonce()
+	cid := value_object.NewCircuitID()
+	up1, _ := net.Pipe()
+	st := entity.NewConnState(key, nonce, up1, nil)
+	repo.Add(cid, st)
+
+	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: []byte{1, 2, 3}}
+	err := uc.Handle(up1, cid, cell)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "connect") || !strings.Contains(err.Error(), cid.String()) {
+		t.Fatalf("missing context: %v", err)
+	}
+	st.Up().Close()
 }
