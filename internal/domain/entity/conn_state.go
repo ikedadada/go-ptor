@@ -9,24 +9,41 @@ import (
 
 // ConnState represents per-circuit connection information held by a relay.
 type ConnState struct {
-	key    value_object.AESKey
-	nonce  value_object.Nonce
-	up     net.Conn
-	down   net.Conn
-	last   time.Time
-	tbl    *StreamTable
-	hidden bool
-	served bool
+	key         value_object.AESKey
+	baseNonce   value_object.Nonce
+	nonceCounter uint64
+	up          net.Conn
+	down        net.Conn
+	last        time.Time
+	tbl         *StreamTable
+	hidden      bool
+	served      bool
 }
 
 // NewConnState returns a new ConnState instance.
 func NewConnState(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn) *ConnState {
-	return &ConnState{key: key, nonce: nonce, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
+	return &ConnState{key: key, baseNonce: nonce, nonceCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
 }
 
 // Key returns the symmetric key for this circuit hop.
 func (s *ConnState) Key() value_object.AESKey  { return s.key }
-func (s *ConnState) Nonce() value_object.Nonce { return s.nonce }
+func (s *ConnState) Nonce() value_object.Nonce { return s.baseNonce }
+
+// NextNonce generates the next unique nonce for this connection using a counter.
+func (s *ConnState) NextNonce() value_object.Nonce {
+	var nonce value_object.Nonce
+	copy(nonce[:], s.baseNonce[:])
+	
+	// XOR the counter into the last 8 bytes of the nonce
+	counter := s.nonceCounter
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
+	s.nonceCounter++
+	return nonce
+}
 
 // Up returns the upstream connection.
 func (s *ConnState) Up() net.Conn { return s.up }

@@ -70,7 +70,7 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	nonces := make([][12]byte, 0, len(cir.Hops()))
 	for i := range cir.Hops() {
 		keys = append(keys, cir.HopKey(i))
-		nonces = append(nonces, cir.HopNonce(i))
+		nonces = append(nonces, cir.NextHopNonce(i))
 	}
 
 	enc, err := uc.crypto.AESMultiSeal(keys, nonces, plain)

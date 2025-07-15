@@ -75,10 +75,6 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 	}
 	keys := make([][32]byte, len(cir.Hops()))
 	nonces := make([][12]byte, len(cir.Hops()))
-	for i := range cir.Hops() {
-		keys[i] = cir.HopKey(i)
-		nonces[i] = cir.HopNonce(i)
-	}
 	for {
 		_, cell, err := handler.ReadCell(conn)
 		if err != nil {
@@ -93,6 +89,11 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 			dp, err := value_object.DecodeDataPayload(cell.Payload)
 			if err != nil {
 				continue
+			}
+			// Generate nonces for decryption (relays use counter-based nonces)
+			for i := range cir.Hops() {
+				keys[i] = cir.HopKey(i)
+				nonces[i] = cir.NextHopNonce(i)
 			}
 			plain, err := crypto.AESMultiOpen(keys, nonces, dp.Data)
 			if err != nil {

@@ -113,7 +113,8 @@ func (*cryptoServiceImpl) DeriveKeyNonce(secret []byte) ([32]byte, [12]byte, err
 	if _, err := io.ReadFull(hk, key[:]); err != nil {
 		return key, nonce, err
 	}
-	if _, err := io.ReadFull(hk, nonce[:]); err != nil {
+	// Generate random nonce instead of deriving from secret to avoid reuse
+	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
 		return key, nonce, err
 	}
 	return key, nonce, nil
