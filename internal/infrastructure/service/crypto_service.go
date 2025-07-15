@@ -113,9 +113,23 @@ func (*cryptoServiceImpl) DeriveKeyNonce(secret []byte) ([32]byte, [12]byte, err
 	if _, err := io.ReadFull(hk, key[:]); err != nil {
 		return key, nonce, err
 	}
-	// Generate random nonce instead of deriving from secret to avoid reuse
-	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
+	// Derive base nonce from secret - will be modified per message
+	if _, err := io.ReadFull(hk, nonce[:]); err != nil {
 		return key, nonce, err
 	}
 	return key, nonce, nil
+}
+
+// ModifyNonceWithSequence creates a unique nonce by XORing sequence number into base nonce
+func (*cryptoServiceImpl) ModifyNonceWithSequence(baseNonce [12]byte, sequence uint64) [12]byte {
+	var nonce [12]byte
+	nonce = baseNonce
+	
+	// XOR sequence number into last 8 bytes of nonce
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(sequence)
+		sequence >>= 8
+	}
+	
+	return nonce
 }

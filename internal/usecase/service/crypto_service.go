@@ -21,4 +21,7 @@ type CryptoService interface {
 	X25519Shared(priv, pub []byte) ([]byte, error)
 	// DeriveKeyNonce expands the shared secret into an AES key and nonce.
 	DeriveKeyNonce(secret []byte) ([32]byte, [12]byte, error)
+
+	// ModifyNonceWithSequence creates a unique nonce by XORing sequence number into base nonce
+	ModifyNonceWithSequence(baseNonce [12]byte, sequence uint64) [12]byte
 }
