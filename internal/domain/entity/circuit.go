@@ -93,6 +93,21 @@ func (c *Circuit) HopBeginNonce(idx int) value_object.Nonce {
 	return nonce
 }
 
+// HopBeginNoncePeek returns the next nonce without incrementing counter
+func (c *Circuit) HopBeginNoncePeek(idx int) value_object.Nonce {
+	var nonce value_object.Nonce
+	nonce = c.baseNonces[idx]
+	
+	// XOR begin counter into last 8 bytes
+	counter := c.beginCounter[idx]
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
+	return nonce
+}
+
 // HopDataNonce generates the next unique nonce for DATA commands at hop idx
 func (c *Circuit) HopDataNonce(idx int) value_object.Nonce {
 	var nonce value_object.Nonce
@@ -106,6 +121,21 @@ func (c *Circuit) HopDataNonce(idx int) value_object.Nonce {
 	}
 	
 	c.dataCounter[idx]++
+	return nonce
+}
+
+// HopDataNoncePeek returns the next nonce without incrementing counter
+func (c *Circuit) HopDataNoncePeek(idx int) value_object.Nonce {
+	var nonce value_object.Nonce
+	nonce = c.baseNonces[idx]
+	
+	// XOR data counter into last 8 bytes
+	counter := c.dataCounter[idx]
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
 	return nonce
 }
 func (c *Circuit) RSAPrivate() *rsa.PrivateKey         { return c.priv }

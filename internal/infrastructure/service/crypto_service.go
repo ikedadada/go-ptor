@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"log"
 
 	"golang.org/x/crypto/hkdf"
 
@@ -61,6 +62,7 @@ func (c *cryptoServiceImpl) AESMultiSeal(keys [][32]byte, nonces [][12]byte, pla
 	copy(out, plain)
 	var err error
 	for i := len(keys) - 1; i >= 0; i-- {
+		log.Printf("AESMultiSeal hop=%d nonce=%x key=%x", i, nonces[i], keys[i])
 		out, err = c.AESSeal(keys[i], nonces[i], out)
 		if err != nil {
 			return nil, err
@@ -76,8 +78,10 @@ func (c *cryptoServiceImpl) AESMultiOpen(keys [][32]byte, nonces [][12]byte, enc
 	out := enc
 	var err error
 	for i := 0; i < len(keys); i++ {
+		log.Printf("AESMultiOpen hop=%d nonce=%x key=%x", i, nonces[i], keys[i])
 		out, err = c.AESOpen(keys[i], nonces[i], out)
 		if err != nil {
+			log.Printf("AESMultiOpen hop=%d failed: %v", i, err)
 			return nil, err
 		}
 	}

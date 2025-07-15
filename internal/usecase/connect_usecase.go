@@ -56,6 +56,8 @@ func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
 
 	keys := make([][32]byte, 0, len(cir.Hops()))
 	nonces := make([][12]byte, 0, len(cir.Hops()))
+	
+	// Generate nonces in normal order for array indexing
 	for i := range cir.Hops() {
 		keys = append(keys, cir.HopKey(i))
 		nonces = append(nonces, cir.HopBeginNonce(i))  // CONNECT uses BEGIN nonce
