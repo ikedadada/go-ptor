@@ -157,7 +157,9 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 }
 
 func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
-	dec, err := uc.crypto.AESOpen(st.Key(), st.NextNonce(), cell.Payload)
+	nonce := st.NextNonce()
+	log.Printf("begin decrypt cid=%s nonce=%x", cid.String(), nonce)
+	dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
 	if err != nil {
 		return fmt.Errorf("AESOpen begin cid=%s: %w", cid.String(), err)
 	}

@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"fmt"
+	"log"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
@@ -70,7 +71,9 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	nonces := make([][12]byte, 0, len(cir.Hops()))
 	for i := range cir.Hops() {
 		keys = append(keys, cir.HopKey(i))
-		nonces = append(nonces, cir.HopNonce(i))
+		nonce := cir.HopNonce(i)
+		nonces = append(nonces, nonce)
+		log.Printf("send encrypt hop=%d nonce=%x", i, nonce)
 	}
 
 	enc, err := uc.crypto.AESMultiSeal(keys, nonces, plain)
