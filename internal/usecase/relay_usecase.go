@@ -162,11 +162,13 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 
 func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
 	nonce := st.BeginNonce()
-	log.Printf("begin decrypt cid=%s nonce=%x", cid.String(), nonce)
+	log.Printf("begin decrypt cid=%s nonce=%x key=%x payloadLen=%d", cid.String(), nonce, st.Key(), len(cell.Payload))
 	dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
 	if err != nil {
+		log.Printf("AESOpen begin failed cid=%s nonce=%x error=%v", cid.String(), nonce, err)
 		return fmt.Errorf("AESOpen begin cid=%s: %w", cid.String(), err)
 	}
+	log.Printf("begin decrypt success cid=%s decryptedLen=%d", cid.String(), len(dec))
 
 	if st.IsHidden() {
 		p, err := value_object.DecodeBeginPayload(dec)
@@ -229,11 +231,13 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 		return err
 	}
 	nonce := st.DataNonce()
-	log.Printf("data decrypt cid=%s nonce=%x", cid.String(), nonce)
+	log.Printf("data decrypt cid=%s nonce=%x key=%x dataLen=%d", cid.String(), nonce, st.Key(), len(p.Data))
 	dec, err := uc.crypto.AESOpen(st.Key(), nonce, p.Data)
 	if err != nil {
+		log.Printf("AESOpen data failed cid=%s nonce=%x error=%v", cid.String(), nonce, err)
 		return fmt.Errorf("AESOpen data cid=%s: %w", cid.String(), err)
 	}
+	log.Printf("data decrypt success cid=%s decryptedLen=%d", cid.String(), len(dec))
 
 	if st.IsHidden() {
 		_, err := st.Down().Write(dec)

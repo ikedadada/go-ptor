@@ -82,13 +82,16 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 			nonce = cir.HopDataNonce(i)
 		}
 		nonces = append(nonces, nonce)
-		log.Printf("send encrypt hop=%d cmd=%d nonce=%x", i, cmd, nonce)
+		log.Printf("send encrypt hop=%d cmd=%d nonce=%x key=%x", i, cmd, nonce, cir.HopKey(i))
 	}
 
+	log.Printf("multi-seal input cid=%s plainLen=%d", in.CircuitID, len(plain))
 	enc, err := uc.crypto.AESMultiSeal(keys, nonces, plain)
 	if err != nil {
+		log.Printf("multi-seal failed cid=%s error=%v", in.CircuitID, err)
 		return SendDataOutput{}, err
 	}
+	log.Printf("multi-seal success cid=%s encLen=%d", in.CircuitID, len(enc))
 	tx := uc.factory.New(cir.Conn(0))
 	switch cmd {
 	case value_object.CmdData:

@@ -336,6 +336,7 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 		return
 	}
 
+	log.Printf("building circuit hops=%d exitID=%s", hops, exitID)
 	buildOut, err := build.Handle(usecase.BuildCircuitInput{Hops: hops, ExitRelayID: exitID})
 	if err != nil {
 		log.Println("build circuit:", err)
@@ -343,6 +344,7 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 		return
 	}
 	circuitID := buildOut.CircuitID
+	log.Printf("circuit built successfully cid=%s", circuitID)
 
 	cid, _ := value_object.CircuitIDFrom(circuitID)
 	sm := newStreamMap()
@@ -368,16 +370,19 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 		log.Println("encode begin:", err)
 		return
 	}
+	log.Printf("sending BEGIN command cid=%s sid=%d target=%s", circuitID, sid, addr)
 	if _, err := send.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: sid, Data: payload, Cmd: value_object.CmdBegin}); err != nil {
 		log.Println("send begin:", err)
 		return
 	}
+	log.Printf("BEGIN command sent successfully cid=%s sid=%d", circuitID, sid)
 	conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
 
 	bufLocal := make([]byte, 4096)
 	for {
 		n, err := conn.Read(bufLocal)
 		if n > 0 {
+			log.Printf("sending DATA command cid=%s sid=%d bytes=%d", circuitID, sid, n)
 			if _, err2 := send.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: sid, Data: bufLocal[:n]}); err2 != nil {
 				log.Println("send data:", err2)
 				break
