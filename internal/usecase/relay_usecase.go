@@ -106,7 +106,9 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 	// middle relay: peel one layer and forward the remaining ciphertext
 	if st.Down() != nil {
 		uc.ensureServeDown(st)
-		dec, err := uc.crypto.AESOpen(st.Key(), st.NextNonce(), cell.Payload)
+		nonce := st.BeginNonce()
+		log.Printf("connect decrypt cid=%s nonce=%x", cid.String(), nonce)
+		dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
 		if err != nil {
 			return fmt.Errorf("AESOpen connect cid=%s: %w", cid.String(), err)
 		}
@@ -115,7 +117,9 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 	}
 
 	// exit relay: decode final payload and connect to the hidden service
-	dec, err := uc.crypto.AESOpen(st.Key(), st.NextNonce(), cell.Payload)
+	nonce := st.BeginNonce()
+	log.Printf("connect exit decrypt cid=%s nonce=%x", cid.String(), nonce)
+	dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
 	if err != nil {
 		return fmt.Errorf("AESOpen connect cid=%s: %w", cid.String(), err)
 	}
@@ -157,7 +161,7 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 }
 
 func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
-	nonce := st.NextNonce()
+	nonce := st.BeginNonce()
 	log.Printf("begin decrypt cid=%s nonce=%x", cid.String(), nonce)
 	dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
 	if err != nil {
@@ -224,7 +228,9 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 	if err != nil {
 		return err
 	}
-	dec, err := uc.crypto.AESOpen(st.Key(), st.NextNonce(), p.Data)
+	nonce := st.DataNonce()
+	log.Printf("data decrypt cid=%s nonce=%x", cid.String(), nonce)
+	dec, err := uc.crypto.AESOpen(st.Key(), nonce, p.Data)
 	if err != nil {
 		return fmt.Errorf("AESOpen data cid=%s: %w", cid.String(), err)
 	}
@@ -410,7 +416,9 @@ func (uc *relayUsecaseImpl) forwardUpstream(st *entity.ConnState, cid value_obje
 	for {
 		n, err := down.Read(buf)
 		if n > 0 {
-			enc, err2 := uc.crypto.AESSeal(st.Key(), st.NextNonce(), buf[:n])
+			nonce := st.DataNonce()
+			log.Printf("upstream encrypt cid=%s nonce=%x", cid.String(), nonce)
+			enc, err2 := uc.crypto.AESSeal(st.Key(), nonce, buf[:n])
 			if err2 == nil {
 				payload, err3 := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid.UInt16(), Data: enc})
 				if err3 == nil {

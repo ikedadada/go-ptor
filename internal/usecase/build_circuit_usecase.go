@@ -66,7 +66,7 @@ func (uc *buildCircuitUseCaseImpl) Handle(in BuildCircuitInput) (BuildCircuitOut
 	// 鍵・ノンス（array → slice 変換）
 	for i := range cir.Hops() {
 		key := cir.HopKey(i)     // [32]byte
-		nonce := cir.HopNonce(i) // [12]byte
+		nonce := cir.HopBaseNonce(i) // [12]byte - use base nonce for circuit info
 		out.Keys = append(out.Keys, key[:])
 		out.Nonces = append(out.Nonces, nonce[:])
 	}

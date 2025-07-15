@@ -24,9 +24,10 @@ type Circuit struct {
 	id   value_object.CircuitID
 	hops []value_object.RelayID
 
-	keys        map[int]value_object.AESKey // per-hop AES key
-	baseNonces  map[int]value_object.Nonce  // per-hop base Nonce
-	counter     map[int]uint64              // per-hop counter
+	keys          map[int]value_object.AESKey // per-hop AES key
+	baseNonces    map[int]value_object.Nonce  // per-hop base Nonce
+	beginCounter  map[int]uint64              // per-hop BEGIN counter
+	dataCounter   map[int]uint64              // per-hop DATA counter
 	priv        *rsa.PrivateKey
 	conns       []net.Conn
 	strmMu      sync.RWMutex
@@ -45,21 +46,24 @@ func NewCircuit(id value_object.CircuitID, relays []value_object.RelayID,
 	}
 	keyMap := make(map[int]value_object.AESKey, len(keys))
 	ncMap := make(map[int]value_object.Nonce, len(nonces))
-	counterMap := make(map[int]uint64, len(nonces))
+	beginCounterMap := make(map[int]uint64, len(nonces))
+	dataCounterMap := make(map[int]uint64, len(nonces))
 	for i := range keys {
 		keyMap[i] = keys[i]
 		ncMap[i] = nonces[i]
-		counterMap[i] = 0
+		beginCounterMap[i] = 0
+		dataCounterMap[i] = 0
 	}
 	return &Circuit{
-		id:         id,
-		hops:       relays,
-		keys:       keyMap,
-		baseNonces: ncMap,
-		counter:    counterMap,
-		priv:       priv,
-		conns:      make([]net.Conn, len(relays)),
-		stream:     make(map[value_object.StreamID]*StreamState),
+		id:           id,
+		hops:         relays,
+		keys:         keyMap,
+		baseNonces:   ncMap,
+		beginCounter: beginCounterMap,
+		dataCounter:  dataCounterMap,
+		priv:         priv,
+		conns:        make([]net.Conn, len(relays)),
+		stream:       make(map[value_object.StreamID]*StreamState),
 	}, nil
 }
 
@@ -73,19 +77,35 @@ func (c *Circuit) Hops() []value_object.RelayID {
 func (c *Circuit) HopKey(idx int) value_object.AESKey  { return c.keys[idx] }
 func (c *Circuit) HopBaseNonce(idx int) value_object.Nonce { return c.baseNonces[idx] }
 
-// HopNonce generates the next unique nonce for hop idx
-func (c *Circuit) HopNonce(idx int) value_object.Nonce {
+// HopBeginNonce generates the next unique nonce for BEGIN commands at hop idx
+func (c *Circuit) HopBeginNonce(idx int) value_object.Nonce {
 	var nonce value_object.Nonce
 	nonce = c.baseNonces[idx]
 	
-	// XOR counter into last 8 bytes
-	counter := c.counter[idx]
+	// XOR begin counter into last 8 bytes
+	counter := c.beginCounter[idx]
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
 	
-	c.counter[idx]++
+	c.beginCounter[idx]++
+	return nonce
+}
+
+// HopDataNonce generates the next unique nonce for DATA commands at hop idx
+func (c *Circuit) HopDataNonce(idx int) value_object.Nonce {
+	var nonce value_object.Nonce
+	nonce = c.baseNonces[idx]
+	
+	// XOR data counter into last 8 bytes
+	counter := c.dataCounter[idx]
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
+	c.dataCounter[idx]++
 	return nonce
 }
 func (c *Circuit) RSAPrivate() *rsa.PrivateKey         { return c.priv }

@@ -58,7 +58,7 @@ func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
 	nonces := make([][12]byte, 0, len(cir.Hops()))
 	for i := range cir.Hops() {
 		keys = append(keys, cir.HopKey(i))
-		nonces = append(nonces, cir.HopNonce(i))
+		nonces = append(nonces, cir.HopBeginNonce(i))  // CONNECT uses BEGIN nonce
 	}
 
 	enc, err := uc.crypto.AESMultiSeal(keys, nonces, payload)

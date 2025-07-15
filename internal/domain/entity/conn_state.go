@@ -11,7 +11,8 @@ import (
 type ConnState struct {
 	key         value_object.AESKey
 	baseNonce   value_object.Nonce
-	counter     uint64
+	beginCounter uint64  // Counter for BEGIN commands
+	dataCounter  uint64  // Counter for DATA commands
 	up          net.Conn
 	down        net.Conn
 	last        time.Time
@@ -22,26 +23,42 @@ type ConnState struct {
 
 // NewConnState returns a new ConnState instance.
 func NewConnState(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn) *ConnState {
-	return &ConnState{key: key, baseNonce: nonce, counter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
+	return &ConnState{key: key, baseNonce: nonce, beginCounter: 0, dataCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
 }
 
 // Key returns the symmetric key for this circuit hop.
 func (s *ConnState) Key() value_object.AESKey  { return s.key }
 func (s *ConnState) Nonce() value_object.Nonce { return s.baseNonce }
 
-// NextNonce generates the next unique nonce
-func (s *ConnState) NextNonce() value_object.Nonce {
+// BeginNonce generates the next unique nonce for BEGIN commands
+func (s *ConnState) BeginNonce() value_object.Nonce {
 	var nonce value_object.Nonce
 	nonce = s.baseNonce
 	
-	// XOR counter into last 8 bytes
-	counter := s.counter
+	// XOR begin counter into last 8 bytes
+	counter := s.beginCounter
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
 	
-	s.counter++
+	s.beginCounter++
+	return nonce
+}
+
+// DataNonce generates the next unique nonce for DATA commands
+func (s *ConnState) DataNonce() value_object.Nonce {
+	var nonce value_object.Nonce
+	nonce = s.baseNonce
+	
+	// XOR data counter into last 8 bytes
+	counter := s.dataCounter
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
+	s.dataCounter++
 	return nonce
 }
 

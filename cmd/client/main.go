@@ -90,10 +90,10 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 			if err != nil {
 				continue
 			}
-			// Use unified nonces for decryption
+			// Use DATA nonces for decryption
 			for i := range cir.Hops() {
 				keys[i] = cir.HopKey(i)
-				nonces[i] = cir.HopNonce(i)
+				nonces[i] = cir.HopDataNonce(i)
 			}
 			plain, err := crypto.AESMultiOpen(keys, nonces, dp.Data)
 			if err != nil {

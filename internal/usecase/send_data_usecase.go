@@ -67,22 +67,27 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 
 	// onion encrypt payload
 	plain := in.Data
+	cmd := in.Cmd
+	if cmd == 0 {
+		cmd = value_object.CmdData
+	}
 	keys := make([][32]byte, 0, len(cir.Hops()))
 	nonces := make([][12]byte, 0, len(cir.Hops()))
 	for i := range cir.Hops() {
 		keys = append(keys, cir.HopKey(i))
-		nonce := cir.HopNonce(i)
+		var nonce value_object.Nonce
+		if cmd == value_object.CmdBegin {
+			nonce = cir.HopBeginNonce(i)
+		} else {
+			nonce = cir.HopDataNonce(i)
+		}
 		nonces = append(nonces, nonce)
-		log.Printf("send encrypt hop=%d nonce=%x", i, nonce)
+		log.Printf("send encrypt hop=%d cmd=%d nonce=%x", i, cmd, nonce)
 	}
 
 	enc, err := uc.crypto.AESMultiSeal(keys, nonces, plain)
 	if err != nil {
 		return SendDataOutput{}, err
-	}
-	cmd := in.Cmd
-	if cmd == 0 {
-		cmd = value_object.CmdData
 	}
 	tx := uc.factory.New(cir.Conn(0))
 	switch cmd {
