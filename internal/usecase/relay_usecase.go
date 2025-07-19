@@ -103,14 +103,15 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 }
 
 func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
-	// middle relay: forward CONNECT command without decryption
+	// middle relay: CONNECT commands should not be processed by middle relays
+	// They are sent directly to the exit relay only
 	if st.Down() != nil {
-		uc.ensureServeDown(st)
-		return forwardCell(st.Down(), cid, cell)
+		log.Printf("middle relay ignoring CONNECT command cid=%s", cid.String())
+		return nil
 	}
 
 	// exit relay: decode final payload and connect to the hidden service
-	nonce := st.DataNonce()
+	nonce := st.BeginNonce()
 	log.Printf("connect exit decrypt cid=%s nonce=%x", cid.String(), nonce)
 	dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
 	if err != nil {

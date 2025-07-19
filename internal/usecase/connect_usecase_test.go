@@ -90,7 +90,7 @@ func TestConnectUseCase_Handle(t *testing.T) {
 			// Get nonce for exit relay only (last hop)
 			exitHop := len(cir.Hops()) - 1
 			key := cir.HopKey(exitHop)
-			nonce := cir.HopDataNoncePeek(exitHop)  // Use peek to get the current nonce
+			nonce := cir.HopBeginNoncePeek(exitHop)  // CONNECT uses BEGIN nonce
 			
 			// Now execute the connect usecase
 			_, err := uc.Handle(tt.input)
