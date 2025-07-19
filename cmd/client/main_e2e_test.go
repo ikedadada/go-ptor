@@ -302,6 +302,13 @@ func TestClientMain_HiddenService(t *testing.T) {
 	if !bytes.Contains(out, []byte("ok")) {
 		t.Fatalf("unexpected response: %s", out)
 	}
+	
+	// Stop relay processes to avoid race condition when reading buffers
+	rcancel()
+	rcmd.Wait()
+	cancel2()
+	rcmd2.Wait()
+	
 	if !strings.Contains(rout.String(), "cmd=2") {
 		t.Fatalf("exit relay did not see CONNECT")
 	}
