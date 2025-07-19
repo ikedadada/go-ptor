@@ -103,21 +103,14 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 }
 
 func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
-	// middle relay: peel one layer and forward the remaining ciphertext
+	// middle relay: forward CONNECT command without decryption
 	if st.Down() != nil {
 		uc.ensureServeDown(st)
-		nonce := st.BeginNonce()
-		log.Printf("connect decrypt cid=%s nonce=%x", cid.String(), nonce)
-		dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
-		if err != nil {
-			return fmt.Errorf("AESOpen connect cid=%s: %w", cid.String(), err)
-		}
-		c := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: dec}
-		return forwardCell(st.Down(), cid, c)
+		return forwardCell(st.Down(), cid, cell)
 	}
 
 	// exit relay: decode final payload and connect to the hidden service
-	nonce := st.BeginNonce()
+	nonce := st.DataNonce()
 	log.Printf("connect exit decrypt cid=%s nonce=%x", cid.String(), nonce)
 	dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
 	if err != nil {
@@ -148,7 +141,8 @@ func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.Circu
 	if st.Down() != nil {
 		st.Down().Close()
 	}
-	newSt := entity.NewConnState(st.Key(), st.Nonce(), st.Up(), down)
+	beginCounter, dataCounter := st.GetCounters()
+	newSt := entity.NewConnStateWithCounters(st.Key(), st.Nonce(), st.Up(), down, beginCounter, dataCounter)
 	newSt.SetHidden(true)
 	if err := uc.repo.Add(cid, newSt); err != nil {
 		down.Close()
@@ -230,10 +224,18 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 	if err != nil {
 		return err
 	}
+	
+	// Try to decrypt the data
 	nonce := st.DataNonce()
 	log.Printf("data decrypt cid=%s nonce=%x key=%x dataLen=%d", cid.String(), nonce, st.Key(), len(p.Data))
 	dec, err := uc.crypto.AESOpen(st.Key(), nonce, p.Data)
 	if err != nil {
+		// If decryption fails and this is a middle relay, it might be upstream data
+		// that should be forwarded without decryption
+		if st.Down() != nil {
+			log.Printf("data decrypt failed, forwarding as upstream cid=%s error=%v", cid.String(), err)
+			return forwardCell(st.Up(), cid, cell)
+		}
 		log.Printf("AESOpen data failed cid=%s nonce=%x error=%v", cid.String(), nonce, err)
 		return fmt.Errorf("AESOpen data cid=%s: %w", cid.String(), err)
 	}
