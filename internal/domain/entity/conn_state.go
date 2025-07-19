@@ -12,7 +12,8 @@ type ConnState struct {
 	key         value_object.AESKey
 	baseNonce   value_object.Nonce
 	beginCounter uint64  // Counter for BEGIN commands
-	dataCounter  uint64  // Counter for DATA commands
+	dataCounter  uint64  // Counter for DATA commands (downstream)
+	upstreamDataCounter uint64  // Counter for upstream DATA commands
 	up          net.Conn
 	down        net.Conn
 	last        time.Time
@@ -23,12 +24,12 @@ type ConnState struct {
 
 // NewConnState returns a new ConnState instance.
 func NewConnState(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn) *ConnState {
-	return &ConnState{key: key, baseNonce: nonce, beginCounter: 0, dataCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
+	return &ConnState{key: key, baseNonce: nonce, beginCounter: 0, dataCounter: 0, upstreamDataCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
 }
 
 // NewConnStateWithCounters returns a new ConnState instance preserving counter values.
 func NewConnStateWithCounters(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn, beginCounter, dataCounter uint64) *ConnState {
-	return &ConnState{key: key, baseNonce: nonce, beginCounter: beginCounter, dataCounter: dataCounter, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
+	return &ConnState{key: key, baseNonce: nonce, beginCounter: beginCounter, dataCounter: dataCounter, upstreamDataCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
 }
 
 // Key returns the symmetric key for this circuit hop.
@@ -69,6 +70,22 @@ func (s *ConnState) DataNonce() value_object.Nonce {
 	}
 	
 	s.dataCounter++
+	return nonce
+}
+
+// UpstreamDataNonce generates the next unique nonce for upstream DATA commands
+func (s *ConnState) UpstreamDataNonce() value_object.Nonce {
+	var nonce value_object.Nonce
+	nonce = s.baseNonce
+	
+	// XOR upstream data counter into last 8 bytes
+	counter := s.upstreamDataCounter
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
+	s.upstreamDataCounter++
 	return nonce
 }
 

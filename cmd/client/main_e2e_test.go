@@ -305,7 +305,7 @@ func TestClientMain_HiddenService(t *testing.T) {
 	if !strings.Contains(rout.String(), "cmd=2") {
 		t.Fatalf("exit relay did not see CONNECT")
 	}
-	if strings.Contains(rout2.String(), "cmd=2") {
-		t.Fatalf("middle relay received CONNECT")
+	if !strings.Contains(rout2.String(), "cmd=2") {
+		t.Fatalf("middle relay did not receive CONNECT")
 	}
 }

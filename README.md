@@ -137,11 +137,21 @@ This implementation is currently an educational demonstration of onion routing c
   - Files: `internal/domain/value_object/cell.go`, relay processing
 
 #### 8. Proper Relay Forwarding
-- [x] **Fix upstream encryption in middle relays** ✅ COMPLETED
-  - Fixed: Middle relays now add encryption layers for upstream data
-  - Fixed: Client uses multi-layer decryption for response data
-  - Fixed: Removed heuristic upstream detection based on decryption failure
+- [ ] **Complete upstream encryption implementation** ⚠️ IN PROGRESS
+  - Current: Single-layer encryption (exit relay only) - NOT Tor-compliant
+  - Target: Multi-layer encryption with proper nonce synchronization
+  - Critical issues:
+    - Nonce synchronization between upstream/downstream flows
+    - Independent nonce counters for upstream encryption
+    - Proper layer-by-layer encryption addition in middle relays
+    - Client multi-layer decryption with correct nonce sequence
   - Files: `internal/usecase/relay_usecase.go`, `cmd/client/main.go`
+  - Sub-tasks:
+    - [ ] Design upstream-specific nonce management system
+    - [ ] Implement upstream encryption in middle relays
+    - [ ] Fix client multi-layer decryption for upstream data
+    - [ ] Add comprehensive testing for nonce synchronization
+    - [ ] Validate against Tor protocol compliance
 - [ ] **Fix downstream relay processing to maintain end-to-end encryption**
   - Current: Middle relays decrypt application data for downstream
   - Target: Layer-by-layer onion peeling only

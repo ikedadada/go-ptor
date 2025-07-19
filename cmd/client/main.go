@@ -88,24 +88,30 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 			if err != nil {
 				continue
 			}
-			// Response data is encrypted by all hops (onion layers)
-			// Use multi-layer decryption to peel off all encryption layers
-			keys := make([][32]byte, len(cir.Hops()))
-			nonces := make([][12]byte, len(cir.Hops()))
-			for i := range cir.Hops() {
-				keys[i] = cir.HopKey(i)
-				nonces[i] = cir.HopDataNonce(i)
+			// Response data uses multi-layer encryption - decrypt layer by layer
+			// Start from outermost layer (first hop) to innermost (exit hop)
+			data := dp.Data
+			hopCount := len(cir.Hops())
+			
+			log.Printf("response decrypt multi-layer hops=%d dataLen=%d", hopCount, len(data))
+			
+			// Decrypt each layer in reverse circuit order (first hop to exit hop)
+			for hop := 0; hop < hopCount; hop++ {
+				key := cir.HopKey(hop)
+				nonce := cir.HopUpstreamDataNonce(hop)
+				
+				log.Printf("response decrypt hop=%d nonce=%x key=%x", hop, nonce, key)
+				decrypted, err := crypto.AESOpen(key, nonce, data)
+				if err != nil {
+					log.Printf("response decrypt failed hop=%d: %v", hop, err)
+					break
+				}
+				data = decrypted
+				log.Printf("response decrypt success hop=%d len=%d", hop, len(data))
 			}
 			
-			log.Printf("response multi-decrypt hops=%d dataLen=%d", len(cir.Hops()), len(dp.Data))
-			plain, err := crypto.AESMultiOpen(keys, nonces, dp.Data)
-			if err != nil {
-				log.Printf("response multi-decrypt failed: %v", err)
-				continue
-			}
-			log.Printf("response multi-decrypt success len=%d", len(plain))
 			if c, ok := sm.get(dp.StreamID); ok {
-				c.Write(plain)
+				c.Write(data)
 			}
 		case value_object.CmdEnd:
 			sid := uint16(0)
