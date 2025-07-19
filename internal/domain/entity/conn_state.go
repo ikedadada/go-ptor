@@ -26,9 +26,19 @@ func NewConnState(key value_object.AESKey, nonce value_object.Nonce, up, down ne
 	return &ConnState{key: key, baseNonce: nonce, beginCounter: 0, dataCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
 }
 
+// NewConnStateWithCounters returns a new ConnState instance preserving counter values.
+func NewConnStateWithCounters(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn, beginCounter, dataCounter uint64) *ConnState {
+	return &ConnState{key: key, baseNonce: nonce, beginCounter: beginCounter, dataCounter: dataCounter, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
+}
+
 // Key returns the symmetric key for this circuit hop.
 func (s *ConnState) Key() value_object.AESKey  { return s.key }
 func (s *ConnState) Nonce() value_object.Nonce { return s.baseNonce }
+
+// GetCounters returns the current counter values
+func (s *ConnState) GetCounters() (beginCounter, dataCounter uint64) {
+	return s.beginCounter, s.dataCounter
+}
 
 // BeginNonce generates the next unique nonce for BEGIN commands
 func (s *ConnState) BeginNonce() value_object.Nonce {
