@@ -24,12 +24,14 @@ type Circuit struct {
 	id   value_object.CircuitID
 	hops []value_object.RelayID
 
-	keys   map[int]value_object.AESKey // per-hop AES key
-	nonces map[int]value_object.Nonce  // per-hop Nonce
-	priv   *rsa.PrivateKey
-	conns  []net.Conn
-	strmMu sync.RWMutex
-	stream map[value_object.StreamID]*StreamState
+	keys          map[int]value_object.AESKey // per-hop AES key
+	baseNonces    map[int]value_object.Nonce  // per-hop base Nonce
+	beginCounter  map[int]uint64              // per-hop BEGIN counter
+	dataCounter   map[int]uint64              // per-hop DATA counter
+	priv        *rsa.PrivateKey
+	conns       []net.Conn
+	strmMu      sync.RWMutex
+	stream      map[value_object.StreamID]*StreamState
 }
 
 // NewCircuit は 3 ホップ分の RelayID と鍵束を受け取って生成。
@@ -44,18 +46,24 @@ func NewCircuit(id value_object.CircuitID, relays []value_object.RelayID,
 	}
 	keyMap := make(map[int]value_object.AESKey, len(keys))
 	ncMap := make(map[int]value_object.Nonce, len(nonces))
+	beginCounterMap := make(map[int]uint64, len(nonces))
+	dataCounterMap := make(map[int]uint64, len(nonces))
 	for i := range keys {
 		keyMap[i] = keys[i]
 		ncMap[i] = nonces[i]
+		beginCounterMap[i] = 0
+		dataCounterMap[i] = 0
 	}
 	return &Circuit{
-		id:     id,
-		hops:   relays,
-		keys:   keyMap,
-		nonces: ncMap,
-		priv:   priv,
-		conns:  make([]net.Conn, len(relays)),
-		stream: make(map[value_object.StreamID]*StreamState),
+		id:           id,
+		hops:         relays,
+		keys:         keyMap,
+		baseNonces:   ncMap,
+		beginCounter: beginCounterMap,
+		dataCounter:  dataCounterMap,
+		priv:         priv,
+		conns:        make([]net.Conn, len(relays)),
+		stream:       make(map[value_object.StreamID]*StreamState),
 	}, nil
 }
 
@@ -67,7 +75,69 @@ func (c *Circuit) Hops() []value_object.RelayID {
 	return append([]value_object.RelayID(nil), c.hops...)
 }
 func (c *Circuit) HopKey(idx int) value_object.AESKey  { return c.keys[idx] }
-func (c *Circuit) HopNonce(idx int) value_object.Nonce { return c.nonces[idx] }
+func (c *Circuit) HopBaseNonce(idx int) value_object.Nonce { return c.baseNonces[idx] }
+
+// HopBeginNonce generates the next unique nonce for BEGIN commands at hop idx
+func (c *Circuit) HopBeginNonce(idx int) value_object.Nonce {
+	var nonce value_object.Nonce
+	nonce = c.baseNonces[idx]
+	
+	// XOR begin counter into last 8 bytes
+	counter := c.beginCounter[idx]
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
+	c.beginCounter[idx]++
+	return nonce
+}
+
+// HopBeginNoncePeek returns the next nonce without incrementing counter
+func (c *Circuit) HopBeginNoncePeek(idx int) value_object.Nonce {
+	var nonce value_object.Nonce
+	nonce = c.baseNonces[idx]
+	
+	// XOR begin counter into last 8 bytes
+	counter := c.beginCounter[idx]
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
+	return nonce
+}
+
+// HopDataNonce generates the next unique nonce for DATA commands at hop idx
+func (c *Circuit) HopDataNonce(idx int) value_object.Nonce {
+	var nonce value_object.Nonce
+	nonce = c.baseNonces[idx]
+	
+	// XOR data counter into last 8 bytes
+	counter := c.dataCounter[idx]
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
+	c.dataCounter[idx]++
+	return nonce
+}
+
+// HopDataNoncePeek returns the next nonce without incrementing counter
+func (c *Circuit) HopDataNoncePeek(idx int) value_object.Nonce {
+	var nonce value_object.Nonce
+	nonce = c.baseNonces[idx]
+	
+	// XOR data counter into last 8 bytes
+	counter := c.dataCounter[idx]
+	for i := 0; i < 8; i++ {
+		nonce[11-i] ^= byte(counter)
+		counter >>= 8
+	}
+	
+	return nonce
+}
 func (c *Circuit) RSAPrivate() *rsa.PrivateKey         { return c.priv }
 func (c *Circuit) RSAPublic() *rsa.PublicKey {
 	if c.priv == nil {
@@ -81,8 +151,8 @@ func (c *Circuit) WipeKeys() {
 	for i := range c.keys {
 		c.keys[i] = value_object.AESKey{}
 	}
-	for i := range c.nonces {
-		c.nonces[i] = value_object.Nonce{}
+	for i := range c.baseNonces {
+		c.baseNonces[i] = value_object.Nonce{}
 	}
 	c.priv = nil
 }

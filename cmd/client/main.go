@@ -73,12 +73,6 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 		log.Println("no connection for circuit")
 		return
 	}
-	keys := make([][32]byte, len(cir.Hops()))
-	nonces := make([][12]byte, len(cir.Hops()))
-	for i := range cir.Hops() {
-		keys[i] = cir.HopKey(i)
-		nonces[i] = cir.HopNonce(i)
-	}
 	for {
 		_, cell, err := handler.ReadCell(conn)
 		if err != nil {
@@ -94,10 +88,19 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 			if err != nil {
 				continue
 			}
-			plain, err := crypto.AESMultiOpen(keys, nonces, dp.Data)
+			// Response data is only encrypted by the exit relay (last hop)
+			// Use only the exit relay's nonce for decryption
+			exitHop := len(cir.Hops()) - 1
+			key := cir.HopKey(exitHop)
+			nonce := cir.HopDataNonce(exitHop)
+			
+			log.Printf("response decrypt hop=%d nonce=%x key=%x", exitHop, nonce, key)
+			plain, err := crypto.AESOpen(key, nonce, dp.Data)
 			if err != nil {
+				log.Printf("response decrypt failed: %v", err)
 				continue
 			}
+			log.Printf("response decrypt success len=%d", len(plain))
 			if c, ok := sm.get(dp.StreamID); ok {
 				c.Write(plain)
 			}
@@ -335,6 +338,7 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 		return
 	}
 
+	log.Printf("building circuit hops=%d exitID=%s", hops, exitID)
 	buildOut, err := build.Handle(usecase.BuildCircuitInput{Hops: hops, ExitRelayID: exitID})
 	if err != nil {
 		log.Println("build circuit:", err)
@@ -342,6 +346,7 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 		return
 	}
 	circuitID := buildOut.CircuitID
+	log.Printf("circuit built successfully cid=%s", circuitID)
 
 	cid, _ := value_object.CircuitIDFrom(circuitID)
 	sm := newStreamMap()
@@ -367,16 +372,19 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 		log.Println("encode begin:", err)
 		return
 	}
+	log.Printf("sending BEGIN command cid=%s sid=%d target=%s", circuitID, sid, addr)
 	if _, err := send.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: sid, Data: payload, Cmd: value_object.CmdBegin}); err != nil {
 		log.Println("send begin:", err)
 		return
 	}
+	log.Printf("BEGIN command sent successfully cid=%s sid=%d", circuitID, sid)
 	conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
 
 	bufLocal := make([]byte, 4096)
 	for {
 		n, err := conn.Read(bufLocal)
 		if n > 0 {
+			log.Printf("sending DATA command cid=%s sid=%d bytes=%d", circuitID, sid, n)
 			if _, err2 := send.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: sid, Data: bufLocal[:n]}); err2 != nil {
 				log.Println("send data:", err2)
 				break

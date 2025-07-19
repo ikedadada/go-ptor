@@ -54,19 +54,18 @@ func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
 		}
 	}
 
-	keys := make([][32]byte, 0, len(cir.Hops()))
-	nonces := make([][12]byte, 0, len(cir.Hops()))
-	for i := range cir.Hops() {
-		keys = append(keys, cir.HopKey(i))
-		nonces = append(nonces, cir.HopNonce(i))
-	}
-
-	enc, err := uc.crypto.AESMultiSeal(keys, nonces, payload)
+	// CONNECT command should only be encrypted for the exit relay (last hop)
+	exitHop := len(cir.Hops()) - 1
+	key := cir.HopKey(exitHop)
+	nonce := cir.HopBeginNonce(exitHop)  // CONNECT uses BEGIN nonce
+	
+	enc, err := uc.crypto.AESSeal(key, nonce, payload)
 	if err != nil {
 		return ConnectOutput{}, err
 	}
 
-	conn := cir.Conn(0)
+	// Send CONNECT command directly to exit relay (last hop)
+	conn := cir.Conn(exitHop)
 	tx := uc.factory.New(conn)
 	if err := tx.SendConnect(cid, enc); err != nil {
 		return ConnectOutput{}, err

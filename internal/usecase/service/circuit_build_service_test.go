@@ -206,7 +206,7 @@ func TestCircuitBuildService_Build_KeyGeneration(t *testing.T) {
 		if circuit.HopKey(i) == (value_object.AESKey{}) {
 			t.Errorf("key %d empty", i)
 		}
-		if circuit.HopNonce(i) == (value_object.Nonce{}) {
+		if circuit.HopBaseNonce(i) == (value_object.Nonce{}) {
 			t.Errorf("nonce %d empty", i)
 		}
 	}

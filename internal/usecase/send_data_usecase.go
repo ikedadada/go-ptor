@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"fmt"
+	"log"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
@@ -66,21 +67,33 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 
 	// onion encrypt payload
 	plain := in.Data
-	keys := make([][32]byte, 0, len(cir.Hops()))
-	nonces := make([][12]byte, 0, len(cir.Hops()))
-	for i := range cir.Hops() {
-		keys = append(keys, cir.HopKey(i))
-		nonces = append(nonces, cir.HopNonce(i))
-	}
-
-	enc, err := uc.crypto.AESMultiSeal(keys, nonces, plain)
-	if err != nil {
-		return SendDataOutput{}, err
-	}
 	cmd := in.Cmd
 	if cmd == 0 {
 		cmd = value_object.CmdData
 	}
+	keys := make([][32]byte, 0, len(cir.Hops()))
+	nonces := make([][12]byte, 0, len(cir.Hops()))
+	
+	// Generate nonces in normal order for array indexing
+	for i := range cir.Hops() {
+		keys = append(keys, cir.HopKey(i))
+		var nonce value_object.Nonce
+		if cmd == value_object.CmdBegin {
+			nonce = cir.HopBeginNonce(i)
+		} else {
+			nonce = cir.HopDataNonce(i)
+		}
+		nonces = append(nonces, nonce)
+		log.Printf("send encrypt hop=%d cmd=%d nonce=%x key=%x", i, cmd, nonce, cir.HopKey(i))
+	}
+
+	log.Printf("multi-seal input cid=%s plainLen=%d", in.CircuitID, len(plain))
+	enc, err := uc.crypto.AESMultiSeal(keys, nonces, plain)
+	if err != nil {
+		log.Printf("multi-seal failed cid=%s error=%v", in.CircuitID, err)
+		return SendDataOutput{}, err
+	}
+	log.Printf("multi-seal success cid=%s encLen=%d", in.CircuitID, len(enc))
 	tx := uc.factory.New(cir.Conn(0))
 	switch cmd {
 	case value_object.CmdData:

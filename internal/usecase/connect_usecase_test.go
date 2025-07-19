@@ -86,6 +86,13 @@ func TestConnectUseCase_Handle(t *testing.T) {
 			fac := connectFactory{tt.tx}
 			crypto := infraSvc.NewCryptoService()
 			uc := usecase.NewConnectUseCase(tt.repo, fac, crypto)
+			
+			// Get nonce for exit relay only (last hop)
+			exitHop := len(cir.Hops()) - 1
+			key := cir.HopKey(exitHop)
+			nonce := cir.HopBeginNoncePeek(exitHop)  // CONNECT uses BEGIN nonce
+			
+			// Now execute the connect usecase
 			_, err := uc.Handle(tt.input)
 			if tt.err {
 				if err == nil {
@@ -99,13 +106,8 @@ func TestConnectUseCase_Handle(t *testing.T) {
 			if tt.tx.cid.String() != cid {
 				t.Errorf("cid not passed")
 			}
-			k := make([][32]byte, len(cir.Hops()))
-			n := make([][12]byte, len(cir.Hops()))
-			for i := range cir.Hops() {
-				k[i] = cir.HopKey(i)
-				n[i] = cir.HopNonce(i)
-			}
-			out, err := crypto.AESMultiOpen(k, n, tt.tx.payload)
+			
+			out, err := crypto.AESOpen(key, nonce, tt.tx.payload)
 			if err != nil {
 				t.Fatalf("decrypt: %v", err)
 			}
