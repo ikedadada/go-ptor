@@ -73,8 +73,6 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 		log.Println("no connection for circuit")
 		return
 	}
-	keys := make([][32]byte, len(cir.Hops()))
-	nonces := make([][12]byte, len(cir.Hops()))
 	for {
 		_, cell, err := handler.ReadCell(conn)
 		if err != nil {
@@ -90,15 +88,19 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 			if err != nil {
 				continue
 			}
-			// Use DATA nonces for decryption
-			for i := range cir.Hops() {
-				keys[i] = cir.HopKey(i)
-				nonces[i] = cir.HopDataNonce(i)
-			}
-			plain, err := crypto.AESMultiOpen(keys, nonces, dp.Data)
+			// Response data is only encrypted by the exit relay (last hop)
+			// Use only the exit relay's nonce for decryption
+			exitHop := len(cir.Hops()) - 1
+			key := cir.HopKey(exitHop)
+			nonce := cir.HopDataNonce(exitHop)
+			
+			log.Printf("response decrypt hop=%d nonce=%x key=%x", exitHop, nonce, key)
+			plain, err := crypto.AESOpen(key, nonce, dp.Data)
 			if err != nil {
+				log.Printf("response decrypt failed: %v", err)
 				continue
 			}
+			log.Printf("response decrypt success len=%d", len(plain))
 			if c, ok := sm.get(dp.StreamID); ok {
 				c.Write(plain)
 			}
