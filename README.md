@@ -137,8 +137,13 @@ This implementation is currently an educational demonstration of onion routing c
   - Files: `internal/domain/value_object/cell.go`, relay processing
 
 #### 8. Proper Relay Forwarding
-- [ ] **Fix middle relay processing to maintain end-to-end encryption**
-  - Current: Middle relays decrypt application data
+- [x] **Fix upstream encryption in middle relays** ✅ COMPLETED
+  - Fixed: Middle relays now add encryption layers for upstream data
+  - Fixed: Client uses multi-layer decryption for response data
+  - Fixed: Removed heuristic upstream detection based on decryption failure
+  - Files: `internal/usecase/relay_usecase.go`, `cmd/client/main.go`
+- [ ] **Fix downstream relay processing to maintain end-to-end encryption**
+  - Current: Middle relays decrypt application data for downstream
   - Target: Layer-by-layer onion peeling only
   - Files: `internal/usecase/relay_usecase.go`
   - Impact: Fundamental relay processing changes
