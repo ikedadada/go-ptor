@@ -10,6 +10,16 @@ import (
 	"ikedadada/go-ptor/internal/domain/value_object"
 )
 
+// MessageType represents the type of message for nonce management
+type MessageType int
+
+const (
+	MessageTypeBegin MessageType = iota
+	MessageTypeData
+	MessageTypeUpstreamData
+	MessageTypeConnect
+)
+
 // ---- StreamState ----------------------------------------------------------
 
 type StreamState struct {
@@ -247,4 +257,32 @@ func (c *Circuit) SetConn(i int, cconn net.Conn) {
 func (c *Circuit) String() string {
 	return fmt.Sprintf("Circuit(%s) hops=%d streams=%d",
 		c.id, len(c.hops), len(c.stream))
+}
+
+// GetMessageTypeNonce returns the next nonce for the given message type and hop
+func (c *Circuit) GetMessageTypeNonce(hopIndex int, messageType MessageType) value_object.Nonce {
+	switch messageType {
+	case MessageTypeBegin, MessageTypeConnect:
+		return c.HopBeginNonce(hopIndex)
+	case MessageTypeData:
+		return c.HopDataNonce(hopIndex)
+	case MessageTypeUpstreamData:
+		return c.HopUpstreamDataNonce(hopIndex)
+	default:
+		return c.HopDataNonce(hopIndex)
+	}
+}
+
+// IncrementCounter increments the counter for the given message type and hop
+func (c *Circuit) IncrementCounter(hopIndex int, messageType MessageType) {
+	// Note: The individual nonce methods already increment counters
+	// This method is for interface compliance and future extensibility
+	switch messageType {
+	case MessageTypeBegin, MessageTypeConnect:
+		c.beginCounter[hopIndex]++
+	case MessageTypeData:
+		c.dataCounter[hopIndex]++
+	case MessageTypeUpstreamData:
+		c.upstreamDataCounter[hopIndex]++
+	}
 }

@@ -7,6 +7,8 @@ import (
 	"ikedadada/go-ptor/internal/domain/value_object"
 )
 
+// MessageType is defined in circuit.go to avoid duplication
+
 // ConnState represents per-circuit connection information held by a relay.
 type ConnState struct {
 	key         value_object.AESKey
@@ -126,5 +128,33 @@ func (s *ConnState) Close() {
 	}
 	if s.tbl != nil {
 		s.tbl.DestroyAll()
+	}
+}
+
+// GetMessageTypeNonce returns the next nonce for the given message type
+func (s *ConnState) GetMessageTypeNonce(messageType MessageType) value_object.Nonce {
+	switch messageType {
+	case MessageTypeBegin, MessageTypeConnect:
+		return s.BeginNonce()
+	case MessageTypeData:
+		return s.DataNonce()
+	case MessageTypeUpstreamData:
+		return s.UpstreamDataNonce()
+	default:
+		return s.DataNonce()
+	}
+}
+
+// IncrementCounter increments the counter for the given message type
+func (s *ConnState) IncrementCounter(messageType MessageType) {
+	// Note: The individual nonce methods already increment counters
+	// This method is for interface compliance and future extensibility
+	switch messageType {
+	case MessageTypeBegin, MessageTypeConnect:
+		s.beginCounter++
+	case MessageTypeData:
+		s.dataCounter++
+	case MessageTypeUpstreamData:
+		s.upstreamDataCounter++
 	}
 }
