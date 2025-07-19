@@ -103,11 +103,17 @@ func (uc *relayUsecaseImpl) Handle(up net.Conn, cid value_object.CircuitID, cell
 }
 
 func (uc *relayUsecaseImpl) connect(st *entity.ConnState, cid value_object.CircuitID, cell *value_object.Cell) error {
-	// middle relay: CONNECT commands should not be processed by middle relays
-	// They are sent directly to the exit relay only
+	// middle relay: peel one layer and forward the remaining ciphertext
 	if st.Down() != nil {
-		log.Printf("middle relay ignoring CONNECT command cid=%s", cid.String())
-		return nil
+		uc.ensureServeDown(st)
+		nonce := st.BeginNonce()
+		log.Printf("connect decrypt cid=%s nonce=%x", cid.String(), nonce)
+		dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
+		if err != nil {
+			return fmt.Errorf("AESOpen connect cid=%s: %w", cid.String(), err)
+		}
+		c := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: dec}
+		return forwardCell(st.Down(), cid, c)
 	}
 
 	// exit relay: decode final payload and connect to the hidden service
@@ -226,16 +232,30 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 		return err
 	}
 	
-	// Try to decrypt the data
+	// Try to decrypt the data for downstream flow
 	nonce := st.DataNonce()
 	log.Printf("data decrypt cid=%s nonce=%x key=%x dataLen=%d", cid.String(), nonce, st.Key(), len(p.Data))
 	dec, err := uc.crypto.AESOpen(st.Key(), nonce, p.Data)
 	if err != nil {
 		// If decryption fails and this is a middle relay, it might be upstream data
-		// that should be forwarded without decryption
+		// Add our encryption layer and forward upstream
 		if st.Down() != nil {
-			log.Printf("data decrypt failed, forwarding as upstream cid=%s error=%v", cid.String(), err)
-			return forwardCell(st.Up(), cid, cell)
+			log.Printf("data decrypt failed, treating as upstream data cid=%s", cid.String())
+			// Add encryption layer for upstream flow
+			upstreamNonce := st.UpstreamDataNonce()
+			log.Printf("upstream encrypt layer cid=%s nonce=%x", cid.String(), upstreamNonce)
+			enc, err2 := uc.crypto.AESSeal(st.Key(), upstreamNonce, p.Data)
+			if err2 != nil {
+				log.Printf("upstream encryption failed cid=%s error=%v", cid.String(), err2)
+				return err2
+			}
+			// Forward with additional encryption layer
+			upstreamPayload, err3 := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: p.StreamID, Data: enc})
+			if err3 != nil {
+				return err3
+			}
+			upstreamCell := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: upstreamPayload}
+			return forwardCell(st.Up(), cid, upstreamCell)
 		}
 		log.Printf("AESOpen data failed cid=%s nonce=%x error=%v", cid.String(), nonce, err)
 		return fmt.Errorf("AESOpen data cid=%s: %w", cid.String(), err)
@@ -417,13 +437,15 @@ func forwardCell(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell
 	return nil
 }
 
+
 func (uc *relayUsecaseImpl) forwardUpstream(st *entity.ConnState, cid value_object.CircuitID, sid value_object.StreamID, down net.Conn) {
 	defer down.Close()
 	buf := make([]byte, value_object.MaxDataLen)
 	for {
 		n, err := down.Read(buf)
 		if n > 0 {
-			nonce := st.DataNonce()
+			// Use upstream-specific nonce for upstream data encryption
+			nonce := st.UpstreamDataNonce()
 			log.Printf("upstream encrypt cid=%s nonce=%x", cid.String(), nonce)
 			enc, err2 := uc.crypto.AESSeal(st.Key(), nonce, buf[:n])
 			if err2 == nil {

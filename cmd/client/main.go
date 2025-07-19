@@ -88,21 +88,30 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 			if err != nil {
 				continue
 			}
-			// Response data is only encrypted by the exit relay (last hop)
-			// Use only the exit relay's nonce for decryption
-			exitHop := len(cir.Hops()) - 1
-			key := cir.HopKey(exitHop)
-			nonce := cir.HopDataNonce(exitHop)
+			// Response data uses multi-layer encryption - decrypt layer by layer
+			// Start from outermost layer (first hop) to innermost (exit hop)
+			data := dp.Data
+			hopCount := len(cir.Hops())
 			
-			log.Printf("response decrypt hop=%d nonce=%x key=%x", exitHop, nonce, key)
-			plain, err := crypto.AESOpen(key, nonce, dp.Data)
-			if err != nil {
-				log.Printf("response decrypt failed: %v", err)
-				continue
+			log.Printf("response decrypt multi-layer hops=%d dataLen=%d", hopCount, len(data))
+			
+			// Decrypt each layer in reverse circuit order (first hop to exit hop)
+			for hop := 0; hop < hopCount; hop++ {
+				key := cir.HopKey(hop)
+				nonce := cir.HopUpstreamDataNonce(hop)
+				
+				log.Printf("response decrypt hop=%d nonce=%x key=%x", hop, nonce, key)
+				decrypted, err := crypto.AESOpen(key, nonce, data)
+				if err != nil {
+					log.Printf("response decrypt failed hop=%d: %v", hop, err)
+					break
+				}
+				data = decrypted
+				log.Printf("response decrypt success hop=%d len=%d", hop, len(data))
 			}
-			log.Printf("response decrypt success len=%d", len(plain))
+			
 			if c, ok := sm.get(dp.StreamID); ok {
-				c.Write(plain)
+				c.Write(data)
 			}
 		case value_object.CmdEnd:
 			sid := uint16(0)
