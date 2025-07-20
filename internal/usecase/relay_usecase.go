@@ -439,7 +439,7 @@ func forwardCell(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell
 
 func (uc *relayUsecaseImpl) forwardUpstream(st *entity.ConnState, cid value_object.CircuitID, sid value_object.StreamID, down net.Conn) {
 	defer down.Close()
-	buf := make([]byte, value_object.MaxDataLen)
+	buf := make([]byte, value_object.MaxPayloadSize)
 	for {
 		n, err := down.Read(buf)
 		if n > 0 {
