@@ -1,8 +1,7 @@
 package value_object
 
 import (
-	"bytes"
-	"encoding/gob"
+	"ikedadada/go-ptor/internal/infrastructure/util"
 )
 
 // BeginPayload specifies the target address for a new stream.
@@ -13,14 +12,10 @@ type BeginPayload struct {
 
 // EncodeBeginPayload encodes p using gob.
 func EncodeBeginPayload(p *BeginPayload) ([]byte, error) {
-	var buf bytes.Buffer
-	err := gob.NewEncoder(&buf).Encode(p)
-	return buf.Bytes(), err
+	return util.EncodePayload(p)
 }
 
 // DecodeBeginPayload decodes bytes into a BeginPayload.
 func DecodeBeginPayload(b []byte) (*BeginPayload, error) {
-	var p BeginPayload
-	err := gob.NewDecoder(bytes.NewReader(b)).Decode(&p)
-	return &p, err
+	return util.DecodePayload[BeginPayload](b)
 }

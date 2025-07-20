@@ -1,16 +1,16 @@
 package entity
 
 import (
-	"errors"
 	"net"
 	"sync"
 
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/infrastructure/util"
 )
 
 var (
-	ErrDuplicate = errors.New("stream id already exists")
-	ErrNotFound  = errors.New("stream id not found")
+	ErrDuplicate = util.ErrDuplicate
+	ErrNotFound  = util.ErrNotFound
 )
 
 type StreamTable struct {

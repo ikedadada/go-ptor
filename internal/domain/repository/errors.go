@@ -1,7 +1,8 @@
 package repository
 
-import "errors"
+import "ikedadada/go-ptor/internal/infrastructure/util"
 
+// Repository layer errors - re-export common errors for convenience
 var (
-	ErrNotFound = errors.New("not found")
+	ErrNotFound = util.ErrNotFound
 )
