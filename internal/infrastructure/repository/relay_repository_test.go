@@ -3,6 +3,7 @@ package repository_test
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -35,8 +36,32 @@ func makeTestRelay(status entity.RelayStatus, idStr string) (*entity.Relay, erro
 	return rel, nil
 }
 
+// Mock HTTPClient for testing
+type mockHTTPClient struct {
+	response interface{}
+	err      error
+}
+
+func (m *mockHTTPClient) FetchJSON(url string, result interface{}) error {
+	if m.err != nil {
+		return m.err
+	}
+	// Simulate JSON unmarshaling
+	data, _ := json.Marshal(m.response)
+	return json.Unmarshal(data, result)
+}
+
 func TestRelayRepo_Save_FindByID(t *testing.T) {
-	repo := repository.NewRelayRepository()
+	// Create mock HTTP client that returns empty relays
+	mockClient := &mockHTTPClient{
+		response: entity.Directory{Relays: map[string]entity.RelayInfo{}},
+	}
+
+	repo, err := repository.NewRelayRepository(mockClient, "http://test.com")
+	if err != nil {
+		t.Fatalf("NewRelayRepository: %v", err)
+	}
+
 	rel, err := makeTestRelay(entity.Online, "550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		t.Fatalf("setup relay: %v", err)
@@ -55,7 +80,16 @@ func TestRelayRepo_Save_FindByID(t *testing.T) {
 }
 
 func TestRelayRepo_FindByID_NotFound(t *testing.T) {
-	repo := repository.NewRelayRepository()
+	// Create mock HTTP client that returns empty relays
+	mockClient := &mockHTTPClient{
+		response: entity.Directory{Relays: map[string]entity.RelayInfo{}},
+	}
+
+	repo, err := repository.NewRelayRepository(mockClient, "http://test.com")
+	if err != nil {
+		t.Fatalf("NewRelayRepository: %v", err)
+	}
+
 	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440001")
 	if err != nil {
 		t.Fatalf("NewRelayID: %v", err)
@@ -67,7 +101,16 @@ func TestRelayRepo_FindByID_NotFound(t *testing.T) {
 }
 
 func TestRelayRepo_AllOnline(t *testing.T) {
-	repo := repository.NewRelayRepository()
+	// Create mock HTTP client that returns empty relays
+	mockClient := &mockHTTPClient{
+		response: entity.Directory{Relays: map[string]entity.RelayInfo{}},
+	}
+
+	repo, err := repository.NewRelayRepository(mockClient, "http://test.com")
+	if err != nil {
+		t.Fatalf("NewRelayRepository: %v", err)
+	}
+
 	on, err := makeTestRelay(entity.Online, "550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		t.Fatalf("setup on relay: %v", err)

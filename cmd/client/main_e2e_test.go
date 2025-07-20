@@ -120,6 +120,10 @@ func TestClientMain_E2E(t *testing.T) {
 		},
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays, HiddenServices: map[string]entity.HiddenServiceInfo{}})
+	})
 	mux.HandleFunc("/relays.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays})
@@ -268,6 +272,10 @@ func TestClientMain_HiddenService(t *testing.T) {
 		},
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays, HiddenServices: dirData.HiddenServices})
+	})
 	mux.HandleFunc("/relays.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays})

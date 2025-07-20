@@ -1,68 +1,27 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	"net/http"
-	"strconv"
 	"strings"
-	"sync"
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	repoif "ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/handler"
+	"ikedadada/go-ptor/internal/infrastructure/http"
 	infraRepo "ikedadada/go-ptor/internal/infrastructure/repository"
 	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
-type streamMap struct {
-	mu sync.Mutex
-	m  map[uint16]net.Conn
-}
+// Use the existing StreamManager interface from usecase package
 
-func newStreamMap() *streamMap { return &streamMap{m: make(map[uint16]net.Conn)} }
-
-func (s *streamMap) add(id uint16, c net.Conn) {
-	s.mu.Lock()
-	s.m[id] = c
-	s.mu.Unlock()
-}
-
-func (s *streamMap) get(id uint16) (net.Conn, bool) {
-	s.mu.Lock()
-	c, ok := s.m[id]
-	s.mu.Unlock()
-	return c, ok
-}
-
-func (s *streamMap) remove(id uint16) {
-	s.mu.Lock()
-	if c, ok := s.m[id]; ok {
-		c.Close()
-		delete(s.m, id)
-	}
-	s.mu.Unlock()
-}
-
-func (s *streamMap) closeAll() {
-	s.mu.Lock()
-	for id, c := range s.m {
-		if c != nil {
-			c.Close()
-		}
-		delete(s.m, id)
-	}
-	s.mu.Unlock()
-}
-
-func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid value_object.CircuitID, sm *streamMap) {
+func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid value_object.CircuitID, sm usecase.StreamManager) {
 	cir, err := repo.Find(cid)
 	if err != nil {
 		log.Println("find circuit:", err)
@@ -79,7 +38,7 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 			if err != io.EOF {
 				log.Println("read cell:", err)
 			}
-			sm.closeAll()
+			sm.CloseAll()
 			return
 		}
 		switch cell.Cmd {
@@ -92,14 +51,14 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 			// Start from outermost layer (first hop) to innermost (exit hop)
 			data := dp.Data
 			hopCount := len(cir.Hops())
-			
+
 			log.Printf("response decrypt multi-layer hops=%d dataLen=%d", hopCount, len(data))
-			
+
 			// Decrypt each layer in reverse circuit order (first hop to exit hop)
 			for hop := 0; hop < hopCount; hop++ {
 				key := cir.HopKey(hop)
 				nonce := cir.HopUpstreamDataNonce(hop)
-				
+
 				log.Printf("response decrypt hop=%d nonce=%x key=%x", hop, nonce, key)
 				decrypted, err := crypto.AESOpen(key, nonce, data)
 				if err != nil {
@@ -109,8 +68,8 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 				data = decrypted
 				log.Printf("response decrypt success hop=%d len=%d", hop, len(data))
 			}
-			
-			if c, ok := sm.get(dp.StreamID); ok {
+
+			if c, ok := sm.Get(dp.StreamID); ok {
 				c.Write(data)
 			}
 		case value_object.CmdEnd:
@@ -121,69 +80,15 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 				}
 			}
 			if sid == 0 {
-				sm.closeAll()
+				sm.CloseAll()
 				return
 			}
-			sm.remove(sid)
+			sm.Remove(sid)
 		case value_object.CmdDestroy:
-			sm.closeAll()
+			sm.CloseAll()
 			return
 		}
 	}
-}
-
-func fetchRelays(base string) (map[string]entity.RelayInfo, error) {
-	url := strings.TrimRight(base, "/") + "/relays.json"
-	log.Printf("request GET %s", url)
-	res, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	log.Printf("response GET %s status=%s", url, res.Status)
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %s", res.Status)
-	}
-	var d entity.Directory
-	if err := json.NewDecoder(res.Body).Decode(&d); err != nil {
-		return nil, err
-	}
-	return d.Relays, nil
-}
-
-func fetchHidden(base string) (map[string]entity.HiddenServiceInfo, error) {
-	url := strings.TrimRight(base, "/") + "/hidden.json"
-	log.Printf("request GET %s", url)
-	res, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	log.Printf("response GET %s status=%s", url, res.Status)
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %s", res.Status)
-	}
-	var d entity.Directory
-	if err := json.NewDecoder(res.Body).Decode(&d); err != nil {
-		return nil, err
-	}
-	m := make(map[string]entity.HiddenServiceInfo, len(d.HiddenServices))
-	for k, v := range d.HiddenServices {
-		m[strings.ToLower(k)] = v
-	}
-	return m, nil
-}
-
-func fetchDirectory(base string) (entity.Directory, error) {
-	relays, err := fetchRelays(base)
-	if err != nil {
-		return entity.Directory{}, err
-	}
-	hidden, err := fetchHidden(base)
-	if err != nil {
-		return entity.Directory{}, err
-	}
-	return entity.Directory{Relays: relays, HiddenServices: hidden}, nil
 }
 
 // resolveAddress returns the dial address for the given host and port.
@@ -212,49 +117,27 @@ func main() {
 	flag.Parse()
 
 	// --- repositories & services ---
-	relayRepository := infraRepo.NewRelayRepository()
-	circuitRepository := infraRepo.NewCircuitRepository()
-
 	if *dirURL == "" {
 		log.Fatal("base directory URL required")
 	}
 
-	dir, err := fetchDirectory(*dirURL)
+	// Initialize HTTP client
+	httpClient := http.NewHTTPClient()
+
+	// Initialize RelayRepository with directory data
+	relayRepository, err := infraRepo.NewRelayRepository(httpClient, *dirURL)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("initialize relay repository:", err)
 	}
-	for id, info := range dir.Relays {
-		rid, err := value_object.NewRelayID(id)
-		if err != nil {
-			log.Printf("invalid relay id %q: %v", id, err)
-			continue
-		}
-		host, portStr, err := net.SplitHostPort(info.Endpoint)
-		if err != nil {
-			log.Printf("parse endpoint %q: %v", info.Endpoint, err)
-			continue
-		}
-		p, err := strconv.Atoi(portStr)
-		if err != nil {
-			log.Printf("parse port %q: %v", portStr, err)
-			continue
-		}
-		ep, err := value_object.NewEndpoint(host, uint16(p))
-		if err != nil {
-			log.Printf("new endpoint: %v", err)
-			continue
-		}
-		pk, err := value_object.RSAPubKeyFromPEM([]byte(info.PubKey))
-		if err != nil {
-			log.Printf("parse pubkey for %s: %v", id, err)
-			continue
-		}
-		rel := entity.NewRelay(rid, ep, pk)
-		rel.SetOnline()
-		if err := relayRepository.Save(rel); err != nil {
-			log.Printf("save relay %s: %v", id, err)
-		}
+	circuitRepository := infraRepo.NewCircuitRepository()
+
+	// Fetch directory for hidden services (relays are already loaded in repository)
+	directoryUC := usecase.NewDirectoryServiceUseCase()
+	hiddenOut, err := directoryUC.FetchHiddenServices(usecase.DirectoryServiceInput{BaseURL: *dirURL})
+	if err != nil {
+		log.Fatal("fetch hidden services:", err)
 	}
+	dir := entity.Directory{HiddenServices: hiddenOut.HiddenServices}
 
 	dialer := infraSvc.NewTCPDialer()
 	cryptoSvc := infraSvc.NewCryptoService()
@@ -300,25 +183,25 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 		log.Println("read SOCKS methods:", err)
 		return
 	}
-	conn.Write([]byte{5, 0})
+	conn.Write(value_object.SOCKS5HandshakeResp)
 
 	if _, err := io.ReadFull(conn, buf[:4]); err != nil {
 		log.Println("read SOCKS request:", err)
 		return
 	}
-	if buf[1] != 1 {
+	if buf[1] != value_object.SOCKS5CmdConnect {
 		log.Println("unsupported SOCKS command:", buf[1])
 		return
 	}
 	var host string
 	switch buf[3] {
-	case 1:
+	case value_object.SOCKS5AddrIPv4:
 		if _, err := io.ReadFull(conn, buf[:4]); err != nil {
 			log.Println("read IPv4 address:", err)
 			return
 		}
 		host = net.IP(buf[:4]).String()
-	case 3:
+	case value_object.SOCKS5AddrDomain:
 		if _, err := io.ReadFull(conn, buf[:1]); err != nil {
 			log.Println("read hostname length:", err)
 			return
@@ -343,7 +226,7 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 	hidden := exitID != ""
 	if err != nil {
 		log.Println("resolve address:", err)
-		conn.Write([]byte{5, 4, 0, 1, 0, 0, 0, 0, 0, 0})
+		conn.Write(value_object.SOCKS5HostUnreachResp)
 		return
 	}
 
@@ -351,14 +234,14 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 	buildOut, err := build.Handle(usecase.BuildCircuitInput{Hops: hops, ExitRelayID: exitID})
 	if err != nil {
 		log.Println("build circuit:", err)
-		conn.Write([]byte{5, 1, 0, 1, 0, 0, 0, 0, 0, 0})
+		conn.Write(value_object.SOCKS5ErrorResp)
 		return
 	}
 	circuitID := buildOut.CircuitID
 	log.Printf("circuit built successfully cid=%s", circuitID)
 
 	cid, _ := value_object.CircuitIDFrom(circuitID)
-	sm := newStreamMap()
+	sm := usecase.NewStreamManager()
 	go recvLoop(repo, crypto, cid, sm)
 
 	if hidden {
@@ -373,8 +256,8 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 		return
 	}
 	sid := stOut.StreamID
-	sm.add(uint16(sid), conn)
-	defer sm.remove(uint16(sid))
+	sm.Add(uint16(sid), conn)
+	defer sm.Remove(uint16(sid))
 
 	payload, err := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: sid, Target: addr})
 	if err != nil {
@@ -387,7 +270,7 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 		return
 	}
 	log.Printf("BEGIN command sent successfully cid=%s sid=%d", circuitID, sid)
-	conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
+	conn.Write(value_object.SOCKS5SuccessResp)
 
 	bufLocal := make([]byte, 4096)
 	for {

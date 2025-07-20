@@ -7,21 +7,28 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/usecase"
 )
 
-func TestFetchHidden_NormalizesKeys(t *testing.T) {
+func TestDirectoryServiceUseCase_NormalizesKeys(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(entity.Directory{HiddenServices: map[string]entity.HiddenServiceInfo{
-			"UPPER.PTOR": {Relay: "r1", PubKey: "pk"},
-		}})
+		if r.URL.Path == "/hidden.json" {
+			json.NewEncoder(w).Encode(entity.Directory{HiddenServices: map[string]entity.HiddenServiceInfo{
+				"UPPER.PTOR": {Relay: "r1", PubKey: "pk"},
+			}})
+		} else if r.URL.Path == "/relays.json" {
+			json.NewEncoder(w).Encode(entity.Directory{Relays: map[string]entity.RelayInfo{}})
+		}
 	}))
 	defer srv.Close()
 
-	got, err := fetchHidden(srv.URL)
+	directoryUC := usecase.NewDirectoryServiceUseCase()
+	out, err := directoryUC.FetchHiddenServices(usecase.DirectoryServiceInput{BaseURL: srv.URL})
 	if err != nil {
-		t.Fatalf("fetchHidden: %v", err)
+		t.Fatalf("FetchHiddenServices: %v", err)
 	}
+	got := out.HiddenServices
 	if _, ok := got["upper.ptor"]; !ok {
 		t.Fatalf("normalized key not found")
 	}
