@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"ikedadada/go-ptor/internal/handler"
 	"ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
@@ -22,7 +23,6 @@ func (m *mockHTTPClient) FetchJSON(url string, result interface{}) error {
 	return json.Unmarshal(data, result)
 }
 
-
 func TestResolveAddress_CaseInsensitive(t *testing.T) {
 	// Create mock HTTP client with test data in new array format
 	type hiddenServiceDTO struct {
@@ -30,7 +30,7 @@ func TestResolveAddress_CaseInsensitive(t *testing.T) {
 		Relay   string `json:"relay"`
 		PubKey  string `json:"pubkey"`
 	}
-	
+
 	mockClient := &mockHTTPClient{
 		response: []hiddenServiceDTO{
 			{
@@ -46,7 +46,12 @@ func TestResolveAddress_CaseInsensitive(t *testing.T) {
 		t.Fatalf("NewHiddenServiceRepository: %v", err)
 	}
 
-	addr, exit, err := resolveAddress(hsRepo, "LOWER.PTOR", 80)
+	// Create a minimal SOCKS5Controller for testing
+	controller := handler.NewSOCKS5Controller(
+		hsRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0,
+	)
+
+	addr, exit, err := controller.ResolveAddress("LOWER.PTOR", 80)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
