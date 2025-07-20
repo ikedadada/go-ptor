@@ -20,11 +20,11 @@ func NewTCPTransmitter(conn net.Conn) service.CircuitTransmitter {
 	return &TCPTransmitter{conn: conn}
 }
 
-func (t *TCPTransmitter) send(cmd byte, cid value_object.CircuitID, payload []byte) error {
+func (t *TCPTransmitter) send(cmd value_object.CellCommand, cid value_object.CircuitID, payload []byte) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	cell := value_object.Cell{Cmd: cmd, Version: value_object.Version, Payload: payload}
+	cell := value_object.Cell{Cmd: cmd, Version: value_object.ProtocolV1, Payload: payload}
 	buf, err := value_object.Encode(cell)
 	if err != nil {
 		return err

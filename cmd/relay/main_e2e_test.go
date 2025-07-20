@@ -69,7 +69,7 @@ func TestRelayMain_E2E(t *testing.T) {
 	sid := uint16(1)
 	data := []byte("ok")
 	inner, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid, Data: data})
-	cellBuf, _ := value_object.Encode(value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: inner})
+	cellBuf, _ := value_object.Encode(value_object.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: inner})
 	outBuf := append(cid[:], cellBuf...)
 	c.Write(outBuf)
 	c.Close()

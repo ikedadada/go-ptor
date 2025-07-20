@@ -14,7 +14,7 @@ type SendDataInput struct {
 	CircuitID string
 	StreamID  uint16
 	Data      []byte
-	Cmd       byte // default CmdData
+	Cmd       value_object.CellCommand // default CmdData
 }
 
 // SendDataOutput reports how many bytes were sent.

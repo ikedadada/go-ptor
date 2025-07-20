@@ -8,7 +8,7 @@ import (
 
 func TestEncodeDecode(t *testing.T) {
 	payload := []byte("hello")
-	c := valueobject.Cell{Cmd: valueobject.CmdData, Version: valueobject.Version, Payload: payload}
+	c := valueobject.Cell{Cmd: valueobject.CmdData, Version: valueobject.ProtocolV1, Payload: payload}
 	buf, err := valueobject.Encode(c)
 	if err != nil {
 		t.Fatalf("encode: %v", err)

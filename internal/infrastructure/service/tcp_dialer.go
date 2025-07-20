@@ -20,7 +20,7 @@ func NewTCPDialer() useSvc.CircuitDialer { return &TCPDialer{} }
 func (TCPDialer) Dial(addr string) (net.Conn, error) { return net.Dial("tcp", addr) }
 
 func (TCPDialer) SendCell(conn net.Conn, c entity.RelayCell) error {
-	cell := value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.Version, Payload: c.Data}
+	cell := value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: c.Data}
 	buf, err := value_object.Encode(cell)
 	if err != nil {
 		return err
@@ -35,7 +35,7 @@ func (TCPDialer) WaitCreated(conn net.Conn) ([]byte, error) {
 	if _, err := io.ReadFull(conn, hdr[:]); err != nil {
 		return nil, err
 	}
-	if hdr[16] != value_object.CmdCreated || hdr[17] != value_object.Version {
+	if value_object.CellCommand(hdr[16]) != value_object.CmdCreated || value_object.ProtocolVersion(hdr[17]) != value_object.ProtocolV1 {
 		return nil, fmt.Errorf("invalid created header")
 	}
 	l := binary.BigEndian.Uint16(hdr[18:20])

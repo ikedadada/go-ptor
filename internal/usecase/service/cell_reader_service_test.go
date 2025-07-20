@@ -11,7 +11,7 @@ import (
 func TestReadCell(t *testing.T) {
 	pcr := service.NewCellReaderService()
 	cid := value_object.NewCircuitID()
-	cellBuf, err := value_object.Encode(value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: []byte("hi")})
+	cellBuf, err := value_object.Encode(value_object.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: []byte("hi")})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
