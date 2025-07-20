@@ -19,7 +19,7 @@ func NewTCPDialer() useSvc.CircuitDialer { return &TCPDialer{} }
 
 func (TCPDialer) Dial(addr string) (net.Conn, error) { return net.Dial("tcp", addr) }
 
-func (TCPDialer) SendCell(conn net.Conn, c entity.Cell) error {
+func (TCPDialer) SendCell(conn net.Conn, c entity.RelayCell) error {
 	cell := value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.Version, Payload: c.Data}
 	buf, err := value_object.Encode(cell)
 	if err != nil {

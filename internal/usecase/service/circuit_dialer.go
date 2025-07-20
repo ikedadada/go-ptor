@@ -12,7 +12,7 @@ type CircuitDialer interface {
 	// Dial connects to the given relay address.
 	Dial(addr string) (net.Conn, error)
 	// SendCell writes a cell to the relay.
-	SendCell(conn net.Conn, cell entity.Cell) error
+	SendCell(conn net.Conn, cell entity.RelayCell) error
 	// WaitCreated waits for a CREATED payload from the relay.
 	WaitCreated(conn net.Conn) ([]byte, error)
 	// SendDestroy notifies the relay about circuit teardown.

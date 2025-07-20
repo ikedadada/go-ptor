@@ -10,9 +10,8 @@ import (
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
-	useSvc "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 type mockRepoConnect struct {
@@ -49,7 +48,7 @@ func (m *mockTxConnect) SendDestroy(value_object.CircuitID) error               
 
 type connectFactory struct{ tx *mockTxConnect }
 
-func (c connectFactory) New(net.Conn) useSvc.CircuitTransmitter { return c.tx }
+func (c connectFactory) New(net.Conn) service.CircuitTransmitter { return c.tx }
 
 func makeTestCircuitConnect() (*entity.Circuit, error) {
 	id := value_object.NewCircuitID()
@@ -84,9 +83,9 @@ func TestConnectUseCase_Handle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fac := connectFactory{tt.tx}
-			crypto := infraSvc.NewCryptoService()
+			crypto := service.NewCryptoService()
 			uc := usecase.NewConnectUseCase(tt.repo, fac, crypto)
-			
+
 			// Store expected nonces before use case execution
 			k := make([][32]byte, len(cir.Hops()))
 			n := make([][12]byte, len(cir.Hops()))
@@ -94,7 +93,7 @@ func TestConnectUseCase_Handle(t *testing.T) {
 				k[i] = cir.HopKey(i)
 				n[i] = cir.HopBeginNoncePeek(i)
 			}
-			
+
 			_, err := uc.Handle(tt.input)
 			if tt.err {
 				if err == nil {
