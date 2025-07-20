@@ -9,6 +9,9 @@ import (
 
 type RSAPubKey struct{ *rsa.PublicKey }
 
+// Ensure RSAPubKey implements PublicKey interface
+var _ PublicKey = RSAPubKey{}
+
 func RSAPubKeyFromPEM(pemBytes []byte) (RSAPubKey, error) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
