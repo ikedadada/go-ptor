@@ -15,32 +15,37 @@ import (
 
 type relayRepositoryImpl struct {
 	mu sync.RWMutex
-	m  map[value_object.RelayID]*entity.Relay
+	s  []*entity.Relay
 }
 
 // NewRelayRepository creates a RelayRepository pre-loaded with relay data from directory URL
 func NewRelayRepository(httpClient http.HTTPClient, directoryURL string) (repository.RelayRepository, error) {
 
-	url := strings.TrimRight(directoryURL, "/") + "/"
+	url := strings.TrimRight(directoryURL, "/") + "/relays"
+	type relayDTO struct {
+		ID       string `json:"id"`
+		Endpoint string `json:"endpoint"`
+		PubKey   string `json:"pubkey"`
+	}
 
-	var d entity.Directory
-	if err := httpClient.FetchJSON(url, &d); err != nil {
+	var rs []relayDTO
+	if err := httpClient.FetchJSON(url, &rs); err != nil {
 		return nil, err
 	}
 
-	var m = make(map[value_object.RelayID]*entity.Relay)
+	var s = make([]*entity.Relay, 0, len(rs))
 
-	for id, info := range d.Relays {
+	for _, r := range rs {
 		// Validate and construct RelayID
-		rid, err := value_object.NewRelayID(id)
+		rid, err := value_object.NewRelayID(r.ID)
 		if err != nil {
-			return nil, fmt.Errorf("invalid relay id %q: %w", id, err)
+			return nil, fmt.Errorf("invalid relay id %q: %w", r.ID, err)
 		}
 
 		// Parse endpoint
-		host, portStr, err := net.SplitHostPort(info.Endpoint)
+		host, portStr, err := net.SplitHostPort(r.Endpoint)
 		if err != nil {
-			return nil, fmt.Errorf("parse endpoint %q: %w", info.Endpoint, err)
+			return nil, fmt.Errorf("parse endpoint %q: %w", r.Endpoint, err)
 		}
 
 		port, err := strconv.Atoi(portStr)
@@ -55,7 +60,7 @@ func NewRelayRepository(httpClient http.HTTPClient, directoryURL string) (reposi
 		}
 
 		// Parse public key
-		pk, err := value_object.RSAPubKeyFromPEM([]byte(info.PubKey))
+		pk, err := value_object.RSAPubKeyFromPEM([]byte(r.PubKey))
 		if err != nil {
 			return nil, fmt.Errorf("parse pubkey: %w", err)
 		}
@@ -64,39 +69,52 @@ func NewRelayRepository(httpClient http.HTTPClient, directoryURL string) (reposi
 		relay := entity.NewRelay(rid, ep, pk)
 		relay.SetOnline()
 
-		m[relay.ID()] = relay
+		// Append to slice
+		s = append(s, relay)
 	}
 
 	return &relayRepositoryImpl{
-		m: m,
+		s: s,
 	}, nil
 }
 
 func (r *relayRepositoryImpl) Save(rel *entity.Relay) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.m[rel.ID()] = rel
+	// Check if relay already exists
+	for i, existing := range r.s {
+		if existing.ID() == rel.ID() {
+			// Update existing relay
+			r.s[i] = rel
+		}
+	}
+	// If not found, append new relay
+	r.s = append(r.s, rel)
 	return nil
 }
 
 func (r *relayRepositoryImpl) FindByID(id value_object.RelayID) (*entity.Relay, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	rel, ok := r.m[id]
-	if !ok {
-		return nil, repository.ErrNotFound
+	for _, rel := range r.s {
+		if rel.ID() == id {
+			return rel, nil
+		}
 	}
-	return rel, nil
+	return nil, repository.ErrNotFound
 }
 
 func (r *relayRepositoryImpl) AllOnline() ([]*entity.Relay, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]*entity.Relay, 0, len(r.m))
-	for _, rel := range r.m {
+	var onlineRelays []*entity.Relay
+	for _, rel := range r.s {
 		if rel.Status() == entity.Online {
-			out = append(out, rel)
+			onlineRelays = append(onlineRelays, rel)
 		}
 	}
-	return out, nil
+	if len(onlineRelays) == 0 {
+		return nil, repository.ErrNotFound
+	}
+	return onlineRelays, nil
 }

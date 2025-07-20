@@ -22,7 +22,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"github.com/google/uuid"
-	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	"strings"
 )
@@ -114,23 +113,25 @@ func TestClientMain_E2E(t *testing.T) {
 		t.Fatalf("marshal pkix: %v", err)
 	}
 	pem := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
-	dirData := entity.Directory{
-		Relays: map[string]entity.RelayInfo{
-			uuid.NewString(): {Endpoint: relayAddr, PubKey: pem},
+	// Create data in new array format
+	relayID := uuid.NewString()
+	relays := []map[string]interface{}{
+		{
+			"id":       relayID,
+			"endpoint": relayAddr,
+			"pubkey":   pem,
 		},
 	}
+	hiddenServices := []map[string]interface{}{}
+	
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/relays", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays, HiddenServices: map[string]entity.HiddenServiceInfo{}})
+		json.NewEncoder(w).Encode(relays)
 	})
-	mux.HandleFunc("/relays.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/hidden_services", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays})
-	})
-	mux.HandleFunc("/hidden.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(entity.Directory{HiddenServices: map[string]entity.HiddenServiceInfo{}})
+		json.NewEncoder(w).Encode(hiddenServices)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -262,27 +263,36 @@ func TestClientMain_HiddenService(t *testing.T) {
 	hidAddr := value_object.NewHiddenAddr(key.Public().(ed25519.PublicKey)).String()
 	exitID := uuid.NewString()
 	midID := uuid.NewString()
-	dirData := entity.Directory{
-		Relays: map[string]entity.RelayInfo{
-			midID:  {Endpoint: relay2Addr, PubKey: relPem},
-			exitID: {Endpoint: relayAddr, PubKey: relPem},
+	
+	// Create data in new array format
+	relays := []map[string]interface{}{
+		{
+			"id":       midID,
+			"endpoint": relay2Addr,
+			"pubkey":   relPem,
 		},
-		HiddenServices: map[string]entity.HiddenServiceInfo{
-			hidAddr: {Relay: exitID, PubKey: hidPem},
+		{
+			"id":       exitID,
+			"endpoint": relayAddr,
+			"pubkey":   relPem,
 		},
 	}
+	hiddenServices := []map[string]interface{}{
+		{
+			"address": hidAddr,
+			"relay":   exitID,
+			"pubkey":  hidPem,
+		},
+	}
+	
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/relays", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays, HiddenServices: dirData.HiddenServices})
+		json.NewEncoder(w).Encode(relays)
 	})
-	mux.HandleFunc("/relays.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/hidden_services", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(entity.Directory{Relays: dirData.Relays})
-	})
-	mux.HandleFunc("/hidden.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(entity.Directory{HiddenServices: dirData.HiddenServices})
+		json.NewEncoder(w).Encode(hiddenServices)
 	})
 	dirSrv := httptest.NewServer(mux)
 	defer dirSrv.Close()

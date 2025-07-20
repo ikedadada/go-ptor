@@ -8,7 +8,6 @@ import (
 	"net"
 	"strings"
 
-	"ikedadada/go-ptor/internal/domain/entity"
 	repoif "ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/handler"
@@ -92,17 +91,17 @@ func recvLoop(repo repoif.CircuitRepository, crypto useSvc.CryptoService, cid va
 }
 
 // resolveAddress returns the dial address for the given host and port.
-// If host ends with .ptor, it looks up the hidden service in the directory
+// If host ends with .ptor, it looks up the hidden service in the repository
 // and returns the endpoint of the designated exit relay.
-func resolveAddress(dir entity.Directory, host string, port int) (string, string, error) {
+func resolveAddress(hsRepo repoif.HiddenServiceRepository, host string, port int) (string, string, error) {
 	hostLower := strings.ToLower(host)
 	exit := ""
 	if strings.HasSuffix(hostLower, ".ptor") {
-		hs, ok := dir.HiddenServices[hostLower]
-		if !ok {
+		hs, err := hsRepo.FindByAddressString(hostLower)
+		if err != nil {
 			return "", "", fmt.Errorf("hidden service not found: %s", host)
 		}
-		exit = hs.Relay
+		exit = hs.RelayID().String()
 	}
 	if ip := net.ParseIP(hostLower); ip != nil && ip.To4() == nil {
 		return fmt.Sprintf("[%s]:%d", hostLower, port), exit, nil
@@ -129,15 +128,14 @@ func main() {
 	if err != nil {
 		log.Fatal("initialize relay repository:", err)
 	}
-	circuitRepository := infraRepo.NewCircuitRepository()
 
-	// Fetch directory for hidden services (relays are already loaded in repository)
-	directoryUC := usecase.NewDirectoryServiceUseCase()
-	hiddenOut, err := directoryUC.FetchHiddenServices(usecase.DirectoryServiceInput{BaseURL: *dirURL})
+	// Initialize HiddenServiceRepository with directory data
+	hiddenServiceRepository, err := infraRepo.NewHiddenServiceRepository(httpClient, *dirURL)
 	if err != nil {
-		log.Fatal("fetch hidden services:", err)
+		log.Fatal("initialize hidden service repository:", err)
 	}
-	dir := entity.Directory{HiddenServices: hiddenOut.HiddenServices}
+
+	circuitRepository := infraRepo.NewCircuitRepository()
 
 	dialer := infraSvc.NewTCPDialer()
 	cryptoSvc := infraSvc.NewCryptoService()
@@ -164,13 +162,13 @@ func main() {
 		}
 		log.Printf("request connection from %s", c.RemoteAddr())
 		go func(conn net.Conn) {
-			handleSOCKS(conn, dir, *hops, buildUC, connectUC, openUC, closeUC, sendUC, endUC, circuitRepository, cryptoSvc)
+			handleSOCKS(conn, hiddenServiceRepository, *hops, buildUC, connectUC, openUC, closeUC, sendUC, endUC, circuitRepository, cryptoSvc)
 			log.Printf("response connection closed %s", conn.RemoteAddr())
 		}(c)
 	}
 }
 
-func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.BuildCircuitUseCase, connect usecase.ConnectUseCase, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase, repo repoif.CircuitRepository, crypto useSvc.CryptoService) {
+func handleSOCKS(conn net.Conn, hsRepo repoif.HiddenServiceRepository, hops int, build usecase.BuildCircuitUseCase, connect usecase.ConnectUseCase, open usecase.OpenStreamUseCase, close usecase.CloseStreamUseCase, send usecase.SendDataUseCase, end usecase.HandleEndUseCase, repo repoif.CircuitRepository, crypto useSvc.CryptoService) {
 	defer conn.Close()
 
 	var buf [262]byte
@@ -222,7 +220,7 @@ func handleSOCKS(conn net.Conn, dir entity.Directory, hops int, build usecase.Bu
 	}
 	port := int(buf[0])<<8 | int(buf[1])
 
-	addr, exitID, err := resolveAddress(dir, host, port)
+	addr, exitID, err := resolveAddress(hsRepo, host, port)
 	hidden := exitID != ""
 	if err != nil {
 		log.Println("resolve address:", err)

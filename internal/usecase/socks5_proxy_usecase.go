@@ -7,7 +7,7 @@ import (
 	"net"
 	"strings"
 
-	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
 )
 
@@ -17,10 +17,10 @@ type SOCKS5ProxyUseCase interface {
 }
 
 type SOCKS5ConnectionInput struct {
-	Conn      net.Conn
-	Directory entity.Directory
-	Hops      int
-	
+	Conn              net.Conn
+	HiddenServiceRepo repository.HiddenServiceRepository
+	Hops              int
+
 	// Dependencies for circuit management
 	BuildUC   BuildCircuitUseCase
 	ConnectUC ConnectUseCase
@@ -60,7 +60,7 @@ func (uc *socks5ProxyUseCaseImpl) HandleConnection(input SOCKS5ConnectionInput) 
 	}
 
 	// Resolve address and determine if it's a hidden service
-	addr, exitID, err := ResolveAddress(input.Directory, host, port)
+	addr, exitID, err := ResolveAddressWithRepo(input.HiddenServiceRepo, host, port)
 	if err != nil {
 		uc.sendSOCKSError(conn, 4) // Host unreachable
 		return SOCKS5ConnectionOutput{}, fmt.Errorf("resolve address failed: %w", err)
@@ -134,38 +134,38 @@ func (uc *socks5ProxyUseCaseImpl) HandleConnection(input SOCKS5ConnectionInput) 
 
 func (uc *socks5ProxyUseCaseImpl) performHandshake(conn net.Conn) error {
 	var buf [262]byte
-	
+
 	// Read version and method count
 	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
 		return fmt.Errorf("read version: %w", err)
 	}
-	
+
 	// Read methods
 	n := int(buf[1])
 	if _, err := io.ReadFull(conn, buf[:n]); err != nil {
 		return fmt.Errorf("read methods: %w", err)
 	}
-	
+
 	// Send response (no authentication required)
 	if _, err := conn.Write([]byte{5, 0}); err != nil {
 		return fmt.Errorf("send handshake response: %w", err)
 	}
-	
+
 	return nil
 }
 
 func (uc *socks5ProxyUseCaseImpl) parseSOCKSRequest(conn net.Conn) (string, int, error) {
 	var buf [262]byte
-	
+
 	// Read request header
 	if _, err := io.ReadFull(conn, buf[:4]); err != nil {
 		return "", 0, fmt.Errorf("read request header: %w", err)
 	}
-	
+
 	if buf[1] != 1 { // Only support CONNECT command
 		return "", 0, fmt.Errorf("unsupported command: %d", buf[1])
 	}
-	
+
 	var host string
 	switch buf[3] { // Address type
 	case 1: // IPv4
@@ -185,33 +185,34 @@ func (uc *socks5ProxyUseCaseImpl) parseSOCKSRequest(conn net.Conn) (string, int,
 	default:
 		return "", 0, fmt.Errorf("unsupported address type: %d", buf[3])
 	}
-	
+
 	// Read port
 	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
 		return "", 0, fmt.Errorf("read port: %w", err)
 	}
 	port := int(buf[0])<<8 | int(buf[1])
-	
+
 	return host, port, nil
 }
 
-// ResolveAddress resolves the address and returns the dial address and exit relay ID
-func ResolveAddress(dir entity.Directory, host string, port int) (string, string, error) {
+// ResolveAddressWithRepo resolves the address and returns the dial address and exit relay ID
+func ResolveAddressWithRepo(hsRepo repository.HiddenServiceRepository, host string, port int) (string, string, error) {
 	hostLower := strings.ToLower(host)
 	exit := ""
-	
+
 	if strings.HasSuffix(hostLower, ".ptor") {
-		hs, ok := dir.HiddenServices[hostLower]
-		if !ok {
+		fmt.Println("Resolving hidden service:", hostLower)
+		hs, err := hsRepo.FindByAddressString(hostLower)
+		if err != nil {
 			return "", "", fmt.Errorf("hidden service not found: %s", host)
 		}
-		exit = hs.Relay
+		exit = hs.RelayID().String()
 	}
-	
+
 	if ip := net.ParseIP(hostLower); ip != nil && ip.To4() == nil {
 		return fmt.Sprintf("[%s]:%d", hostLower, port), exit, nil
 	}
-	
+
 	return fmt.Sprintf("%s:%d", hostLower, port), exit, nil
 }
 

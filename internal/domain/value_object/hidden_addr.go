@@ -15,5 +15,11 @@ func NewHiddenAddr(pub ed25519.PublicKey) HiddenAddr {
 	return HiddenAddr{val: addr}
 }
 
+// FromString creates a HiddenAddr from a string address
+// This is used when loading addresses from external sources
+func HiddenAddrFromString(addr string) HiddenAddr {
+	return HiddenAddr{val: addr}
+}
+
 func (h HiddenAddr) String() string          { return h.val }
 func (h HiddenAddr) Equal(o HiddenAddr) bool { return h.val == o.val }

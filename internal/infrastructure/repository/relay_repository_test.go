@@ -52,9 +52,14 @@ func (m *mockHTTPClient) FetchJSON(url string, result interface{}) error {
 }
 
 func TestRelayRepo_Save_FindByID(t *testing.T) {
-	// Create mock HTTP client that returns empty relays
+	// Create mock HTTP client that returns empty relays in new array format
+	type relayDTO struct {
+		ID       string `json:"id"`
+		Endpoint string `json:"endpoint"`
+		PubKey   string `json:"pubkey"`
+	}
 	mockClient := &mockHTTPClient{
-		response: entity.Directory{Relays: map[string]entity.RelayInfo{}},
+		response: []relayDTO{},
 	}
 
 	repo, err := repository.NewRelayRepository(mockClient, "http://test.com")
@@ -80,9 +85,14 @@ func TestRelayRepo_Save_FindByID(t *testing.T) {
 }
 
 func TestRelayRepo_FindByID_NotFound(t *testing.T) {
-	// Create mock HTTP client that returns empty relays
+	// Create mock HTTP client that returns empty relays in new array format
+	type relayDTO struct {
+		ID       string `json:"id"`
+		Endpoint string `json:"endpoint"`
+		PubKey   string `json:"pubkey"`
+	}
 	mockClient := &mockHTTPClient{
-		response: entity.Directory{Relays: map[string]entity.RelayInfo{}},
+		response: []relayDTO{},
 	}
 
 	repo, err := repository.NewRelayRepository(mockClient, "http://test.com")
@@ -101,9 +111,14 @@ func TestRelayRepo_FindByID_NotFound(t *testing.T) {
 }
 
 func TestRelayRepo_AllOnline(t *testing.T) {
-	// Create mock HTTP client that returns empty relays
+	// Create mock HTTP client that returns empty relays in new array format
+	type relayDTO struct {
+		ID       string `json:"id"`
+		Endpoint string `json:"endpoint"`
+		PubKey   string `json:"pubkey"`
+	}
 	mockClient := &mockHTTPClient{
-		response: entity.Directory{Relays: map[string]entity.RelayInfo{}},
+		response: []relayDTO{},
 	}
 
 	repo, err := repository.NewRelayRepository(mockClient, "http://test.com")

@@ -63,7 +63,7 @@ func (uc *directoryServiceUseCaseImpl) FetchDirectory(input DirectoryServiceInpu
 }
 
 func (uc *directoryServiceUseCaseImpl) FetchRelays(input DirectoryServiceInput) (RelayServiceOutput, error) {
-	url := strings.TrimRight(input.BaseURL, "/") + "/relays.json"
+	url := strings.TrimRight(input.BaseURL, "/") + "/relays"
 	log.Printf("request GET %s", url)
 
 	res, err := uc.httpClient.Get(url)
@@ -78,16 +78,16 @@ func (uc *directoryServiceUseCaseImpl) FetchRelays(input DirectoryServiceInput) 
 		return RelayServiceOutput{}, fmt.Errorf("unexpected status: %s", res.Status)
 	}
 
-	var d entity.Directory
-	if err := json.NewDecoder(res.Body).Decode(&d); err != nil {
+	var relays map[string]entity.RelayInfo
+	if err := json.NewDecoder(res.Body).Decode(&relays); err != nil {
 		return RelayServiceOutput{}, fmt.Errorf("decode JSON failed: %w", err)
 	}
 
-	return RelayServiceOutput{Relays: d.Relays}, nil
+	return RelayServiceOutput{Relays: relays}, nil
 }
 
 func (uc *directoryServiceUseCaseImpl) FetchHiddenServices(input DirectoryServiceInput) (HiddenServiceOutput, error) {
-	url := strings.TrimRight(input.BaseURL, "/") + "/hidden.json"
+	url := strings.TrimRight(input.BaseURL, "/") + "/hidden_services"
 	log.Printf("request GET %s", url)
 
 	res, err := uc.httpClient.Get(url)
@@ -102,14 +102,14 @@ func (uc *directoryServiceUseCaseImpl) FetchHiddenServices(input DirectoryServic
 		return HiddenServiceOutput{}, fmt.Errorf("unexpected status: %s", res.Status)
 	}
 
-	var d entity.Directory
-	if err := json.NewDecoder(res.Body).Decode(&d); err != nil {
+	var hiddenServices map[string]entity.HiddenServiceInfo
+	if err := json.NewDecoder(res.Body).Decode(&hiddenServices); err != nil {
 		return HiddenServiceOutput{}, fmt.Errorf("decode JSON failed: %w", err)
 	}
 
 	// Normalize hidden service keys to lowercase for case-insensitive lookup
-	normalized := make(map[string]entity.HiddenServiceInfo, len(d.HiddenServices))
-	for k, v := range d.HiddenServices {
+	normalized := make(map[string]entity.HiddenServiceInfo, len(hiddenServices))
+	for k, v := range hiddenServices {
 		normalized[strings.ToLower(k)] = v
 	}
 
