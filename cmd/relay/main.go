@@ -16,8 +16,8 @@ import (
 	"time"
 
 	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
-	"ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 func main() {
@@ -37,7 +37,7 @@ func main() {
 	}
 	tbl := repoimpl.NewCircuitTableRepository(*ttl)
 	cryptoSvc := service.NewCryptoService()
-	reader := service.NewHandlerCellReader()
+	reader := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, tbl, cryptoSvc, reader)
 
 	ln, err := net.Listen("tcp", *listen)

@@ -1,16 +1,25 @@
-package handler
+package service
 
 import (
 	"io"
 
-	"github.com/google/uuid"
-
 	"ikedadada/go-ptor/internal/domain/value_object"
+
+	"github.com/google/uuid"
 )
 
-// ReadCell reads a circuit ID followed by a value_object.Cell from r.
-// The payload is returned as-is and may still be encrypted.
-func ReadCell(r io.Reader) (value_object.CircuitID, *value_object.Cell, error) {
+// CellReader abstracts reading a circuit ID and cell from an io.Reader.
+type CellReaderService interface {
+	ReadCell(r io.Reader) (value_object.CircuitID, *value_object.Cell, error)
+}
+
+// ProtocolCellReader implements CellReader using util.ReadCell for low-level protocol cells.
+type cellReaderService struct{}
+
+// NewProtocolCellReader returns a CellReader backed by util.ReadCell.
+func NewCellReaderService() CellReaderService { return cellReaderService{} }
+
+func (cellReaderService) ReadCell(r io.Reader) (value_object.CircuitID, *value_object.Cell, error) {
 	var idBuf [16]byte
 	if _, err := io.ReadFull(r, idBuf[:]); err != nil {
 		return value_object.CircuitID{}, nil, err

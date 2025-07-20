@@ -26,7 +26,7 @@ type relayUsecaseImpl struct {
 	priv   *rsa.PrivateKey
 	repo   repoif.CircuitTableRepository
 	crypto service.CryptoService
-	reader service.CellReader
+	crs    service.CellReaderService
 }
 
 func (uc *relayUsecaseImpl) ensureServeDown(st *entity.ConnState) {
@@ -38,8 +38,8 @@ func (uc *relayUsecaseImpl) ensureServeDown(st *entity.ConnState) {
 }
 
 // NewRelayUseCase returns a use case to process relay connections.
-func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c service.CryptoService, r service.CellReader) RelayUseCase {
-	return &relayUsecaseImpl{priv: priv, repo: repo, crypto: c, reader: r}
+func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c service.CryptoService, crs service.CellReaderService) RelayUseCase {
+	return &relayUsecaseImpl{priv: priv, repo: repo, crypto: c, crs: crs}
 }
 
 func (uc *relayUsecaseImpl) ServeConn(c net.Conn) {
@@ -50,7 +50,7 @@ func (uc *relayUsecaseImpl) ServeConn(c net.Conn) {
 	}()
 
 	for {
-		cid, cell, err := uc.reader.ReadCell(c)
+		cid, cell, err := uc.crs.ReadCell(c)
 		if err != nil {
 			if err != io.EOF {
 				log.Println("read cell:", err)
@@ -231,7 +231,7 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid value_object.CircuitI
 	if err != nil {
 		return err
 	}
-	
+
 	// Try to decrypt the data for downstream flow
 	nonce := st.DataNonce()
 	log.Printf("data decrypt cid=%s nonce=%x key=%x dataLen=%d", cid.String(), nonce, st.Key(), len(p.Data))
@@ -436,7 +436,6 @@ func forwardCell(w net.Conn, cid value_object.CircuitID, cell *value_object.Cell
 	log.Printf("response forward cid=%s cmd=%d len=%d", cid.String(), cell.Cmd, len(cell.Payload))
 	return nil
 }
-
 
 func (uc *relayUsecaseImpl) forwardUpstream(st *entity.ConnState, cid value_object.CircuitID, sid value_object.StreamID, down net.Conn) {
 	defer down.Close()

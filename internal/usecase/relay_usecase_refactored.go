@@ -24,19 +24,19 @@ type RelayUseCaseRefactored interface {
 }
 
 type relayUsecaseRefactoredImpl struct {
-	priv                *rsa.PrivateKey
-	repo                repoif.CircuitTableRepository
-	reader              useSvc.CellReader
-	cryptographyService service.CircuitCryptographyService
+	priv                 *rsa.PrivateKey
+	repo                 repoif.CircuitTableRepository
+	reader               useSvc.CellReaderService
+	cryptographyService  service.CircuitCryptographyService
 	relayBehaviorService service.RelayBehaviorService
-	cellRoutingService  service.CellRoutingService
+	cellRoutingService   service.CellRoutingService
 }
 
 // NewRelayUseCaseRefactored creates a new refactored relay use case with domain services
 func NewRelayUseCaseRefactored(
 	priv *rsa.PrivateKey,
 	repo repoif.CircuitTableRepository,
-	reader useSvc.CellReader,
+	reader useSvc.CellReaderService,
 	cryptographyService service.CircuitCryptographyService,
 	relayBehaviorService service.RelayBehaviorService,
 	cellRoutingService service.CellRoutingService,
@@ -157,23 +157,23 @@ func (uc *relayUsecaseRefactoredImpl) executeInstruction(st *entity.ConnState, c
 	case service.ActionForwardDownstream:
 		uc.ensureServeDown(st)
 		return uc.forwardCell(st.Down(), cid, instruction.ForwardCell)
-		
+
 	case service.ActionForwardUpstream:
 		return uc.forwardCell(st.Up(), cid, instruction.ForwardCell)
-		
+
 	case service.ActionEncryptAndForward:
 		return uc.forwardCell(st.Up(), cid, instruction.ForwardCell)
-		
+
 	case service.ActionTerminate:
 		// Handle locally - could involve stream operations
 		if instruction.Response != nil {
 			return uc.forwardCell(st.Up(), cid, instruction.Response)
 		}
 		return nil
-		
+
 	case service.ActionCreateConnection:
 		return uc.createConnection(st, cid, &instruction.Connection, instruction.Response)
-		
+
 	default:
 		return fmt.Errorf("unknown action: %v", instruction.Action)
 	}
@@ -200,11 +200,11 @@ func (uc *relayUsecaseRefactoredImpl) createConnection(st *entity.ConnState, cid
 	if st.Down() != nil {
 		st.Down().Close()
 	}
-	
+
 	beginCounter, dataCounter := st.GetCounters()
 	newSt := entity.NewConnStateWithCounters(st.Key(), st.Nonce(), st.Up(), down, beginCounter, dataCounter)
 	newSt.SetHidden(connInfo.IsHidden)
-	
+
 	if err := uc.repo.Add(cid, newSt); err != nil {
 		down.Close()
 		return err
@@ -225,7 +225,7 @@ func (uc *relayUsecaseRefactoredImpl) createConnection(st *entity.ConnState, cid
 	if response != nil {
 		return uc.forwardCell(newSt.Up(), cid, response)
 	}
-	
+
 	return nil
 }
 

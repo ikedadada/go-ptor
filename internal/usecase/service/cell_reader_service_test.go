@@ -1,21 +1,22 @@
-package handler_test
+package service_test
 
 import (
 	"bytes"
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/handler"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 func TestReadCell(t *testing.T) {
+	pcr := service.NewCellReaderService()
 	cid := value_object.NewCircuitID()
 	cellBuf, err := value_object.Encode(value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: []byte("hi")})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
 	buf := append(cid.Bytes(), cellBuf...)
-	gotCID, gotCell, err := handler.ReadCell(bytes.NewReader(buf))
+	gotCID, gotCell, err := pcr.ReadCell(bytes.NewReader(buf))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -28,7 +29,8 @@ func TestReadCell(t *testing.T) {
 }
 
 func TestReadCell_Err(t *testing.T) {
-	_, _, err := handler.ReadCell(bytes.NewReader([]byte("short")))
+	pcr := service.NewCellReaderService()
+	_, _, err := pcr.ReadCell(bytes.NewReader([]byte("short")))
 	if err == nil {
 		t.Fatalf("expected error")
 	}
