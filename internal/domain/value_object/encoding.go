@@ -1,4 +1,4 @@
-package util
+package value_object
 
 import (
 	"bytes"
