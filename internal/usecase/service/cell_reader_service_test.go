@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
@@ -11,7 +12,7 @@ import (
 func TestReadCell(t *testing.T) {
 	pcr := service.NewCellReaderService()
 	cid := value_object.NewCircuitID()
-	cellBuf, err := value_object.Encode(value_object.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: []byte("hi")})
+	cellBuf, err := entity.Encode(entity.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: []byte("hi")})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}

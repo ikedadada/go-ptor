@@ -35,7 +35,7 @@ func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 	copy(pubArr[:], pub)
 	payload, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{NextHop: ln.Addr().String(), ClientPub: pubArr})
 	cid := value_object.NewCircuitID()
-	cell := &value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: payload}
+	cell := &entity.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: payload}
 
 	up1, up2 := net.Pipe()
 	errCh := make(chan error, 1)
@@ -86,7 +86,7 @@ func TestRelayUseCase_ForwardExtendExisting(t *testing.T) {
 	var pubArr [32]byte
 	copy(pubArr[:], pub)
 	payload, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{ClientPub: pubArr})
-	cell := &value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: payload}
+	cell := &entity.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: payload}
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- uc.Handle(up1, cid, cell) }()
@@ -138,7 +138,7 @@ func TestRelayUseCase_EndUnknown(t *testing.T) {
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	cid := value_object.NewCircuitID()
-	cell := &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.ProtocolV1, Payload: nil}
+	cell := &entity.Cell{Cmd: value_object.CmdEnd, Version: value_object.ProtocolV1, Payload: nil}
 	if err := uc.Handle(nil, cid, cell); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestRelayUseCase_EndStreamNoDown(t *testing.T) {
 	st.Streams().Add(sid, local1)
 
 	payload, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid.UInt16()})
-	cell := &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.ProtocolV1, Payload: payload}
+	cell := &entity.Cell{Cmd: value_object.CmdEnd, Version: value_object.ProtocolV1, Payload: payload}
 	if err := uc.Handle(up1, cid, cell); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 		down1, down2 := net.Pipe()
 		st := entity.NewConnState(key, nonce, up1, down1)
 		repo.Add(cid, st)
-		cell := &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.ProtocolV1}
+		cell := &entity.Cell{Cmd: value_object.CmdEnd, Version: value_object.ProtocolV1}
 		errCh := make(chan error, 1)
 		go func() { errCh <- uc.Handle(up1, cid, cell) }()
 		buf := make([]byte, 528)
@@ -225,7 +225,7 @@ func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 		down1, down2 := net.Pipe()
 		st := entity.NewConnState(key, nonce, up1, down1)
 		repo.Add(cid2, st)
-		cell := &value_object.Cell{Cmd: value_object.CmdDestroy, Version: value_object.ProtocolV1}
+		cell := &entity.Cell{Cmd: value_object.CmdDestroy, Version: value_object.ProtocolV1}
 		errCh := make(chan error, 1)
 		go func() { errCh <- uc.Handle(up1, cid2, cell) }()
 		buf := make([]byte, 528)
@@ -269,14 +269,14 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		}()
 		payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
 		enc, _ := cSvc.AESSeal(key, nonce, payload)
-		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
+		cell := &entity.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
 		errCh := make(chan error, 1)
 		go func() { errCh <- uc.Handle(up1, cid, cell) }()
-		ack := make([]byte, 16+value_object.MaxCellSize)
+		ack := make([]byte, 16+entity.MaxCellSize)
 		if _, err := io.ReadFull(up2, ack); err != nil {
 			t.Fatalf("read ack: %v", err)
 		}
-		cAck, err := value_object.Decode(ack[16:])
+		cAck, err := entity.Decode(ack[16:])
 		if err != nil {
 			t.Fatalf("decode ack: %v", err)
 		}
@@ -321,14 +321,14 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		os.Setenv("PTOR_HIDDEN_ADDR", ln.Addr().String())
 		defer os.Unsetenv("PTOR_HIDDEN_ADDR")
 		enc, _ := cSvc.AESSeal(key, nonce, []byte{})
-		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
+		cell := &entity.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
 		errCh := make(chan error, 1)
 		go func() { errCh <- uc.Handle(up1, cid, cell) }()
-		ack := make([]byte, 16+value_object.MaxCellSize)
+		ack := make([]byte, 16+entity.MaxCellSize)
 		if _, err := io.ReadFull(up2, ack); err != nil {
 			t.Fatalf("read ack: %v", err)
 		}
-		cAck, err := value_object.Decode(ack[16:])
+		cAck, err := entity.Decode(ack[16:])
 		if err != nil {
 			t.Fatalf("decode ack: %v", err)
 		}
@@ -364,7 +364,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 
 		payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: "127.0.0.1:1"})
 		enc, _ := cSvc.AESSeal(key, nonce, payload)
-		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
+		cell := &entity.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
 		if err := uc.Handle(up1, cid, cell); err == nil {
 			t.Errorf("expected error")
 		}
@@ -393,14 +393,14 @@ func TestRelayUseCase_ConnectAck(t *testing.T) {
 
 	payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
 	enc, _ := cSvc.AESSeal(key, nonce, payload)
-	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
+	cell := &entity.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
 	go uc.Handle(up1, cid, cell)
 
-	ack := make([]byte, 16+value_object.MaxCellSize)
+	ack := make([]byte, 16+entity.MaxCellSize)
 	if _, err := io.ReadFull(up2, ack); err != nil {
 		t.Fatalf("read ack: %v", err)
 	}
-	cAck, err := value_object.Decode(ack[16:])
+	cAck, err := entity.Decode(ack[16:])
 	if err != nil {
 		t.Fatalf("decode ack: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestRelayUseCase_BeginForward(t *testing.T) {
 
 	plain, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: 1, Target: "example.com:80"})
 	enc, _ := cSvc.AESSeal(key, nonce, plain)
-	cell := &value_object.Cell{Cmd: value_object.CmdBegin, Version: value_object.ProtocolV1, Payload: enc}
+	cell := &entity.Cell{Cmd: value_object.CmdBegin, Version: value_object.ProtocolV1, Payload: enc}
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- uc.Handle(up1, cid, cell) }()
@@ -443,7 +443,7 @@ func TestRelayUseCase_BeginForward(t *testing.T) {
 	if _, err := io.ReadFull(down2, buf); err != nil {
 		t.Fatalf("read forward: %v", err)
 	}
-	fwd, err := value_object.Decode(buf[16:])
+	fwd, err := entity.Decode(buf[16:])
 	if err != nil {
 		t.Fatalf("decode forward: %v", err)
 	}
@@ -483,11 +483,11 @@ func TestRelayUseCase_BeginExit(t *testing.T) {
 
 	plain, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: 1, Target: ln.Addr().String()})
 	enc, _ := cSvc.AESSeal(key, nonce, plain)
-	cell := &value_object.Cell{Cmd: value_object.CmdBegin, Version: value_object.ProtocolV1, Payload: enc}
+	cell := &entity.Cell{Cmd: value_object.CmdBegin, Version: value_object.ProtocolV1, Payload: enc}
 
 	go uc.Handle(up1, cid, cell)
 
-	buf := make([]byte, 16+value_object.MaxCellSize)
+	buf := make([]byte, 16+entity.MaxCellSize)
 	if _, err := io.ReadFull(up2, buf); err != nil {
 		t.Fatalf("read ack: %v", err)
 	}
@@ -550,7 +550,7 @@ func TestRelayUseCase_DataForwardExit(t *testing.T) {
 	layerExit, _ := crypto.AESSeal(keyExit, nonceExit, plain)
 	layerMid, _ := crypto.AESSeal(keyMid, nonceMid, layerExit)
 	payload, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid.UInt16(), Data: layerMid})
-	cell := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: payload}
+	cell := &entity.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: payload}
 
 	// handle at middle relay
 	errCh := make(chan error, 1)
@@ -561,7 +561,7 @@ func TestRelayUseCase_DataForwardExit(t *testing.T) {
 	if _, err := io.ReadFull(up2, buf); err != nil {
 		t.Fatalf("read forward: %v", err)
 	}
-	fwd, err := value_object.Decode(buf[16:])
+	fwd, err := entity.Decode(buf[16:])
 	if err != nil {
 		t.Fatalf("decode forward: %v", err)
 	}
@@ -621,14 +621,14 @@ func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 
 	payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
 	enc, _ := cSvc.AESSeal(key, nonce, payload)
-	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
+	cell := &entity.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: enc}
 	go uc.Handle(up1, cid, cell)
 
-	ack := make([]byte, 16+value_object.MaxCellSize)
+	ack := make([]byte, 16+entity.MaxCellSize)
 	if _, err := io.ReadFull(up2, ack); err != nil {
 		t.Fatalf("read ack: %v", err)
 	}
-	cAck, err := value_object.Decode(ack[16:])
+	cAck, err := entity.Decode(ack[16:])
 	if err != nil {
 		t.Fatalf("decode ack: %v", err)
 	}
@@ -676,7 +676,7 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 
 	plain, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: 1, Target: "svc"})
 	enc, _ := cSvc.AESSeal(key, nonce, plain)
-	cell := &value_object.Cell{Cmd: value_object.CmdBegin, Version: value_object.ProtocolV1, Payload: enc}
+	cell := &entity.Cell{Cmd: value_object.CmdBegin, Version: value_object.ProtocolV1, Payload: enc}
 
 	go uc.Handle(up1, cid, cell)
 
@@ -687,7 +687,7 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 		t.Fatalf("expected timeout, got %v", err)
 	}
 
-	buf := make([]byte, 16+value_object.MaxCellSize)
+	buf := make([]byte, 16+entity.MaxCellSize)
 	if _, err := io.ReadFull(up2, buf); err != nil {
 		t.Fatalf("read ack: %v", err)
 	}
@@ -698,11 +698,11 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 	// data from hidden service should be forwarded with stream ID
 	data := []byte("hi")
 	down2.Write(data)
-	out := make([]byte, 16+value_object.MaxCellSize)
+	out := make([]byte, 16+entity.MaxCellSize)
 	if _, err := io.ReadFull(up2, out); err != nil {
 		t.Fatalf("read data: %v", err)
 	}
-	c, err := value_object.Decode(out[16:])
+	c, err := entity.Decode(out[16:])
 	if err != nil {
 		t.Fatalf("decode data: %v", err)
 	}
@@ -743,7 +743,7 @@ func TestRelayUseCase_DataHidden(t *testing.T) {
 	data := []byte("hello")
 	enc, _ := cSvc.AESSeal(key, nonce, data)
 	payload, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: 1, Data: enc})
-	cell := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: payload}
+	cell := &entity.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: payload}
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- uc.Handle(up1, cid, cell) }()
@@ -780,15 +780,15 @@ func TestRelayUseCase_ForwardAck(t *testing.T) {
 	st := entity.NewConnState(key, nonce, up1, down1)
 	repo.Add(cid, st)
 
-	cell := &value_object.Cell{Cmd: value_object.CmdBeginAck, Version: value_object.ProtocolV1}
+	cell := &entity.Cell{Cmd: value_object.CmdBeginAck, Version: value_object.ProtocolV1}
 	errCh := make(chan error, 1)
 	go func() { errCh <- uc.Handle(down1, cid, cell) }()
 
-	buf := make([]byte, 16+value_object.MaxCellSize)
+	buf := make([]byte, 16+entity.MaxCellSize)
 	if _, err := io.ReadFull(up2, buf); err != nil {
 		t.Fatalf("read forward: %v", err)
 	}
-	fwd, err := value_object.Decode(buf[16:])
+	fwd, err := entity.Decode(buf[16:])
 	if err != nil {
 		t.Fatalf("decode forward: %v", err)
 	}
@@ -830,7 +830,7 @@ func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 	copy(pubArr1[:], pub1)
 	payload1, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{NextHop: ln.Addr().String(), ClientPub: pubArr1})
 	cid := value_object.NewCircuitID()
-	cell1 := &value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: payload1}
+	cell1 := &entity.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: payload1}
 
 	upEntry, upClient := net.Pipe()
 	go uc1.Handle(upEntry, cid, cell1)
@@ -849,7 +849,7 @@ func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 	var pubArr2 [32]byte
 	copy(pubArr2[:], pub2)
 	payload2, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{ClientPub: pubArr2})
-	cell2 := &value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: payload2}
+	cell2 := &entity.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: payload2}
 	go uc1.Handle(upEntry, cid, cell2)
 
 	hdr2 := make([]byte, 20)
@@ -882,7 +882,7 @@ func TestRelayUseCase_AESOpenErrorContext(t *testing.T) {
 	st := entity.NewConnState(key, nonce, up1, nil)
 	repo.Add(cid, st)
 
-	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: []byte{1, 2, 3}}
+	cell := &entity.Cell{Cmd: value_object.CmdConnect, Version: value_object.ProtocolV1, Payload: []byte{1, 2, 3}}
 	err := uc.Handle(up1, cid, cell)
 	if err == nil {
 		t.Fatalf("expected error")

@@ -6,7 +6,7 @@ import (
 	"io"
 	"net"
 
-	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/domain/aggregate"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
@@ -19,13 +19,12 @@ func NewTCPDialer() useSvc.CircuitDialer { return &TCPDialer{} }
 
 func (TCPDialer) Dial(addr string) (net.Conn, error) { return net.Dial("tcp", addr) }
 
-func (TCPDialer) SendCell(conn net.Conn, c entity.RelayCell) error {
-	cell := value_object.Cell{Cmd: value_object.CmdExtend, Version: value_object.ProtocolV1, Payload: c.Data}
-	buf, err := value_object.Encode(cell)
+func (TCPDialer) SendCell(conn net.Conn, c *aggregate.RelayCell) error {
+	buf, err := c.Encode()
 	if err != nil {
 		return err
 	}
-	packet := append(c.CircID.Bytes(), buf...)
+	packet := append(c.CircuitID().Bytes(), buf...)
 	_, err = conn.Write(packet)
 	return err
 }

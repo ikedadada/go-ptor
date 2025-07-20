@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"ikedadada/go-ptor/internal/domain/aggregate"
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
@@ -61,7 +62,7 @@ func (m *mockDialer) Dial(string) (net.Conn, error) {
 	m.dialCalled++
 	return dummyConn{}, nil
 }
-func (m *mockDialer) SendCell(net.Conn, entity.RelayCell) error {
+func (m *mockDialer) SendCell(net.Conn, *aggregate.RelayCell) error {
 	m.sendCalled++
 	return nil
 }

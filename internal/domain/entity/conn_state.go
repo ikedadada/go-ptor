@@ -11,17 +11,17 @@ import (
 
 // ConnState represents per-circuit connection information held by a relay.
 type ConnState struct {
-	key         value_object.AESKey
-	baseNonce   value_object.Nonce
-	beginCounter uint64  // Counter for BEGIN commands
-	dataCounter  uint64  // Counter for DATA commands (downstream)
-	upstreamDataCounter uint64  // Counter for upstream DATA commands
-	up          net.Conn
-	down        net.Conn
-	last        time.Time
-	tbl         *StreamTable
-	hidden      bool
-	served      bool
+	key                 value_object.AESKey
+	baseNonce           value_object.Nonce
+	beginCounter        uint64 // Counter for BEGIN commands
+	dataCounter         uint64 // Counter for DATA commands (downstream)
+	upstreamDataCounter uint64 // Counter for upstream DATA commands
+	up                  net.Conn
+	down                net.Conn
+	last                time.Time
+	tbl                 *StreamTable
+	hidden              bool
+	served              bool
 }
 
 // NewConnState returns a new ConnState instance.
@@ -45,48 +45,45 @@ func (s *ConnState) GetCounters() (beginCounter, dataCounter uint64) {
 
 // BeginNonce generates the next unique nonce for BEGIN commands
 func (s *ConnState) BeginNonce() value_object.Nonce {
-	var nonce value_object.Nonce
-	nonce = s.baseNonce
-	
+	nonce := s.baseNonce
+
 	// XOR begin counter into last 8 bytes
 	counter := s.beginCounter
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
-	
+
 	s.beginCounter++
 	return nonce
 }
 
 // DataNonce generates the next unique nonce for DATA commands
 func (s *ConnState) DataNonce() value_object.Nonce {
-	var nonce value_object.Nonce
-	nonce = s.baseNonce
-	
+	nonce := s.baseNonce
+
 	// XOR data counter into last 8 bytes
 	counter := s.dataCounter
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
-	
+
 	s.dataCounter++
 	return nonce
 }
 
 // UpstreamDataNonce generates the next unique nonce for upstream DATA commands
 func (s *ConnState) UpstreamDataNonce() value_object.Nonce {
-	var nonce value_object.Nonce
-	nonce = s.baseNonce
-	
+	nonce := s.baseNonce
+
 	// XOR upstream data counter into last 8 bytes
 	counter := s.upstreamDataCounter
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
-	
+
 	s.upstreamDataCounter++
 	return nonce
 }

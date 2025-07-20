@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"encoding/binary"
 	"fmt"
+	"ikedadada/go-ptor/internal/domain/aggregate"
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
@@ -201,7 +202,13 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 			conn.Close()
 			return nil, err
 		}
-		cell := entity.RelayCell{CircID: cid, StreamID: 0, Data: payload}
+		streamID, _ := value_object.StreamIDFrom(0)
+		cell, err := aggregate.NewRelayCell(value_object.CmdExtend, cid, streamID, payload)
+		if err != nil {
+			_ = uc.dialer.SendDestroy(conn, cid)
+			conn.Close()
+			return nil, err
+		}
 		_ = conn.SetDeadline(time.Now().Add(ioTimeout))
 		if err := uc.dialer.SendCell(conn, cell); err != nil {
 			_ = uc.dialer.SendDestroy(conn, cid)

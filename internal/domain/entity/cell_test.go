@@ -1,22 +1,23 @@
-package value_object_test
+package entity_test
 
 import (
 	"testing"
 
-	valueobject "ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/domain/value_object"
 )
 
 func TestEncodeDecode(t *testing.T) {
 	payload := []byte("hello")
-	c := valueobject.Cell{Cmd: valueobject.CmdData, Version: valueobject.ProtocolV1, Payload: payload}
-	buf, err := valueobject.Encode(c)
+	c := entity.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: payload}
+	buf, err := entity.Encode(c)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	if len(buf) != valueobject.MaxCellSize {
+	if len(buf) != entity.MaxCellSize {
 		t.Fatalf("size: %d", len(buf))
 	}
-	d, err := valueobject.Decode(buf)
+	d, err := entity.Decode(buf)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}

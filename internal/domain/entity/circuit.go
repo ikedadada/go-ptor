@@ -34,15 +34,15 @@ type Circuit struct {
 	id   value_object.CircuitID
 	hops []value_object.RelayID
 
-	keys          map[int]value_object.AESKey // per-hop AES key
-	baseNonces    map[int]value_object.Nonce  // per-hop base Nonce
-	beginCounter  map[int]uint64              // per-hop BEGIN counter
-	dataCounter   map[int]uint64              // per-hop DATA counter (downstream)
-	upstreamDataCounter map[int]uint64        // per-hop upstream DATA counter
-	priv        *rsa.PrivateKey
-	conns       []net.Conn
-	strmMu      sync.RWMutex
-	stream      map[value_object.StreamID]*StreamState
+	keys                map[int]value_object.AESKey // per-hop AES key
+	baseNonces          map[int]value_object.Nonce  // per-hop base Nonce
+	beginCounter        map[int]uint64              // per-hop BEGIN counter
+	dataCounter         map[int]uint64              // per-hop DATA counter (downstream)
+	upstreamDataCounter map[int]uint64              // per-hop upstream DATA counter
+	priv                *rsa.PrivateKey
+	conns               []net.Conn
+	strmMu              sync.RWMutex
+	stream              map[value_object.StreamID]*StreamState
 }
 
 // NewCircuit は 3 ホップ分の RelayID と鍵束を受け取って生成。
@@ -68,16 +68,16 @@ func NewCircuit(id value_object.CircuitID, relays []value_object.RelayID,
 		upstreamDataCounterMap[i] = 0
 	}
 	return &Circuit{
-		id:           id,
-		hops:         relays,
-		keys:         keyMap,
-		baseNonces:   ncMap,
-		beginCounter: beginCounterMap,
-		dataCounter:  dataCounterMap,
+		id:                  id,
+		hops:                relays,
+		keys:                keyMap,
+		baseNonces:          ncMap,
+		beginCounter:        beginCounterMap,
+		dataCounter:         dataCounterMap,
 		upstreamDataCounter: upstreamDataCounterMap,
-		priv:         priv,
-		conns:        make([]net.Conn, len(relays)),
-		stream:       make(map[value_object.StreamID]*StreamState),
+		priv:                priv,
+		conns:               make([]net.Conn, len(relays)),
+		stream:              make(map[value_object.StreamID]*StreamState),
 	}, nil
 }
 
@@ -88,103 +88,97 @@ func (c *Circuit) ID() value_object.CircuitID { return c.id }
 func (c *Circuit) Hops() []value_object.RelayID {
 	return append([]value_object.RelayID(nil), c.hops...)
 }
-func (c *Circuit) HopKey(idx int) value_object.AESKey  { return c.keys[idx] }
+func (c *Circuit) HopKey(idx int) value_object.AESKey      { return c.keys[idx] }
 func (c *Circuit) HopBaseNonce(idx int) value_object.Nonce { return c.baseNonces[idx] }
 
 // HopBeginNonce generates the next unique nonce for BEGIN commands at hop idx
 func (c *Circuit) HopBeginNonce(idx int) value_object.Nonce {
-	var nonce value_object.Nonce
-	nonce = c.baseNonces[idx]
-	
+	nonce := c.baseNonces[idx]
+
 	// XOR begin counter into last 8 bytes
 	counter := c.beginCounter[idx]
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
-	
+
 	c.beginCounter[idx]++
 	return nonce
 }
 
 // HopBeginNoncePeek returns the next nonce without incrementing counter
 func (c *Circuit) HopBeginNoncePeek(idx int) value_object.Nonce {
-	var nonce value_object.Nonce
-	nonce = c.baseNonces[idx]
-	
+	nonce := c.baseNonces[idx]
+
 	// XOR begin counter into last 8 bytes
 	counter := c.beginCounter[idx]
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
-	
+
 	return nonce
 }
 
 // HopDataNonce generates the next unique nonce for DATA commands at hop idx
 func (c *Circuit) HopDataNonce(idx int) value_object.Nonce {
-	var nonce value_object.Nonce
-	nonce = c.baseNonces[idx]
-	
+	nonce := c.baseNonces[idx]
+
 	// XOR data counter into last 8 bytes
 	counter := c.dataCounter[idx]
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
-	
+
 	c.dataCounter[idx]++
 	return nonce
 }
 
 // HopDataNoncePeek returns the next nonce without incrementing counter
 func (c *Circuit) HopDataNoncePeek(idx int) value_object.Nonce {
-	var nonce value_object.Nonce
-	nonce = c.baseNonces[idx]
-	
+	nonce := c.baseNonces[idx]
+
 	// XOR data counter into last 8 bytes
 	counter := c.dataCounter[idx]
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
-	
+
 	return nonce
 }
 
 // HopUpstreamDataNonce generates the next unique nonce for upstream DATA commands at hop idx
 func (c *Circuit) HopUpstreamDataNonce(idx int) value_object.Nonce {
-	var nonce value_object.Nonce
-	nonce = c.baseNonces[idx]
-	
+	nonce := c.baseNonces[idx]
+
 	// XOR upstream data counter into last 8 bytes
 	counter := c.upstreamDataCounter[idx]
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
-	
+
 	c.upstreamDataCounter[idx]++
 	return nonce
 }
 
 // HopUpstreamDataNoncePeek returns the next upstream nonce without incrementing counter
 func (c *Circuit) HopUpstreamDataNoncePeek(idx int) value_object.Nonce {
-	var nonce value_object.Nonce
-	nonce = c.baseNonces[idx]
-	
+	nonce := c.baseNonces[idx]
+
 	// XOR upstream data counter into last 8 bytes
 	counter := c.upstreamDataCounter[idx]
 	for i := 0; i < 8; i++ {
 		nonce[11-i] ^= byte(counter)
 		counter >>= 8
 	}
-	
+
 	return nonce
 }
 
-func (c *Circuit) RSAPrivate() *rsa.PrivateKey         { return c.priv }
+func (c *Circuit) RSAPrivate() *rsa.PrivateKey { return c.priv }
 func (c *Circuit) RSAPublic() *rsa.PublicKey {
 	if c.priv == nil {
 		return nil

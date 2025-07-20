@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"ikedadada/go-ptor/internal/domain/entity"
+	"ikedadada/go-ptor/internal/domain/aggregate"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
@@ -17,7 +17,7 @@ type MemDialer struct{}
 func NewMemDialer() useSvc.CircuitDialer { return &MemDialer{} }
 
 func (MemDialer) Dial(string) (net.Conn, error)        { return dummyConn{}, nil }
-func (MemDialer) SendCell(net.Conn, entity.RelayCell) error { return nil }
+func (MemDialer) SendCell(net.Conn, *aggregate.RelayCell) error { return nil }
 func (MemDialer) WaitCreated(net.Conn) ([]byte, error) {
 	var pub [32]byte
 	if _, err := rand.Read(pub[:]); err != nil {

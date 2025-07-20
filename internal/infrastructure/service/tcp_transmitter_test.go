@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/infrastructure/service"
 )
@@ -63,7 +64,7 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	}
 	select {
 	case msg := <-received:
-		if len(msg) != 16+value_object.MaxCellSize {
+		if len(msg) != 16+entity.MaxCellSize {
 			t.Fatalf("unexpected cell size %d", len(msg))
 		}
 		var cidBuf [16]byte
@@ -77,7 +78,7 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 		if !gotCID.Equal(cid) {
 			t.Errorf("cid mismatch")
 		}
-		cell, err := value_object.Decode(msg[16:])
+		cell, err := entity.Decode(msg[16:])
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -101,10 +102,10 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	}
 	select {
 	case msg := <-received:
-		if len(msg) != 16+value_object.MaxCellSize {
+		if len(msg) != 16+entity.MaxCellSize {
 			t.Fatalf("unexpected cell size %d", len(msg))
 		}
-		cell, err := value_object.Decode(msg[16:])
+		cell, err := entity.Decode(msg[16:])
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -121,10 +122,10 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	}
 	select {
 	case msg := <-received:
-		if len(msg) != 16+value_object.MaxCellSize {
+		if len(msg) != 16+entity.MaxCellSize {
 			t.Fatalf("unexpected cell size %d", len(msg))
 		}
-		cell, err := value_object.Decode(msg[16:])
+		cell, err := entity.Decode(msg[16:])
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -141,10 +142,10 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	}
 	select {
 	case msg := <-received:
-		if len(msg) != 16+value_object.MaxCellSize {
+		if len(msg) != 16+entity.MaxCellSize {
 			t.Fatalf("unexpected cell size %d", len(msg))
 		}
-		cell, err := value_object.Decode(msg[16:])
+		cell, err := entity.Decode(msg[16:])
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -161,10 +162,10 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	}
 	select {
 	case msg := <-received:
-		if len(msg) != 16+value_object.MaxCellSize {
+		if len(msg) != 16+entity.MaxCellSize {
 			t.Fatalf("unexpected cell size %d", len(msg))
 		}
-		cell, err := value_object.Decode(msg[16:])
+		cell, err := entity.Decode(msg[16:])
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -186,7 +187,7 @@ func TestTCPTransmitter_SendData_tooBig_realConn(t *testing.T) {
 	tx := service.NewTCPTransmitter(conn)
 	cid := value_object.NewCircuitID()
 	sid := value_object.NewStreamIDAuto()
-	big := make([]byte, value_object.MaxPayloadSize+1)
+	big := make([]byte, entity.MaxPayloadSize+1)
 	err = tx.SendData(cid, sid, big)
 	if err == nil || err.Error() != "data too big" {
 		t.Errorf("expected data too big error, got %v", err)

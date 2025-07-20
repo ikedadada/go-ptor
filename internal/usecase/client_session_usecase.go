@@ -115,7 +115,7 @@ func (uc *clientSessionUseCaseImpl) receiveLoop(cid value_object.CircuitID, sm S
 	}
 }
 
-func (uc *clientSessionUseCaseImpl) handleDataCell(cell *value_object.Cell, cir *entity.Circuit, sm StreamManager) error {
+func (uc *clientSessionUseCaseImpl) handleDataCell(cell *entity.Cell, cir *entity.Circuit, sm StreamManager) error {
 	dp, err := value_object.DecodeDataPayload(cell.Payload)
 	if err != nil {
 		return fmt.Errorf("decode data payload: %w", err)
@@ -137,7 +137,7 @@ func (uc *clientSessionUseCaseImpl) handleDataCell(cell *value_object.Cell, cir 
 	return nil
 }
 
-func (uc *clientSessionUseCaseImpl) handleEndCell(cell *value_object.Cell, sm StreamManager) error {
+func (uc *clientSessionUseCaseImpl) handleEndCell(cell *entity.Cell, sm StreamManager) error {
 	sid := uint16(0)
 	if len(cell.Payload) > 0 {
 		if p, err := value_object.DecodeDataPayload(cell.Payload); err == nil {

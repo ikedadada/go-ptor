@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 
+	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase/service" // 依存関係のために必要
 )
@@ -24,8 +25,8 @@ func (t *TCPTransmitter) send(cmd value_object.CellCommand, cid value_object.Cir
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	cell := value_object.Cell{Cmd: cmd, Version: value_object.ProtocolV1, Payload: payload}
-	buf, err := value_object.Encode(cell)
+	cell := entity.Cell{Cmd: cmd, Version: value_object.ProtocolV1, Payload: payload}
+	buf, err := entity.Encode(cell)
 	if err != nil {
 		return err
 	}
@@ -35,7 +36,7 @@ func (t *TCPTransmitter) send(cmd value_object.CellCommand, cid value_object.Cir
 }
 
 func (t *TCPTransmitter) SendData(cid value_object.CircuitID, s value_object.StreamID, d []byte) error {
-	if len(d) > value_object.MaxPayloadSize {
+	if len(d) > entity.MaxPayloadSize {
 		return fmt.Errorf("data too big")
 	}
 	p, err := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: s.UInt16(), Data: d})
@@ -46,14 +47,14 @@ func (t *TCPTransmitter) SendData(cid value_object.CircuitID, s value_object.Str
 }
 
 func (t *TCPTransmitter) SendBegin(cid value_object.CircuitID, _ value_object.StreamID, d []byte) error {
-	if len(d) > value_object.MaxPayloadSize {
+	if len(d) > entity.MaxPayloadSize {
 		return fmt.Errorf("data too big")
 	}
 	return t.send(value_object.CmdBegin, cid, d)
 }
 
 func (t *TCPTransmitter) SendConnect(cid value_object.CircuitID, d []byte) error {
-	if len(d) > value_object.MaxPayloadSize {
+	if len(d) > entity.MaxPayloadSize {
 		return fmt.Errorf("data too big")
 	}
 	return t.send(value_object.CmdConnect, cid, d)
