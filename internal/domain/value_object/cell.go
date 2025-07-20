@@ -21,11 +21,13 @@ const (
 	MaxPayloadSize = MaxCellSize - headerOverhead
 )
 
-// Cell represents a 512-byte protocol cell.
+// Cell represents a low-level 512-byte protocol cell used in Tor communication.
+// This is the fundamental unit of communication between nodes in the network.
+// For higher-level relay operations, see entity.RelayCell.
 type Cell struct {
-	Cmd     byte
-	Version byte
-	Payload []byte
+	Cmd     byte   // Command type (CmdExtend, CmdData, etc.)
+	Version byte   // Protocol version
+	Payload []byte // Cell payload data
 }
 
 // Encode serializes the cell into a fixed 512-byte slice with random padding.

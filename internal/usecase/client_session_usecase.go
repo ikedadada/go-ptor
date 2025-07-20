@@ -10,7 +10,6 @@ import (
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/handler"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -24,18 +23,12 @@ type DataRelayInput struct {
 	CircuitID        value_object.CircuitID
 	StreamID         uint16
 	ClientConnection net.Conn
-	Repository       repository.CircuitRepository
-	CryptoService    service.CryptoService
-	SendUC           SendDataUseCase
-	EndUC            HandleEndUseCase
 }
 
 type DataTransferInput struct {
 	CircuitID        value_object.CircuitID
 	ClientConnection net.Conn
 	StreamMap        StreamManager
-	Repository       repository.CircuitRepository
-	CryptoService    service.CryptoService
 }
 
 // StreamManager provides thread-safe stream management
@@ -46,15 +39,33 @@ type StreamManager interface {
 	CloseAll()
 }
 
-type clientSessionUseCaseImpl struct{}
+type clientSessionUseCaseImpl struct {
+	cr  repository.CircuitRepository
+	cs  service.CryptoService
+	crs service.CellReaderService
+	suc SendDataUseCase
+	euc HandleEndUseCase
+}
 
-func NewClientSessionUseCase() ClientSessionUseCase {
-	return &clientSessionUseCaseImpl{}
+func NewClientSessionUseCase(
+	cr repository.CircuitRepository,
+	cs service.CryptoService,
+	crs service.CellReaderService,
+	suc SendDataUseCase,
+	euc HandleEndUseCase,
+) ClientSessionUseCase {
+	return &clientSessionUseCaseImpl{
+		cr:  cr,
+		cs:  cs,
+		crs: crs,
+		suc: suc,
+		euc: euc,
+	}
 }
 
 func (uc *clientSessionUseCaseImpl) StartDataRelay(input DataRelayInput) error {
 	// Start receive loop in goroutine
-	go uc.receiveLoop(input.Repository, input.CryptoService, input.CircuitID, &streamMapImpl{
+	go uc.receiveLoop(input.CircuitID, &streamMapImpl{
 		m: make(map[uint16]net.Conn),
 	})
 
@@ -63,11 +74,11 @@ func (uc *clientSessionUseCaseImpl) StartDataRelay(input DataRelayInput) error {
 }
 
 func (uc *clientSessionUseCaseImpl) HandleDataTransfer(input DataTransferInput) error {
-	return uc.receiveLoop(input.Repository, input.CryptoService, input.CircuitID, input.StreamMap)
+	return uc.receiveLoop(input.CircuitID, input.StreamMap)
 }
 
-func (uc *clientSessionUseCaseImpl) receiveLoop(repo repository.CircuitRepository, crypto service.CryptoService, cid value_object.CircuitID, sm StreamManager) error {
-	cir, err := repo.Find(cid)
+func (uc *clientSessionUseCaseImpl) receiveLoop(cid value_object.CircuitID, sm StreamManager) error {
+	cir, err := uc.cr.Find(cid)
 	if err != nil {
 		return fmt.Errorf("find circuit: %w", err)
 	}
@@ -80,7 +91,7 @@ func (uc *clientSessionUseCaseImpl) receiveLoop(repo repository.CircuitRepositor
 	defer sm.CloseAll() // Ensure cleanup on exit
 
 	for {
-		_, cell, err := handler.ReadCell(conn)
+		_, cell, err := uc.crs.ReadCell(conn)
 		if err != nil {
 			if err != io.EOF {
 				log.Println("read cell:", err)
@@ -90,7 +101,7 @@ func (uc *clientSessionUseCaseImpl) receiveLoop(repo repository.CircuitRepositor
 
 		switch cell.Cmd {
 		case value_object.CmdData:
-			if err := uc.handleDataCell(cell, cir, crypto, sm); err != nil {
+			if err := uc.handleDataCell(cell, cir, sm); err != nil {
 				log.Println("handle data cell:", err)
 				continue
 			}
@@ -104,14 +115,14 @@ func (uc *clientSessionUseCaseImpl) receiveLoop(repo repository.CircuitRepositor
 	}
 }
 
-func (uc *clientSessionUseCaseImpl) handleDataCell(cell *value_object.Cell, cir *entity.Circuit, crypto service.CryptoService, sm StreamManager) error {
+func (uc *clientSessionUseCaseImpl) handleDataCell(cell *value_object.Cell, cir *entity.Circuit, sm StreamManager) error {
 	dp, err := value_object.DecodeDataPayload(cell.Payload)
 	if err != nil {
 		return fmt.Errorf("decode data payload: %w", err)
 	}
 
 	// Decrypt response data using multi-layer decryption
-	decrypted, err := uc.decryptResponseData(dp.Data, cir, crypto)
+	decrypted, err := uc.decryptResponseData(dp.Data, cir, uc.cs)
 	if err != nil {
 		return fmt.Errorf("decrypt response data: %w", err)
 	}
@@ -171,7 +182,7 @@ func (uc *clientSessionUseCaseImpl) handleOutgoingData(input DataRelayInput) err
 		n, err := input.ClientConnection.Read(buffer)
 		if n > 0 {
 			log.Printf("sending DATA command cid=%s sid=%d bytes=%d", input.CircuitID, input.StreamID, n)
-			if _, err2 := input.SendUC.Handle(SendDataInput{
+			if _, err2 := uc.suc.Handle(SendDataInput{
 				CircuitID: input.CircuitID.String(),
 				StreamID:  input.StreamID,
 				Data:      buffer[:n],
@@ -181,7 +192,7 @@ func (uc *clientSessionUseCaseImpl) handleOutgoingData(input DataRelayInput) err
 		}
 		if err != nil {
 			if err == io.EOF {
-				_, _ = input.EndUC.Handle(HandleEndInput{
+				_, _ = uc.euc.Handle(HandleEndInput{
 					CircuitID: input.CircuitID.String(),
 					StreamID:  input.StreamID,
 				})

@@ -15,18 +15,19 @@ import (
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
 	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	// prepare extend cell
-	_, pub, _ := crypto.X25519Generate()
+	_, pub, _ := cSvc.X25519Generate()
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer ln.Close()
 	go func() { ln.Accept() }()
@@ -69,8 +70,9 @@ func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 func TestRelayUseCase_ForwardExtendExisting(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -80,7 +82,7 @@ func TestRelayUseCase_ForwardExtendExisting(t *testing.T) {
 	st := entity.NewConnState(key, nonce, up1, down1)
 	repo.Add(cid, st)
 
-	_, pub, _ := crypto.X25519Generate()
+	_, pub, _ := cSvc.X25519Generate()
 	var pubArr [32]byte
 	copy(pubArr[:], pub)
 	payload, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{ClientPub: pubArr})
@@ -131,8 +133,10 @@ func TestRelayUseCase_ForwardExtendExisting(t *testing.T) {
 func TestRelayUseCase_EndUnknown(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
+
 	cid := value_object.NewCircuitID()
 	cell := &value_object.Cell{Cmd: value_object.CmdEnd, Version: value_object.Version, Payload: nil}
 	if err := uc.Handle(nil, cid, cell); err != nil {
@@ -143,8 +147,9 @@ func TestRelayUseCase_EndUnknown(t *testing.T) {
 func TestRelayUseCase_EndStreamNoDown(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -183,8 +188,9 @@ func TestRelayUseCase_EndStreamNoDown(t *testing.T) {
 func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -242,8 +248,9 @@ func TestRelayUseCase_Connect(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 		repo := repoimpl.NewCircuitTableRepository(time.Second)
-		crypto := infraSvc.NewCryptoService()
-		uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+		cSvc := service.NewCryptoService()
+		crSvc := service.NewCellReaderService()
+		uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 		key, _ := value_object.NewAESKey()
 		nonce, _ := value_object.NewNonce()
@@ -261,7 +268,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 			}
 		}()
 		payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
-		enc, _ := crypto.AESSeal(key, nonce, payload)
+		enc, _ := cSvc.AESSeal(key, nonce, payload)
 		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 		errCh := make(chan error, 1)
 		go func() { errCh <- uc.Handle(up1, cid, cell) }()
@@ -292,8 +299,9 @@ func TestRelayUseCase_Connect(t *testing.T) {
 	t.Run("env addr", func(t *testing.T) {
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 		repo := repoimpl.NewCircuitTableRepository(time.Second)
-		crypto := infraSvc.NewCryptoService()
-		uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+		cSvc := service.NewCryptoService()
+		crSvc := service.NewCellReaderService()
+		uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 		key, _ := value_object.NewAESKey()
 		nonce, _ := value_object.NewNonce()
@@ -312,7 +320,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		}()
 		os.Setenv("PTOR_HIDDEN_ADDR", ln.Addr().String())
 		defer os.Unsetenv("PTOR_HIDDEN_ADDR")
-		enc, _ := crypto.AESSeal(key, nonce, []byte{})
+		enc, _ := cSvc.AESSeal(key, nonce, []byte{})
 		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 		errCh := make(chan error, 1)
 		go func() { errCh <- uc.Handle(up1, cid, cell) }()
@@ -343,8 +351,9 @@ func TestRelayUseCase_Connect(t *testing.T) {
 	t.Run("fail dial", func(t *testing.T) {
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 		repo := repoimpl.NewCircuitTableRepository(time.Second)
-		crypto := infraSvc.NewCryptoService()
-		uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+		cSvc := service.NewCryptoService()
+		crSvc := service.NewCellReaderService()
+		uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 		key, _ := value_object.NewAESKey()
 		nonce, _ := value_object.NewNonce()
@@ -354,7 +363,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		repo.Add(cid, st)
 
 		payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: "127.0.0.1:1"})
-		enc, _ := crypto.AESSeal(key, nonce, payload)
+		enc, _ := cSvc.AESSeal(key, nonce, payload)
 		cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 		if err := uc.Handle(up1, cid, cell); err == nil {
 			t.Errorf("expected error")
@@ -366,8 +375,9 @@ func TestRelayUseCase_Connect(t *testing.T) {
 func TestRelayUseCase_ConnectAck(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -382,7 +392,7 @@ func TestRelayUseCase_ConnectAck(t *testing.T) {
 	go func() { c, _ := ln.Accept(); connCh <- c }()
 
 	payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
-	enc, _ := crypto.AESSeal(key, nonce, payload)
+	enc, _ := cSvc.AESSeal(key, nonce, payload)
 	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 	go uc.Handle(up1, cid, cell)
 
@@ -410,8 +420,9 @@ func TestRelayUseCase_ConnectAck(t *testing.T) {
 func TestRelayUseCase_BeginForward(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -422,7 +433,7 @@ func TestRelayUseCase_BeginForward(t *testing.T) {
 	repo.Add(cid, st)
 
 	plain, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: 1, Target: "example.com:80"})
-	enc, _ := crypto.AESSeal(key, nonce, plain)
+	enc, _ := cSvc.AESSeal(key, nonce, plain)
 	cell := &value_object.Cell{Cmd: value_object.CmdBegin, Version: value_object.Version, Payload: enc}
 
 	errCh := make(chan error, 1)
@@ -454,8 +465,9 @@ func TestRelayUseCase_BeginForward(t *testing.T) {
 func TestRelayUseCase_BeginExit(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -470,7 +482,7 @@ func TestRelayUseCase_BeginExit(t *testing.T) {
 	go func() { c, _ := ln.Accept(); acceptCh <- c }()
 
 	plain, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: 1, Target: ln.Addr().String()})
-	enc, _ := crypto.AESSeal(key, nonce, plain)
+	enc, _ := cSvc.AESSeal(key, nonce, plain)
 	cell := &value_object.Cell{Cmd: value_object.CmdBegin, Version: value_object.Version, Payload: enc}
 
 	go uc.Handle(up1, cid, cell)
@@ -505,13 +517,13 @@ func TestRelayUseCase_BeginExit(t *testing.T) {
 
 func TestRelayUseCase_DataForwardExit(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	crypto := infraSvc.NewCryptoService()
+	crypto := service.NewCryptoService()
 
 	repoMid := repoimpl.NewCircuitTableRepository(10 * time.Second)
 	repoExit := repoimpl.NewCircuitTableRepository(10 * time.Second)
 
-	ucMid := usecase.NewRelayUseCase(priv, repoMid, crypto, infraSvc.NewHandlerCellReader())
-	ucExit := usecase.NewRelayUseCase(priv, repoExit, crypto, infraSvc.NewHandlerCellReader())
+	ucMid := usecase.NewRelayUseCase(priv, repoMid, crypto, service.NewCellReaderService())
+	ucExit := usecase.NewRelayUseCase(priv, repoExit, crypto, service.NewCellReaderService())
 
 	keyMid, _ := value_object.NewAESKey()
 	nonceMid, _ := value_object.NewNonce()
@@ -591,8 +603,9 @@ func TestRelayUseCase_DataForwardExit(t *testing.T) {
 func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -607,7 +620,7 @@ func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 	go func() { c, _ := ln.Accept(); connCh <- c }()
 
 	payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: ln.Addr().String()})
-	enc, _ := crypto.AESSeal(key, nonce, payload)
+	enc, _ := cSvc.AESSeal(key, nonce, payload)
 	cell := &value_object.Cell{Cmd: value_object.CmdConnect, Version: value_object.Version, Payload: enc}
 	go uc.Handle(up1, cid, cell)
 
@@ -648,8 +661,9 @@ func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 func TestRelayUseCase_BeginHidden(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -661,7 +675,7 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 	repo.Add(cid, st)
 
 	plain, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: 1, Target: "svc"})
-	enc, _ := crypto.AESSeal(key, nonce, plain)
+	enc, _ := cSvc.AESSeal(key, nonce, plain)
 	cell := &value_object.Cell{Cmd: value_object.CmdBegin, Version: value_object.Version, Payload: enc}
 
 	go uc.Handle(up1, cid, cell)
@@ -699,7 +713,7 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	enc2, _ := crypto.AESSeal(key, nonce, data)
+	enc2, _ := cSvc.AESSeal(key, nonce, data)
 	if dp.StreamID != 1 || !bytes.Equal(dp.Data, enc2) {
 		t.Fatalf("payload mismatch")
 	}
@@ -713,8 +727,9 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 func TestRelayUseCase_DataHidden(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -726,7 +741,7 @@ func TestRelayUseCase_DataHidden(t *testing.T) {
 	repo.Add(cid, st)
 
 	data := []byte("hello")
-	enc, _ := crypto.AESSeal(key, nonce, data)
+	enc, _ := cSvc.AESSeal(key, nonce, data)
 	payload, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: 1, Data: enc})
 	cell := &value_object.Cell{Cmd: value_object.CmdData, Version: value_object.Version, Payload: payload}
 
@@ -753,8 +768,9 @@ func TestRelayUseCase_DataHidden(t *testing.T) {
 func TestRelayUseCase_ForwardAck(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()
@@ -794,9 +810,11 @@ func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 	priv2, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo1 := repoimpl.NewCircuitTableRepository(time.Second)
 	repo2 := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc1 := usecase.NewRelayUseCase(priv1, repo1, crypto, infraSvc.NewHandlerCellReader())
-	uc2 := usecase.NewRelayUseCase(priv2, repo2, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+
+	uc1 := usecase.NewRelayUseCase(priv1, repo1, cSvc, crSvc)
+	uc2 := usecase.NewRelayUseCase(priv2, repo2, cSvc, crSvc)
 
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer ln.Close()
@@ -807,7 +825,7 @@ func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 		}
 	}()
 
-	_, pub1, _ := crypto.X25519Generate()
+	_, pub1, _ := cSvc.X25519Generate()
 	var pubArr1 [32]byte
 	copy(pubArr1[:], pub1)
 	payload1, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{NextHop: ln.Addr().String(), ClientPub: pubArr1})
@@ -827,7 +845,7 @@ func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 		t.Fatalf("read created1 body: %v", err)
 	}
 
-	_, pub2, _ := crypto.X25519Generate()
+	_, pub2, _ := cSvc.X25519Generate()
 	var pubArr2 [32]byte
 	copy(pubArr2[:], pub2)
 	payload2, _ := value_object.EncodeExtendPayload(&value_object.ExtendPayload{ClientPub: pubArr2})
@@ -853,8 +871,9 @@ func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 func TestRelayUseCase_AESOpenErrorContext(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	repo := repoimpl.NewCircuitTableRepository(time.Second)
-	crypto := infraSvc.NewCryptoService()
-	uc := usecase.NewRelayUseCase(priv, repo, crypto, infraSvc.NewHandlerCellReader())
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
 
 	key, _ := value_object.NewAESKey()
 	nonce, _ := value_object.NewNonce()

@@ -8,7 +8,6 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
@@ -53,7 +52,7 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 
 	repo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
-	crypto := infraSvc.NewCryptoService()
+	crypto := service.NewCryptoService()
 	uc := usecase.NewSendDataUsecase(repo, recordFactory{tx}, crypto)
 	data := []byte("hello")
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: data}); err != nil {
@@ -97,7 +96,7 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 
 	repo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
-	crypto := infraSvc.NewCryptoService()
+	crypto := service.NewCryptoService()
 	uc := usecase.NewSendDataUsecase(repo, recordFactory{tx}, crypto)
 	payload, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: st.ID.UInt16(), Target: "example.com:80"})
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: payload, Cmd: value_object.CmdBegin}); err != nil {

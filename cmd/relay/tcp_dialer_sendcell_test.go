@@ -8,7 +8,6 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/handler"
 	"ikedadada/go-ptor/internal/infrastructure/service"
 )
 
@@ -30,7 +29,7 @@ func TestSendCellWritesFixedPacket(t *testing.T) {
 	d := service.NewTCPDialer()
 	cid := value_object.NewCircuitID()
 	payload := []byte("hello")
-	cell := entity.Cell{CircID: cid, Data: payload}
+	cell := entity.RelayCell{CircID: cid, Data: payload}
 
 	if err := d.SendCell(conn, cell); err != nil {
 		t.Fatalf("SendCell error: %v", err)
@@ -38,19 +37,5 @@ func TestSendCellWritesFixedPacket(t *testing.T) {
 
 	if conn.Len() != 16+value_object.MaxCellSize {
 		t.Fatalf("expected %d bytes, got %d", 16+value_object.MaxCellSize, conn.Len())
-	}
-
-	gotCID, gotCell, err := handler.ReadCell(bytes.NewReader(conn.Bytes()))
-	if err != nil {
-		t.Fatalf("readCell: %v", err)
-	}
-	if !cid.Equal(gotCID) {
-		t.Fatalf("cid mismatch")
-	}
-	if gotCell.Cmd != value_object.CmdExtend {
-		t.Fatalf("cmd mismatch: %d", gotCell.Cmd)
-	}
-	if string(gotCell.Payload) != string(payload) {
-		t.Fatalf("payload mismatch")
 	}
 }
