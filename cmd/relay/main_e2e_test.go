@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"ikedadada/go-ptor/internal/domain/aggregate"
-	"ikedadada/go-ptor/internal/domain/entity"
-	vo "ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/shared/domain/aggregate"
+	"ikedadada/go-ptor/shared/domain/entity"
+	vo "ikedadada/go-ptor/shared/domain/value_object"
+	"ikedadada/go-ptor/shared/service"
 
 	"github.com/google/uuid"
 )
