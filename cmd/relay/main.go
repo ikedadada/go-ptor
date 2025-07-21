@@ -35,10 +35,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	tbl := repoimpl.NewCircuitTableRepository(*ttl)
+	repo := repoimpl.NewConnStateRepository(*ttl)
 	cryptoSvc := service.NewCryptoService()
 	reader := service.NewCellReaderService()
-	uc := usecase.NewRelayUseCase(priv, tbl, cryptoSvc, reader)
+	uc := usecase.NewRelayUseCase(priv, repo, cryptoSvc, reader)
 
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {

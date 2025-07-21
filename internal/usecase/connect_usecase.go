@@ -5,7 +5,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
-	useSvc "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 // ConnectInput triggers a CONNECT cell to the exit relay.
@@ -27,12 +27,12 @@ type ConnectUseCase interface {
 
 type connectUsecaseImpl struct {
 	repo    repository.CircuitRepository
-	factory useSvc.MessagingServiceFactory
-	crypto  useSvc.CryptoService
+	factory service.MessagingServiceFactory
+	crypto  service.CryptoService
 }
 
 // NewConnectUseCase creates a use case for CONNECT cells.
-func NewConnectUseCase(r repository.CircuitRepository, f useSvc.MessagingServiceFactory, c useSvc.CryptoService) ConnectUseCase {
+func NewConnectUseCase(r repository.CircuitRepository, f service.MessagingServiceFactory, c service.CryptoService) ConnectUseCase {
 	return &connectUsecaseImpl{repo: r, factory: f, crypto: c}
 }
 
@@ -55,11 +55,11 @@ func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
 
 	keys := make([][32]byte, 0, len(cir.Hops()))
 	nonces := make([][12]byte, 0, len(cir.Hops()))
-	
+
 	// Generate nonces in normal order for array indexing
 	for i := range cir.Hops() {
 		keys = append(keys, cir.HopKey(i))
-		nonces = append(nonces, cir.HopBeginNonce(i))  // CONNECT uses BEGIN nonce
+		nonces = append(nonces, cir.HopBeginNonce(i)) // CONNECT uses BEGIN nonce
 	}
 
 	enc, err := uc.crypto.AESMultiSeal(keys, nonces, payload)

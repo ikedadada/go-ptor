@@ -11,7 +11,7 @@ import (
 	"os"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	repoif "ikedadada/go-ptor/internal/domain/repository"
+	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
@@ -24,7 +24,7 @@ type RelayUseCase interface {
 
 type relayUsecaseImpl struct {
 	priv   *rsa.PrivateKey
-	repo   repoif.CircuitTableRepository
+	repo   repository.ConnStateRepository
 	crypto service.CryptoService
 	crs    service.CellReaderService
 }
@@ -38,7 +38,7 @@ func (uc *relayUsecaseImpl) ensureServeDown(st *entity.ConnState) {
 }
 
 // NewRelayUseCase returns a use case to process relay connections.
-func NewRelayUseCase(priv *rsa.PrivateKey, repo repoif.CircuitTableRepository, c service.CryptoService, crs service.CellReaderService) RelayUseCase {
+func NewRelayUseCase(priv *rsa.PrivateKey, repo repository.ConnStateRepository, c service.CryptoService, crs service.CellReaderService) RelayUseCase {
 	return &relayUsecaseImpl{priv: priv, repo: repo, crypto: c, crs: crs}
 }
 
@@ -67,10 +67,10 @@ func (uc *relayUsecaseImpl) ServeConn(c net.Conn) {
 func (uc *relayUsecaseImpl) Handle(up net.Conn, cid vo.CircuitID, cell *entity.Cell) error {
 	st, err := uc.repo.Find(cid)
 	switch {
-	case errors.Is(err, repoif.ErrNotFound) && cell.Cmd == vo.CmdEnd:
+	case errors.Is(err, repository.ErrNotFound) && cell.Cmd == vo.CmdEnd:
 		// End for an unknown circuit is ignored
 		return nil
-	case errors.Is(err, repoif.ErrNotFound) && cell.Cmd == vo.CmdExtend:
+	case errors.Is(err, repository.ErrNotFound) && cell.Cmd == vo.CmdExtend:
 		// new circuit request
 		return uc.extend(up, cid, cell)
 	case err != nil:
@@ -205,14 +205,9 @@ func (uc *relayUsecaseImpl) begin(st *entity.ConnState, cid vo.CircuitID, cell *
 		log.Printf("dial begin target cid=%s addr=%s err=%v", cid.String(), p.Target, err)
 		return err
 	}
-	if err := st.Streams().Add(sid, down); err != nil {
-		if errors.Is(err, entity.ErrDuplicate) {
-			_ = st.Streams().Remove(sid)
-			_ = st.Streams().Add(sid, down)
-		} else {
-			down.Close()
-			return err
-		}
+	if err := uc.repo.AddStream(cid, sid, down); err != nil {
+		down.Close()
+		return err
 	}
 	ack := &entity.Cell{Cmd: vo.CmdBeginAck, Version: vo.ProtocolV1}
 	if err := forwardCell(st.Up(), cid, ack); err != nil {
@@ -279,14 +274,14 @@ func (uc *relayUsecaseImpl) data(st *entity.ConnState, cid vo.CircuitID, cell *e
 	}
 
 	// exit relay: write plaintext to the local stream
-	conn, err := st.Streams().Get(sid)
+	conn, err := uc.repo.GetStream(cid, sid)
 	if err != nil {
 		c := &entity.Cell{Cmd: vo.CmdDestroy, Version: vo.ProtocolV1}
 		_ = forwardCell(st.Up(), cid, c)
 		return nil
 	}
 	if _, err := conn.Write(dec); err != nil {
-		_ = st.Streams().Remove(sid)
+		_ = uc.repo.RemoveStream(cid, sid)
 		c := &entity.Cell{Cmd: vo.CmdDestroy, Version: vo.ProtocolV1}
 		_ = forwardCell(st.Up(), cid, c)
 		return err
@@ -306,7 +301,7 @@ func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid vo.CircuitID, ce
 		p = &vo.DataPayload{}
 	}
 	if p.StreamID == 0 {
-		st.Streams().DestroyAll()
+		uc.repo.DestroyAllStreams(cid)
 		if st.Down() != nil {
 			uc.ensureServeDown(st)
 			_ = forwardCell(st.Down(), cid, cell)
@@ -318,7 +313,7 @@ func (uc *relayUsecaseImpl) endStream(st *entity.ConnState, cid vo.CircuitID, ce
 	if err != nil {
 		return err
 	}
-	_ = st.Streams().Remove(sid)
+	_ = uc.repo.RemoveStream(cid, sid)
 	if st.Down() != nil {
 		uc.ensureServeDown(st)
 		return forwardCell(st.Down(), cid, cell)
@@ -457,7 +452,7 @@ func (uc *relayUsecaseImpl) forwardUpstream(st *entity.ConnState, cid vo.Circuit
 		}
 		if err != nil {
 			if sid != 0 {
-				_ = st.Streams().Remove(sid)
+				_ = uc.repo.RemoveStream(cid, sid)
 			}
 			endPayload := []byte{}
 			if sid != 0 {

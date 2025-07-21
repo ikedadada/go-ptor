@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	repoif "ikedadada/go-ptor/internal/domain/repository"
+	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/infrastructure/repository"
+	repoImpl "ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
 func TestHiddenServiceRepo_FindByAddressString(t *testing.T) {
@@ -42,7 +42,7 @@ func TestHiddenServiceRepo_FindByAddressString(t *testing.T) {
 		},
 	}
 
-	repo, err := repository.NewHiddenServiceRepository(mockClient, "http://test.com")
+	repo, err := repoImpl.NewHiddenServiceRepository(mockClient, "http://test.com")
 	if err != nil {
 		t.Fatalf("NewHiddenServiceRepository: %v", err)
 	}
@@ -77,13 +77,13 @@ func TestHiddenServiceRepo_FindByAddressString_NotFound(t *testing.T) {
 		response: []hiddenServiceDTO{},
 	}
 
-	repo, err := repository.NewHiddenServiceRepository(mockClient, "http://test.com")
+	repo, err := repoImpl.NewHiddenServiceRepository(mockClient, "http://test.com")
 	if err != nil {
 		t.Fatalf("NewHiddenServiceRepository: %v", err)
 	}
 
 	_, err = repo.FindByAddressString("nonexistent.ptor")
-	if !errors.Is(err, repoif.ErrNotFound) {
+	if !errors.Is(err, repository.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -120,7 +120,7 @@ func TestHiddenServiceRepo_All(t *testing.T) {
 		},
 	}
 
-	repo, err := repository.NewHiddenServiceRepository(mockClient, "http://test.com")
+	repo, err := repoImpl.NewHiddenServiceRepository(mockClient, "http://test.com")
 	if err != nil {
 		t.Fatalf("NewHiddenServiceRepository: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestHiddenServiceRepo_Save(t *testing.T) {
 		response: []hiddenServiceDTO{},
 	}
 
-	repo, err := repository.NewHiddenServiceRepository(mockClient, "http://test.com")
+	repo, err := repoImpl.NewHiddenServiceRepository(mockClient, "http://test.com")
 	if err != nil {
 		t.Fatalf("NewHiddenServiceRepository: %v", err)
 	}

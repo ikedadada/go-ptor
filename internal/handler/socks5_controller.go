@@ -8,18 +8,18 @@ import (
 	"strings"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	repoif "ikedadada/go-ptor/internal/domain/repository"
+	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
-	useSvc "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 // SOCKS5Controller handles SOCKS5 proxy connections
 type SOCKS5Controller struct {
-	hsRepo      repoif.HiddenServiceRepository
-	circuitRepo repoif.CircuitRepository
-	cryptoSvc   useSvc.CryptoService
-	crSvc       useSvc.CellReaderService
+	hsRepo      repository.HiddenServiceRepository
+	circuitRepo repository.CircuitRepository
+	cryptoSvc   service.CryptoService
+	crSvc       service.CellReaderService
 	buildUC     usecase.BuildCircuitUseCase
 	connectUC   usecase.ConnectUseCase
 	openUC      usecase.OpenStreamUseCase
@@ -31,10 +31,10 @@ type SOCKS5Controller struct {
 
 // NewSOCKS5Controller creates a new SOCKS5Controller
 func NewSOCKS5Controller(
-	hsRepo repoif.HiddenServiceRepository,
-	circuitRepo repoif.CircuitRepository,
-	cryptoSvc useSvc.CryptoService,
-	crSvc useSvc.CellReaderService,
+	hsRepo repository.HiddenServiceRepository,
+	circuitRepo repository.CircuitRepository,
+	cryptoSvc service.CryptoService,
+	crSvc service.CellReaderService,
 	buildUC usecase.BuildCircuitUseCase,
 	connectUC usecase.ConnectUseCase,
 	openUC usecase.OpenStreamUseCase,
@@ -175,7 +175,7 @@ func (c *SOCKS5Controller) buildCircuit(exitID string) (string, error) {
 func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitID, addr string) error {
 	// Setup stream manager and receive loop
 	cid, _ := vo.CircuitIDFrom(circuitID)
-	sm := useSvc.NewStreamManagerService()
+	sm := service.NewStreamManagerService()
 	go c.recvLoop(cid, sm)
 
 	// Connect to hidden service if needed
@@ -272,7 +272,7 @@ func (c *SOCKS5Controller) resolveAddress(host string, port int) (string, string
 }
 
 // recvLoop handles incoming data from the circuit
-func (c *SOCKS5Controller) recvLoop(cid vo.CircuitID, sm useSvc.StreamManagerService) {
+func (c *SOCKS5Controller) recvLoop(cid vo.CircuitID, sm service.StreamManagerService) {
 	cir, err := c.circuitRepo.Find(cid)
 	if err != nil {
 		log.Println("find circuit:", err)
@@ -310,7 +310,7 @@ func (c *SOCKS5Controller) recvLoop(cid vo.CircuitID, sm useSvc.StreamManagerSer
 }
 
 // handleDataCell processes incoming data cells and decrypts onion layers
-func (c *SOCKS5Controller) handleDataCell(cell *entity.Cell, cir *entity.Circuit, sm useSvc.StreamManagerService) {
+func (c *SOCKS5Controller) handleDataCell(cell *entity.Cell, cir *entity.Circuit, sm service.StreamManagerService) {
 	dp, err := vo.DecodeDataPayload(cell.Payload)
 	if err != nil {
 		return
@@ -352,7 +352,7 @@ func (c *SOCKS5Controller) decryptOnionLayers(data []byte, cir *entity.Circuit) 
 }
 
 // handleEndCell processes stream end commands
-func (c *SOCKS5Controller) handleEndCell(cell *entity.Cell, sm useSvc.StreamManagerService) bool {
+func (c *SOCKS5Controller) handleEndCell(cell *entity.Cell, sm service.StreamManagerService) bool {
 	sid := uint16(0)
 	if len(cell.Payload) > 0 {
 		if p, err := vo.DecodeDataPayload(cell.Payload); err == nil {

@@ -2,10 +2,10 @@ package usecase
 
 import (
 	"fmt"
-	"log"
 	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
-	useSvc "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/usecase/service"
+	"log"
 )
 
 // SendDataInput represents application data to forward on a circuit.
@@ -28,12 +28,12 @@ type SendDataUseCase interface {
 
 type sendDataUseCaseImpl struct {
 	cr      repository.CircuitRepository
-	factory useSvc.MessagingServiceFactory
-	crypto  useSvc.CryptoService
+	factory service.MessagingServiceFactory
+	crypto  service.CryptoService
 }
 
 // NewSendDataUsecase returns a use case for sending data cells.
-func NewSendDataUsecase(cr repository.CircuitRepository, f useSvc.MessagingServiceFactory, c useSvc.CryptoService) SendDataUseCase {
+func NewSendDataUsecase(cr repository.CircuitRepository, f service.MessagingServiceFactory, c service.CryptoService) SendDataUseCase {
 	return &sendDataUseCaseImpl{cr: cr, factory: f, crypto: c}
 }
 
@@ -72,7 +72,7 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	}
 	keys := make([][32]byte, 0, len(cir.Hops()))
 	nonces := make([][12]byte, 0, len(cir.Hops()))
-	
+
 	// Generate nonces in normal order for array indexing
 	for i := range cir.Hops() {
 		keys = append(keys, cir.HopKey(i))

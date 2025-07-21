@@ -11,7 +11,7 @@ import (
 	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
-	useSvc "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 type mockCircuitRepoSend struct {
@@ -41,10 +41,10 @@ func (m *mockTransmitterSend) DestroyCircuit(vo.CircuitID) error              { 
 func (m *mockTransmitterSend) EstablishConnection(vo.CircuitID, []byte) error { return nil }
 
 type sendFactory struct {
-	tx useSvc.CircuitMessagingService
+	tx service.CircuitMessagingService
 }
 
-func (m sendFactory) New(net.Conn) useSvc.CircuitMessagingService { return m.tx }
+func (m sendFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
 
 func TestSendDataInteractor_Handle(t *testing.T) {
 	circuit, err := makeTestCircuit()
@@ -59,7 +59,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 	tests := []struct {
 		name       string
 		repo       repository.CircuitRepository
-		fac        useSvc.MessagingServiceFactory
+		fac        service.MessagingServiceFactory
 		input      usecase.SendDataInput
 		expectsErr bool
 	}{
@@ -73,7 +73,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewSendDataUsecase(tt.repo, tt.fac, useSvc.NewCryptoService())
+			uc := usecase.NewSendDataUsecase(tt.repo, tt.fac, service.NewCryptoService())
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")
@@ -103,7 +103,7 @@ func (r *recordTx) EstablishConnection(vo.CircuitID, []byte) error  { return nil
 
 type recordFactory struct{ tx *recordTx }
 
-func (m recordFactory) New(net.Conn) useSvc.CircuitMessagingService { return m.tx }
+func (m recordFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
 
 func TestSendData_OnionRoundTrip(t *testing.T) {
 	hops := 3
@@ -127,7 +127,7 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 
 	repo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
-	crypto := useSvc.NewCryptoService()
+	crypto := service.NewCryptoService()
 	uc := usecase.NewSendDataUsecase(repo, recordFactory{tx}, crypto)
 	data := []byte("hello")
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: data}); err != nil {
@@ -171,7 +171,7 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 
 	repo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
-	crypto := useSvc.NewCryptoService()
+	crypto := service.NewCryptoService()
 	uc := usecase.NewSendDataUsecase(repo, recordFactory{tx}, crypto)
 	payload, _ := vo.EncodeBeginPayload(&vo.BeginPayload{StreamID: st.ID.UInt16(), Target: "example.com:80"})
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: payload, Cmd: vo.CmdBegin}); err != nil {

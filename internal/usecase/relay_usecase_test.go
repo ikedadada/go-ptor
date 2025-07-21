@@ -21,7 +21,7 @@ import (
 
 func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -69,7 +69,7 @@ func TestRelayUseCase_ExtendAndForward(t *testing.T) {
 
 func TestRelayUseCase_ForwardExtendExisting(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -79,6 +79,7 @@ func TestRelayUseCase_ForwardExtendExisting(t *testing.T) {
 	cid := vo.NewCircuitID()
 	up1, up2 := net.Pipe()
 	down1, down2 := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, down1)
 	repo.Add(cid, st)
 
@@ -132,7 +133,7 @@ func TestRelayUseCase_ForwardExtendExisting(t *testing.T) {
 
 func TestRelayUseCase_EndUnknown(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -146,7 +147,7 @@ func TestRelayUseCase_EndUnknown(t *testing.T) {
 
 func TestRelayUseCase_EndStreamNoDown(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -155,11 +156,12 @@ func TestRelayUseCase_EndStreamNoDown(t *testing.T) {
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
 	up1, up2 := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, nil)
 	repo.Add(cid, st)
 	sid, _ := vo.StreamIDFrom(1)
 	local1, local2 := net.Pipe()
-	st.Streams().Add(sid, local1)
+	repo.AddStream(cid, sid, local1)
 
 	payload, _ := vo.EncodeDataPayload(&vo.DataPayload{StreamID: sid.UInt16()})
 	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: payload}
@@ -187,7 +189,7 @@ func TestRelayUseCase_EndStreamNoDown(t *testing.T) {
 
 func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -199,6 +201,7 @@ func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 	t.Run("end", func(t *testing.T) {
 		up1, _ := net.Pipe()
 		down1, down2 := net.Pipe()
+
 		st := entity.NewConnState(key, nonce, up1, down1)
 		repo.Add(cid, st)
 		cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1}
@@ -223,6 +226,7 @@ func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 		cid2 := vo.NewCircuitID()
 		up1, _ := net.Pipe()
 		down1, down2 := net.Pipe()
+
 		st := entity.NewConnState(key, nonce, up1, down1)
 		repo.Add(cid2, st)
 		cell := &entity.Cell{Cmd: vo.CmdDestroy, Version: vo.ProtocolV1}
@@ -247,7 +251,7 @@ func TestRelayUseCase_ForwardEndDestroy(t *testing.T) {
 func TestRelayUseCase_Connect(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-		repo := repoimpl.NewCircuitTableRepository(time.Second)
+		repo := repoimpl.NewConnStateRepository(time.Second)
 		cSvc := service.NewCryptoService()
 		crSvc := service.NewCellReaderService()
 		uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -256,6 +260,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		nonce, _ := vo.NewNonce()
 		cid := vo.NewCircuitID()
 		up1, up2 := net.Pipe()
+
 		st := entity.NewConnState(key, nonce, up1, nil)
 		repo.Add(cid, st)
 
@@ -298,7 +303,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 
 	t.Run("env addr", func(t *testing.T) {
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-		repo := repoimpl.NewCircuitTableRepository(time.Second)
+		repo := repoimpl.NewConnStateRepository(time.Second)
 		cSvc := service.NewCryptoService()
 		crSvc := service.NewCellReaderService()
 		uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -307,6 +312,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		nonce, _ := vo.NewNonce()
 		cid := vo.NewCircuitID()
 		up1, up2 := net.Pipe()
+
 		st := entity.NewConnState(key, nonce, up1, nil)
 		repo.Add(cid, st)
 
@@ -350,7 +356,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 
 	t.Run("fail dial", func(t *testing.T) {
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-		repo := repoimpl.NewCircuitTableRepository(time.Second)
+		repo := repoimpl.NewConnStateRepository(time.Second)
 		cSvc := service.NewCryptoService()
 		crSvc := service.NewCellReaderService()
 		uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -359,6 +365,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 		nonce, _ := vo.NewNonce()
 		cid := vo.NewCircuitID()
 		up1, _ := net.Pipe()
+
 		st := entity.NewConnState(key, nonce, up1, nil)
 		repo.Add(cid, st)
 
@@ -374,7 +381,7 @@ func TestRelayUseCase_Connect(t *testing.T) {
 
 func TestRelayUseCase_ConnectAck(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -383,6 +390,7 @@ func TestRelayUseCase_ConnectAck(t *testing.T) {
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
 	up1, up2 := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, nil)
 	repo.Add(cid, st)
 
@@ -419,7 +427,7 @@ func TestRelayUseCase_ConnectAck(t *testing.T) {
 
 func TestRelayUseCase_BeginForward(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -429,6 +437,7 @@ func TestRelayUseCase_BeginForward(t *testing.T) {
 	cid := vo.NewCircuitID()
 	up1, _ := net.Pipe()
 	down1, down2 := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, down1)
 	repo.Add(cid, st)
 
@@ -464,7 +473,7 @@ func TestRelayUseCase_BeginForward(t *testing.T) {
 
 func TestRelayUseCase_BeginExit(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -473,6 +482,7 @@ func TestRelayUseCase_BeginExit(t *testing.T) {
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
 	up1, up2 := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, nil)
 	repo.Add(cid, st)
 
@@ -504,7 +514,7 @@ func TestRelayUseCase_BeginExit(t *testing.T) {
 
 	st2, _ := repo.Find(cid)
 	sid, _ := vo.StreamIDFrom(1)
-	if _, err := st2.Streams().Get(sid); err != nil {
+	if _, err := repo.GetStream(cid, sid); err != nil {
 		t.Fatalf("stream not stored: %v", err)
 	}
 
@@ -512,15 +522,15 @@ func TestRelayUseCase_BeginExit(t *testing.T) {
 	if st2.Down() != nil {
 		st2.Down().Close()
 	}
-	st2.Streams().DestroyAll()
+	repo.DestroyAllStreams(cid)
 }
 
 func TestRelayUseCase_DataForwardExit(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	crypto := service.NewCryptoService()
 
-	repoMid := repoimpl.NewCircuitTableRepository(10 * time.Second)
-	repoExit := repoimpl.NewCircuitTableRepository(10 * time.Second)
+	repoMid := repoimpl.NewConnStateRepository(10 * time.Second)
+	repoExit := repoimpl.NewConnStateRepository(10 * time.Second)
 
 	ucMid := usecase.NewRelayUseCase(priv, repoMid, crypto, service.NewCellReaderService())
 	ucExit := usecase.NewRelayUseCase(priv, repoExit, crypto, service.NewCellReaderService())
@@ -543,7 +553,7 @@ func TestRelayUseCase_DataForwardExit(t *testing.T) {
 	repoExit.Add(cid, stExit)
 	sid, _ := vo.StreamIDFrom(1)
 	local1, local2 := net.Pipe()
-	stExit.Streams().Add(sid, local1)
+	repoExit.AddStream(cid, sid, local1)
 
 	// build data cell as received by middle (layered for exit)
 	plain := []byte("hello")
@@ -602,7 +612,7 @@ func TestRelayUseCase_DataForwardExit(t *testing.T) {
 
 func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -611,6 +621,7 @@ func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
 	up1, up2 := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, nil)
 	repo.Add(cid, st)
 
@@ -660,7 +671,7 @@ func TestRelayUseCase_ForwardConnectData(t *testing.T) {
 
 func TestRelayUseCase_BeginHidden(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -670,6 +681,7 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 	cid := vo.NewCircuitID()
 	up1, up2 := net.Pipe()
 	down1, down2 := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, down1)
 	st.SetHidden(true)
 	repo.Add(cid, st)
@@ -726,7 +738,7 @@ func TestRelayUseCase_BeginHidden(t *testing.T) {
 
 func TestRelayUseCase_DataHidden(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -736,6 +748,7 @@ func TestRelayUseCase_DataHidden(t *testing.T) {
 	cid := vo.NewCircuitID()
 	up1, up2 := net.Pipe()
 	down1, down2 := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, down1)
 	st.SetHidden(true)
 	repo.Add(cid, st)
@@ -767,7 +780,7 @@ func TestRelayUseCase_DataHidden(t *testing.T) {
 
 func TestRelayUseCase_ForwardAck(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -777,6 +790,7 @@ func TestRelayUseCase_ForwardAck(t *testing.T) {
 	cid := vo.NewCircuitID()
 	up1, up2 := net.Pipe()
 	down1, down2 := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, down1)
 	repo.Add(cid, st)
 
@@ -808,8 +822,8 @@ func TestRelayUseCase_ForwardAck(t *testing.T) {
 func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 	priv1, _ := rsa.GenerateKey(rand.Reader, 2048)
 	priv2, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo1 := repoimpl.NewCircuitTableRepository(time.Second)
-	repo2 := repoimpl.NewCircuitTableRepository(time.Second)
+	repo1 := repoimpl.NewConnStateRepository(time.Second)
+	repo2 := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 
@@ -870,7 +884,7 @@ func TestRelayUseCase_MultiHopExtend(t *testing.T) {
 
 func TestRelayUseCase_AESOpenErrorContext(t *testing.T) {
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	repo := repoimpl.NewCircuitTableRepository(time.Second)
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
 	uc := usecase.NewRelayUseCase(priv, repo, cSvc, crSvc)
@@ -879,6 +893,7 @@ func TestRelayUseCase_AESOpenErrorContext(t *testing.T) {
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
 	up1, _ := net.Pipe()
+
 	st := entity.NewConnState(key, nonce, up1, nil)
 	repo.Add(cid, st)
 

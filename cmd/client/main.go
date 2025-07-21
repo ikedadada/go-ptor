@@ -9,7 +9,7 @@ import (
 	"ikedadada/go-ptor/internal/infrastructure/http"
 	infraRepo "ikedadada/go-ptor/internal/infrastructure/repository"
 	"ikedadada/go-ptor/internal/usecase"
-	useSvc "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 func main() {
@@ -39,12 +39,12 @@ func main() {
 	circuitRepository := infraRepo.NewCircuitRepository()
 
 	// Initialize services and use cases
-	dialer := useSvc.NewTCPCircuitBuildService()
-	cryptoSvc := useSvc.NewCryptoService()
-	crSvc := useSvc.NewCellReaderService()
+	dialer := service.NewTCPCircuitBuildService()
+	cryptoSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
 	buildUC := usecase.NewBuildCircuitUseCase(relayRepository, circuitRepository, dialer, cryptoSvc)
 
-	factory := useSvc.TCPMessagingServiceFactory{}
+	factory := service.TCPMessagingServiceFactory{}
 	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
 	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, factory)
 	sendUC := usecase.NewSendDataUsecase(circuitRepository, factory, cryptoSvc)

@@ -7,39 +7,39 @@ import (
 	"time"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	repoif "ikedadada/go-ptor/internal/domain/repository"
+	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
 	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
-func TestCircuitTableRepo_AddFindDelete(t *testing.T) {
-	tbl := repoimpl.NewCircuitTableRepository(time.Second)
+func TestConnStateRepo_AddFindDelete(t *testing.T) {
+	repo := repoimpl.NewConnStateRepository(time.Second)
 	id := vo.NewCircuitID()
 	st := entity.NewConnState(vo.AESKey{}, vo.Nonce{}, nil, nil)
-	if err := tbl.Add(id, st); err != nil {
+	if err := repo.Add(id, st); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	if _, err := tbl.Find(id); err != nil {
+	if _, err := repo.Find(id); err != nil {
 		t.Fatalf("find: %v", err)
 	}
-	if err := tbl.Delete(id); err != nil {
+	if err := repo.Delete(id); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, err := tbl.Find(id); !errors.Is(err, repoif.ErrNotFound) {
+	if _, err := repo.Find(id); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound")
 	}
 }
 
-func TestCircuitTableRepo_GC(t *testing.T) {
-	tbl := repoimpl.NewCircuitTableRepository(500 * time.Millisecond)
+func TestConnStateRepo_GC(t *testing.T) {
+	repo := repoimpl.NewConnStateRepository(500 * time.Millisecond)
 	id := vo.NewCircuitID()
 	up, down := net.Pipe()
 	st := entity.NewConnState(vo.AESKey{}, vo.Nonce{}, up, down)
-	if err := tbl.Add(id, st); err != nil {
+	if err := repo.Add(id, st); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	time.Sleep(1200 * time.Millisecond)
-	if _, err := tbl.Find(id); !errors.Is(err, repoif.ErrNotFound) {
+	if _, err := repo.Find(id); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("entry not cleaned")
 	}
 }

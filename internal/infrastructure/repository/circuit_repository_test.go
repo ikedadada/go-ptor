@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	repoif "ikedadada/go-ptor/internal/domain/repository"
+	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/infrastructure/repository"
+	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
 func makeTestCircuit(id vo.CircuitID) (*entity.Circuit, error) {
@@ -37,7 +37,7 @@ func makeTestCircuit(id vo.CircuitID) (*entity.Circuit, error) {
 }
 
 func TestCircuitRepo_Save_Find_Delete(t *testing.T) {
-	repo := repository.NewCircuitRepository()
+	repo := repoimpl.NewCircuitRepository()
 	id := vo.NewCircuitID()
 	c, err := makeTestCircuit(id)
 	if err != nil {
@@ -61,7 +61,7 @@ func TestCircuitRepo_Save_Find_Delete(t *testing.T) {
 			if err = repo.Delete(id); err != nil {
 				t.Fatalf("Delete error: %v", err)
 			}
-			if _, err = repo.Find(id); !errors.Is(err, repoif.ErrNotFound) {
+			if _, err = repo.Find(id); !errors.Is(err, repository.ErrNotFound) {
 				t.Errorf("expected ErrNotFound after delete, got %v", err)
 			}
 			if c.RSAPrivate() != nil {
@@ -72,7 +72,7 @@ func TestCircuitRepo_Save_Find_Delete(t *testing.T) {
 }
 
 func TestCircuitRepo_ListActive(t *testing.T) {
-	repo := repository.NewCircuitRepository()
+	repo := repoimpl.NewCircuitRepository()
 	id1 := vo.NewCircuitID()
 	id2 := vo.NewCircuitID()
 	c1, err := makeTestCircuit(id1)

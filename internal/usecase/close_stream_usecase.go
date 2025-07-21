@@ -5,7 +5,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
-	useSvc "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 // CloseStreamInput identifies the stream to close on a circuit.
@@ -26,11 +26,11 @@ type CloseStreamUseCase interface {
 
 type closeStreamUsecaseImpl struct {
 	cr      repository.CircuitRepository
-	factory useSvc.MessagingServiceFactory
+	factory service.MessagingServiceFactory
 }
 
 // NewCloseStreamUsecase creates a use case for closing streams.
-func NewCloseStreamUsecase(cr repository.CircuitRepository, f useSvc.MessagingServiceFactory) CloseStreamUseCase {
+func NewCloseStreamUsecase(cr repository.CircuitRepository, f service.MessagingServiceFactory) CloseStreamUseCase {
 	return &closeStreamUsecaseImpl{cr: cr, factory: f}
 }
 

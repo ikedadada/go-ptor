@@ -5,7 +5,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
-	useSvc "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 // ShutdownCircuitInput specifies which circuit to close gracefully.
@@ -25,11 +25,11 @@ type ShutdownCircuitUseCase interface {
 
 type shutdownCircuitUseCaseImpl struct {
 	repo    repository.CircuitRepository
-	factory useSvc.MessagingServiceFactory
+	factory service.MessagingServiceFactory
 }
 
 // NewShutdownCircuitUsecase returns a use case for orderly circuit shutdown.
-func NewShutdownCircuitUsecase(cr repository.CircuitRepository, f useSvc.MessagingServiceFactory) ShutdownCircuitUseCase {
+func NewShutdownCircuitUsecase(cr repository.CircuitRepository, f service.MessagingServiceFactory) ShutdownCircuitUseCase {
 	return &shutdownCircuitUseCaseImpl{repo: cr, factory: f}
 }
 

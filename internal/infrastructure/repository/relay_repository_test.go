@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	repoif "ikedadada/go-ptor/internal/domain/repository"
+	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/infrastructure/repository"
+	repoImpl "ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
 func makeTestRelay(status entity.RelayStatus, idStr string) (*entity.Relay, error) {
@@ -62,7 +62,7 @@ func TestRelayRepo_Save_FindByID(t *testing.T) {
 		response: []relayDTO{},
 	}
 
-	repo, err := repository.NewRelayRepository(mockClient, "http://test.com")
+	repo, err := repoImpl.NewRelayRepository(mockClient, "http://test.com")
 	if err != nil {
 		t.Fatalf("NewRelayRepository: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestRelayRepo_FindByID_NotFound(t *testing.T) {
 		response: []relayDTO{},
 	}
 
-	repo, err := repository.NewRelayRepository(mockClient, "http://test.com")
+	repo, err := repoImpl.NewRelayRepository(mockClient, "http://test.com")
 	if err != nil {
 		t.Fatalf("NewRelayRepository: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestRelayRepo_FindByID_NotFound(t *testing.T) {
 		t.Fatalf("NewRelayID: %v", err)
 	}
 	_, err = repo.FindByID(relayID)
-	if !errors.Is(err, repoif.ErrNotFound) {
+	if !errors.Is(err, repository.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -121,7 +121,7 @@ func TestRelayRepo_AllOnline(t *testing.T) {
 		response: []relayDTO{},
 	}
 
-	repo, err := repository.NewRelayRepository(mockClient, "http://test.com")
+	repo, err := repoImpl.NewRelayRepository(mockClient, "http://test.com")
 	if err != nil {
 		t.Fatalf("NewRelayRepository: %v", err)
 	}

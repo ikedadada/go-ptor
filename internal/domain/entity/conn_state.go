@@ -19,19 +19,18 @@ type ConnState struct {
 	up                  net.Conn
 	down                net.Conn
 	last                time.Time
-	tbl                 *StreamTable
 	hidden              bool
 	served              bool
 }
 
 // NewConnState returns a new ConnState instance.
 func NewConnState(key vo.AESKey, nonce vo.Nonce, up, down net.Conn) *ConnState {
-	return &ConnState{key: key, baseNonce: nonce, beginCounter: 0, dataCounter: 0, upstreamDataCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
+	return &ConnState{key: key, baseNonce: nonce, beginCounter: 0, dataCounter: 0, upstreamDataCounter: 0, up: up, down: down, last: time.Now(), hidden: false, served: false}
 }
 
 // NewConnStateWithCounters returns a new ConnState instance preserving counter values.
 func NewConnStateWithCounters(key vo.AESKey, nonce vo.Nonce, up, down net.Conn, beginCounter, dataCounter uint64) *ConnState {
-	return &ConnState{key: key, baseNonce: nonce, beginCounter: beginCounter, dataCounter: dataCounter, upstreamDataCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
+	return &ConnState{key: key, baseNonce: nonce, beginCounter: beginCounter, dataCounter: dataCounter, upstreamDataCounter: 0, up: up, down: down, last: time.Now(), hidden: false, served: false}
 }
 
 // Key returns the symmetric key for this circuit hop.
@@ -94,9 +93,6 @@ func (s *ConnState) Up() net.Conn { return s.up }
 // Down returns the downstream connection.
 func (s *ConnState) Down() net.Conn { return s.down }
 
-// Streams returns the table of open stream connections.
-func (s *ConnState) Streams() *StreamTable { return s.tbl }
-
 // Touch updates the last-used time to now.
 func (s *ConnState) Touch() { s.last = time.Now() }
 
@@ -122,9 +118,6 @@ func (s *ConnState) Close() {
 	}
 	if s.down != nil {
 		s.down.Close()
-	}
-	if s.tbl != nil {
-		s.tbl.DestroyAll()
 	}
 }
 

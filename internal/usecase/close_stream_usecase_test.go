@@ -9,7 +9,7 @@ import (
 	"ikedadada/go-ptor/internal/domain/repository"
 	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
-	useSvc "ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 type mockCircuitRepoClose struct {
@@ -49,10 +49,10 @@ func (m *mockTransmitterClose) DestroyCircuit(vo.CircuitID) error              {
 func (m *mockTransmitterClose) EstablishConnection(vo.CircuitID, []byte) error { return nil }
 
 type closeFactory struct {
-	tx useSvc.CircuitMessagingService
+	tx service.CircuitMessagingService
 }
 
-func (m closeFactory) New(net.Conn) useSvc.CircuitMessagingService { return m.tx }
+func (m closeFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
 
 func TestCloseStreamInteractor_Handle(t *testing.T) {
 	circuit, err := makeTestCircuit()
@@ -67,7 +67,7 @@ func TestCloseStreamInteractor_Handle(t *testing.T) {
 	tests := []struct {
 		name       string
 		repo       repository.CircuitRepository
-		fac        useSvc.MessagingServiceFactory
+		fac        service.MessagingServiceFactory
 		input      usecase.CloseStreamInput
 		expectsErr bool
 	}{
