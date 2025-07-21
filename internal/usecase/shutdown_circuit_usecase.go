@@ -5,7 +5,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
+	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
 // ShutdownCircuitInput specifies which circuit to close gracefully.
@@ -25,11 +25,11 @@ type ShutdownCircuitUseCase interface {
 
 type shutdownCircuitUseCaseImpl struct {
 	repo    repository.CircuitRepository
-	factory infraSvc.TransmitterFactory
+	factory useSvc.MessagingServiceFactory
 }
 
 // NewShutdownCircuitUsecase returns a use case for orderly circuit shutdown.
-func NewShutdownCircuitUsecase(cr repository.CircuitRepository, f infraSvc.TransmitterFactory) ShutdownCircuitUseCase {
+func NewShutdownCircuitUsecase(cr repository.CircuitRepository, f useSvc.MessagingServiceFactory) ShutdownCircuitUseCase {
 	return &shutdownCircuitUseCaseImpl{repo: cr, factory: f}
 }
 
@@ -52,11 +52,11 @@ func (uc *shutdownCircuitUseCaseImpl) Handle(in ShutdownCircuitInput) (ShutdownC
 		// ドメイン側を先に更新
 		cir.CloseStream(sid)
 		// ネットワーク側へ END セル
-		_ = tx.SendEnd(cid, sid) // 送信エラーは無視 or 集約
+		_ = tx.TerminateStream(cid, sid) // 送信エラーは無視 or 集約
 	}
 
 	// --- 3. 制御ストリーム 0 で回路破棄を通知
-	_ = tx.SendEnd(cid, 0) // StreamID 0 は回路制御専用とする
+	_ = tx.TerminateStream(cid, 0) // StreamID 0 は回路制御専用とする
 
 	// --- 4. Repository から削除
 	if err := uc.repo.Delete(cid); err != nil {

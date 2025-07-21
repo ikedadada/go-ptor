@@ -8,9 +8,8 @@ import (
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
-	"ikedadada/go-ptor/internal/usecase/service"
+	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
 type mockCircuitRepoSend struct {
@@ -27,21 +26,21 @@ func (m *mockCircuitRepoSend) ListActive() ([]*entity.Circuit, error) { return n
 
 type mockTransmitterSend struct{ err error }
 
-func (m *mockTransmitterSend) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+func (m *mockTransmitterSend) TransmitData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return m.err
 }
-func (m *mockTransmitterSend) SendBegin(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+func (m *mockTransmitterSend) InitiateStream(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return m.err
 }
-func (m *mockTransmitterSend) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
+func (m *mockTransmitterSend) TerminateStream(c value_object.CircuitID, s value_object.StreamID) error {
 	return nil
 }
-func (m *mockTransmitterSend) SendDestroy(value_object.CircuitID) error         { return nil }
-func (m *mockTransmitterSend) SendConnect(value_object.CircuitID, []byte) error { return nil }
+func (m *mockTransmitterSend) DestroyCircuit(value_object.CircuitID) error         { return nil }
+func (m *mockTransmitterSend) EstablishConnection(value_object.CircuitID, []byte) error { return nil }
 
-type sendFactory struct{ tx service.CircuitTransmitter }
+type sendFactory struct{ tx useSvc.CircuitMessagingService }
 
-func (m sendFactory) New(net.Conn) service.CircuitTransmitter { return m.tx }
+func (m sendFactory) New(net.Conn) useSvc.CircuitMessagingService { return m.tx }
 
 func TestSendDataInteractor_Handle(t *testing.T) {
 	circuit, err := makeTestCircuit()
@@ -56,7 +55,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 	tests := []struct {
 		name       string
 		repo       repository.CircuitRepository
-		fac        infraSvc.TransmitterFactory
+		fac        useSvc.MessagingServiceFactory
 		input      usecase.SendDataInput
 		expectsErr bool
 	}{
@@ -70,7 +69,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewSendDataUsecase(tt.repo, tt.fac, service.NewCryptoService())
+			uc := usecase.NewSendDataUsecase(tt.repo, tt.fac, useSvc.NewCryptoService())
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")

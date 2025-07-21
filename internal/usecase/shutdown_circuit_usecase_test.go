@@ -37,25 +37,25 @@ type mockTransmitterShutdown struct {
 	}
 }
 
-func (m *mockTransmitterShutdown) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
+func (m *mockTransmitterShutdown) TerminateStream(c value_object.CircuitID, s value_object.StreamID) error {
 	m.endCalls = append(m.endCalls, struct {
 		cid value_object.CircuitID
 		sid value_object.StreamID
 	}{c, s})
 	return nil
 }
-func (m *mockTransmitterShutdown) SendBegin(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTransmitterShutdown) InitiateStream(value_object.CircuitID, value_object.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTransmitterShutdown) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+func (m *mockTransmitterShutdown) TransmitData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return nil
 }
-func (m *mockTransmitterShutdown) SendDestroy(value_object.CircuitID) error         { return nil }
-func (m *mockTransmitterShutdown) SendConnect(value_object.CircuitID, []byte) error { return nil }
+func (m *mockTransmitterShutdown) DestroyCircuit(value_object.CircuitID) error         { return nil }
+func (m *mockTransmitterShutdown) EstablishConnection(value_object.CircuitID, []byte) error { return nil }
 
-type shutdownFactory struct{ tx service.CircuitTransmitter }
+type shutdownFactory struct{ tx service.CircuitMessagingService }
 
-func (m shutdownFactory) New(net.Conn) service.CircuitTransmitter { return m.tx }
+func (m shutdownFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
 
 func makeTestCircuitShutdown() (*entity.Circuit, error) {
 	id, err := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
@@ -113,7 +113,7 @@ func TestShutdownCircuitInteractor_Handle(t *testing.T) {
 			t.Errorf("expected repo.Delete called with %s", cid)
 		}
 		if len(tx.endCalls) < 3 { // 2 streams + control END
-			t.Errorf("expected at least 3 SendEnd calls, got %d", len(tx.endCalls))
+			t.Errorf("expected at least 3 TerminateStream calls, got %d", len(tx.endCalls))
 		}
 	})
 

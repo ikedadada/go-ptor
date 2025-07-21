@@ -58,15 +58,15 @@ type mockDialer struct {
 	destroyCalled int
 }
 
-func (m *mockDialer) Dial(string) (net.Conn, error) {
+func (m *mockDialer) ConnectToRelay(string) (net.Conn, error) {
 	m.dialCalled++
 	return dummyConn{}, nil
 }
-func (m *mockDialer) SendCell(net.Conn, *aggregate.RelayCell) error {
+func (m *mockDialer) SendExtendCell(net.Conn, *aggregate.RelayCell) error {
 	m.sendCalled++
 	return nil
 }
-func (m *mockDialer) WaitCreated(net.Conn) ([]byte, error) {
+func (m *mockDialer) WaitForCreatedResponse(net.Conn) ([]byte, error) {
 	m.createdCalled++
 	kp, _ := ecdh.X25519().GenerateKey(rand.Reader)
 	var pub [32]byte
@@ -74,7 +74,7 @@ func (m *mockDialer) WaitCreated(net.Conn) ([]byte, error) {
 	b, _ := value_object.EncodeCreatedPayload(&value_object.CreatedPayload{RelayPub: pub})
 	return b, nil
 }
-func (m *mockDialer) SendDestroy(net.Conn, value_object.CircuitID) error {
+func (m *mockDialer) TeardownCircuit(net.Conn, value_object.CircuitID) error {
 	m.destroyCalled++
 	return nil
 }

@@ -40,28 +40,28 @@ type mockTxDestroy struct {
 	events  *[]string
 }
 
-func (m *mockTxDestroy) SendData(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTxDestroy) TransmitData(value_object.CircuitID, value_object.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTxDestroy) SendBegin(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTxDestroy) InitiateStream(value_object.CircuitID, value_object.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTxDestroy) SendEnd(_ value_object.CircuitID, s value_object.StreamID) error {
+func (m *mockTxDestroy) TerminateStream(_ value_object.CircuitID, s value_object.StreamID) error {
 	m.ends = append(m.ends, s)
 	return nil
 }
-func (m *mockTxDestroy) SendDestroy(c value_object.CircuitID) error {
+func (m *mockTxDestroy) DestroyCircuit(c value_object.CircuitID) error {
 	if m.events != nil {
 		*m.events = append(*m.events, "destroy")
 	}
 	m.destroy = c
 	return m.err
 }
-func (m *mockTxDestroy) SendConnect(value_object.CircuitID, []byte) error { return nil }
+func (m *mockTxDestroy) EstablishConnection(value_object.CircuitID, []byte) error { return nil }
 
-type destroyFactory struct{ tx service.CircuitTransmitter }
+type destroyFactory struct{ tx service.CircuitMessagingService }
 
-func (m destroyFactory) New(net.Conn) service.CircuitTransmitter { return m.tx }
+func (m destroyFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
 
 func makeCircuitForDestroy() (*entity.Circuit, error) {
 	id := value_object.NewCircuitID()
@@ -101,7 +101,7 @@ func TestDestroyCircuitUsecase(t *testing.T) {
 			t.Errorf("expected tx and repo with cid")
 		}
 		if len(tx.ends) != 1 {
-			t.Errorf("expected 1 SendEnd call, got %d", len(tx.ends))
+			t.Errorf("expected 1 TerminateStream call, got %d", len(tx.ends))
 		}
 	})
 

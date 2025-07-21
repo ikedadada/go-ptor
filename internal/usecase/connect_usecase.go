@@ -5,7 +5,6 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -28,12 +27,12 @@ type ConnectUseCase interface {
 
 type connectUsecaseImpl struct {
 	repo    repository.CircuitRepository
-	factory infraSvc.TransmitterFactory
+	factory useSvc.MessagingServiceFactory
 	crypto  useSvc.CryptoService
 }
 
 // NewConnectUseCase creates a use case for CONNECT cells.
-func NewConnectUseCase(r repository.CircuitRepository, f infraSvc.TransmitterFactory, c useSvc.CryptoService) ConnectUseCase {
+func NewConnectUseCase(r repository.CircuitRepository, f useSvc.MessagingServiceFactory, c useSvc.CryptoService) ConnectUseCase {
 	return &connectUsecaseImpl{repo: r, factory: f, crypto: c}
 }
 
@@ -70,7 +69,7 @@ func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
 
 	conn := cir.Conn(0)
 	tx := uc.factory.New(conn)
-	if err := tx.SendConnect(cid, enc); err != nil {
+	if err := tx.EstablishConnection(cid, enc); err != nil {
 		return ConnectOutput{}, err
 	}
 	return ConnectOutput{Sent: true}, nil

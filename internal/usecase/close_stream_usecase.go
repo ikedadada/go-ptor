@@ -5,7 +5,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
+	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
 // CloseStreamInput identifies the stream to close on a circuit.
@@ -26,11 +26,11 @@ type CloseStreamUseCase interface {
 
 type closeStreamUsecaseImpl struct {
 	cr      repository.CircuitRepository
-	factory infraSvc.TransmitterFactory
+	factory useSvc.MessagingServiceFactory
 }
 
 // NewCloseStreamUsecase creates a use case for closing streams.
-func NewCloseStreamUsecase(cr repository.CircuitRepository, f infraSvc.TransmitterFactory) CloseStreamUseCase {
+func NewCloseStreamUsecase(cr repository.CircuitRepository, f useSvc.MessagingServiceFactory) CloseStreamUseCase {
 	return &closeStreamUsecaseImpl{cr: cr, factory: f}
 }
 
@@ -50,11 +50,11 @@ func (uc *closeStreamUsecaseImpl) Handle(in CloseStreamInput) (CloseStreamOutput
 	}
 	cir.CloseStream(sid) // ドメイン側の状態更新
 	tx := uc.factory.New(cir.Conn(0))
-	if err := tx.SendEnd(cid, sid); err != nil { // END セル送信
+	if err := tx.TerminateStream(cid, sid); err != nil { // END セル送信
 		return CloseStreamOutput{}, err
 	}
 	if len(cir.ActiveStreams()) == 0 { // 最後のストリームなら制御 END
-		if err := tx.SendEnd(cid, 0); err != nil {
+		if err := tx.TerminateStream(cid, 0); err != nil {
 			return CloseStreamOutput{}, err
 		}
 	}

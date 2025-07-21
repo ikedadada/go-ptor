@@ -6,7 +6,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
+	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
 // DestroyCircuitInput triggers a DESTROY cell transmission.
@@ -26,11 +26,11 @@ type DestroyCircuitUseCase interface {
 
 type destroyCircuitUsecaseImpl struct {
 	repo    repository.CircuitRepository
-	factory infraSvc.TransmitterFactory
+	factory useSvc.MessagingServiceFactory
 }
 
 // NewDestroyCircuitUsecase returns a use case to abort circuits.
-func NewDestroyCircuitUsecase(r repository.CircuitRepository, f infraSvc.TransmitterFactory) DestroyCircuitUseCase {
+func NewDestroyCircuitUsecase(r repository.CircuitRepository, f useSvc.MessagingServiceFactory) DestroyCircuitUseCase {
 	return &destroyCircuitUsecaseImpl{repo: r, factory: f}
 }
 
@@ -49,10 +49,10 @@ func (uc *destroyCircuitUsecaseImpl) Handle(in DestroyCircuitInput) (DestroyCirc
 	if err == nil && cir != nil {
 		// send END for each active stream to allow graceful close
 		for _, sid := range cir.ActiveStreams() {
-			_ = tx.SendEnd(cid, sid)
+			_ = tx.TerminateStream(cid, sid)
 		}
 	}
-	if err := tx.SendDestroy(cid); err != nil {
+	if err := tx.DestroyCircuit(cid); err != nil {
 		return DestroyCircuitOutput{}, fmt.Errorf("send destroy: %w", err)
 	}
 	if err := uc.repo.Delete(cid); err != nil {

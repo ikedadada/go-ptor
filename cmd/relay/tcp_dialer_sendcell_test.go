@@ -9,7 +9,7 @@ import (
 	"ikedadada/go-ptor/internal/domain/aggregate"
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/infrastructure/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 type recordConn struct {
@@ -27,7 +27,7 @@ func (r *recordConn) SetWriteDeadline(t time.Time) error { return nil }
 
 func TestSendCellWritesFixedPacket(t *testing.T) {
 	conn := &recordConn{}
-	d := service.NewTCPDialer()
+	d := service.NewTCPCircuitBuildService()
 	cid := value_object.NewCircuitID()
 	payload := []byte("hello")
 	streamID, _ := value_object.StreamIDFrom(0)
@@ -36,8 +36,8 @@ func TestSendCellWritesFixedPacket(t *testing.T) {
 		t.Fatalf("NewRelayCell error: %v", err)
 	}
 
-	if err := d.SendCell(conn, cell); err != nil {
-		t.Fatalf("SendCell error: %v", err)
+	if err := d.SendExtendCell(conn, cell); err != nil {
+		t.Fatalf("SendExtendCell error: %v", err)
 	}
 
 	if conn.Len() != 16+entity.MaxCellSize {

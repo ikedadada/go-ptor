@@ -32,23 +32,23 @@ type mockTxConnect struct {
 	err     error
 }
 
-func (m *mockTxConnect) SendData(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTxConnect) TransmitData(value_object.CircuitID, value_object.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTxConnect) SendBegin(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTxConnect) InitiateStream(value_object.CircuitID, value_object.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTxConnect) SendConnect(c value_object.CircuitID, d []byte) error {
+func (m *mockTxConnect) EstablishConnection(c value_object.CircuitID, d []byte) error {
 	m.cid = c
 	m.payload = d
 	return m.err
 }
-func (m *mockTxConnect) SendEnd(value_object.CircuitID, value_object.StreamID) error { return nil }
-func (m *mockTxConnect) SendDestroy(value_object.CircuitID) error                    { return nil }
+func (m *mockTxConnect) TerminateStream(value_object.CircuitID, value_object.StreamID) error { return nil }
+func (m *mockTxConnect) DestroyCircuit(value_object.CircuitID) error                    { return nil }
 
 type connectFactory struct{ tx *mockTxConnect }
 
-func (c connectFactory) New(net.Conn) service.CircuitTransmitter { return c.tx }
+func (c connectFactory) New(net.Conn) service.CircuitMessagingService { return c.tx }
 
 func makeTestCircuitConnect() (*entity.Circuit, error) {
 	id := value_object.NewCircuitID()

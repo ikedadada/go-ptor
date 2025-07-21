@@ -8,9 +8,8 @@ import (
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	"ikedadada/go-ptor/internal/usecase"
-	"ikedadada/go-ptor/internal/usecase/service"
+	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
 type mockCircuitRepoClose struct {
@@ -33,25 +32,25 @@ type mockTransmitterClose struct {
 	}
 }
 
-func (m *mockTransmitterClose) SendEnd(c value_object.CircuitID, s value_object.StreamID) error {
+func (m *mockTransmitterClose) TerminateStream(c value_object.CircuitID, s value_object.StreamID) error {
 	m.ends = append(m.ends, struct {
 		cid value_object.CircuitID
 		sid value_object.StreamID
 	}{c, s})
 	return m.err
 }
-func (m *mockTransmitterClose) SendBegin(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTransmitterClose) InitiateStream(value_object.CircuitID, value_object.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTransmitterClose) SendData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+func (m *mockTransmitterClose) TransmitData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
 	return nil
 }
-func (m *mockTransmitterClose) SendDestroy(value_object.CircuitID) error         { return nil }
-func (m *mockTransmitterClose) SendConnect(value_object.CircuitID, []byte) error { return nil }
+func (m *mockTransmitterClose) DestroyCircuit(value_object.CircuitID) error         { return nil }
+func (m *mockTransmitterClose) EstablishConnection(value_object.CircuitID, []byte) error { return nil }
 
-type closeFactory struct{ tx service.CircuitTransmitter }
+type closeFactory struct{ tx useSvc.CircuitMessagingService }
 
-func (m closeFactory) New(net.Conn) service.CircuitTransmitter { return m.tx }
+func (m closeFactory) New(net.Conn) useSvc.CircuitMessagingService { return m.tx }
 
 func TestCloseStreamInteractor_Handle(t *testing.T) {
 	circuit, err := makeTestCircuit()
@@ -66,7 +65,7 @@ func TestCloseStreamInteractor_Handle(t *testing.T) {
 	tests := []struct {
 		name       string
 		repo       repository.CircuitRepository
-		fac        infraSvc.TransmitterFactory
+		fac        useSvc.MessagingServiceFactory
 		input      usecase.CloseStreamInput
 		expectsErr bool
 	}{
@@ -97,10 +96,10 @@ func TestCloseStreamInteractor_Handle(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(tx.ends) != 2 {
-			t.Fatalf("expected 2 SendEnd calls, got %d", len(tx.ends))
+			t.Fatalf("expected 2 TerminateStream calls, got %d", len(tx.ends))
 		}
 		if tx.ends[1].sid.UInt16() != 0 {
-			t.Errorf("second SendEnd should be control END")
+			t.Errorf("second TerminateStream should be control END")
 		}
 	})
 }

@@ -9,7 +9,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	"ikedadada/go-ptor/internal/infrastructure/service"
+	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 func startTestTCPServer(t *testing.T) (addr string, received chan []byte, closeFn func()) {
@@ -45,7 +45,7 @@ func startTestTCPServer(t *testing.T) (addr string, received chan []byte, closeF
 	return ln.Addr().String(), received, func() { close(stop); ln.Close() }
 }
 
-func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
+func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *testing.T) {
 	addr, received, closeFn := startTestTCPServer(t)
 	defer closeFn()
 
@@ -53,14 +53,14 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
 	}
-	tx := service.NewTCPTransmitter(conn)
+	tx := service.NewTCPCircuitMessagingService(conn)
 	cid := value_object.NewCircuitID()
 	sid := value_object.NewStreamIDAuto()
 	data := []byte("hello")
 
-	err = tx.SendData(cid, sid, data)
+	err = tx.TransmitData(cid, sid, data)
 	if err != nil {
-		t.Fatalf("SendData error: %v", err)
+		t.Fatalf("TransmitData error: %v", err)
 	}
 	select {
 	case msg := <-received:
@@ -93,12 +93,12 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 			t.Errorf("payload mismatch")
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for SendData")
+		t.Fatal("timeout waiting for TransmitData")
 	}
 
-	err = tx.SendBegin(cid, sid, data)
+	err = tx.InitiateStream(cid, sid, data)
 	if err != nil {
-		t.Fatalf("SendBegin error: %v", err)
+		t.Fatalf("InitiateStream error: %v", err)
 	}
 	select {
 	case msg := <-received:
@@ -113,12 +113,12 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 			t.Errorf("unexpected cmd %d", cell.Cmd)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for SendBegin")
+		t.Fatal("timeout waiting for InitiateStream")
 	}
 
-	err = tx.SendConnect(cid, []byte("target"))
+	err = tx.EstablishConnection(cid, []byte("target"))
 	if err != nil {
-		t.Fatalf("SendConnect error: %v", err)
+		t.Fatalf("EstablishConnection error: %v", err)
 	}
 	select {
 	case msg := <-received:
@@ -133,12 +133,12 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 			t.Errorf("expected CONNECT cmd, got %d", cell.Cmd)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for SendConnect")
+		t.Fatal("timeout waiting for EstablishConnection")
 	}
 
-	err = tx.SendEnd(cid, sid)
+	err = tx.TerminateStream(cid, sid)
 	if err != nil {
-		t.Fatalf("SendEnd error: %v", err)
+		t.Fatalf("TerminateStream error: %v", err)
 	}
 	select {
 	case msg := <-received:
@@ -153,12 +153,12 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 			t.Errorf("expected END cmd, got %d", cell.Cmd)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for SendEnd")
+		t.Fatal("timeout waiting for TerminateStream")
 	}
 
-	err = tx.SendDestroy(cid)
+	err = tx.DestroyCircuit(cid)
 	if err != nil {
-		t.Fatalf("SendDestroy error: %v", err)
+		t.Fatalf("DestroyCircuit error: %v", err)
 	}
 	select {
 	case msg := <-received:
@@ -173,22 +173,22 @@ func TestTCPTransmitter_SendData_SendEnd_realConn(t *testing.T) {
 			t.Errorf("expected DESTROY cmd, got %d", cell.Cmd)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for SendDestroy")
+		t.Fatal("timeout waiting for DestroyCircuit")
 	}
 }
 
-func TestTCPTransmitter_SendData_tooBig_realConn(t *testing.T) {
+func TestTCPCircuitMessagingService_TransmitData_tooBig_realConn(t *testing.T) {
 	addr, _, closeFn := startTestTCPServer(t)
 	defer closeFn()
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
 	}
-	tx := service.NewTCPTransmitter(conn)
+	tx := service.NewTCPCircuitMessagingService(conn)
 	cid := value_object.NewCircuitID()
 	sid := value_object.NewStreamIDAuto()
 	big := make([]byte, entity.MaxPayloadSize+1)
-	err = tx.SendData(cid, sid, big)
+	err = tx.TransmitData(cid, sid, big)
 	if err == nil || err.Error() != "data too big" {
 		t.Errorf("expected data too big error, got %v", err)
 	}

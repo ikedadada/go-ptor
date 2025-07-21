@@ -5,7 +5,6 @@ import (
 	"log"
 	"ikedadada/go-ptor/internal/domain/repository"
 	"ikedadada/go-ptor/internal/domain/value_object"
-	infraSvc "ikedadada/go-ptor/internal/infrastructure/service"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -29,12 +28,12 @@ type SendDataUseCase interface {
 
 type sendDataUseCaseImpl struct {
 	cr      repository.CircuitRepository
-	factory infraSvc.TransmitterFactory
+	factory useSvc.MessagingServiceFactory
 	crypto  useSvc.CryptoService
 }
 
 // NewSendDataUsecase returns a use case for sending data cells.
-func NewSendDataUsecase(cr repository.CircuitRepository, f infraSvc.TransmitterFactory, c useSvc.CryptoService) SendDataUseCase {
+func NewSendDataUsecase(cr repository.CircuitRepository, f useSvc.MessagingServiceFactory, c useSvc.CryptoService) SendDataUseCase {
 	return &sendDataUseCaseImpl{cr: cr, factory: f, crypto: c}
 }
 
@@ -97,11 +96,11 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	tx := uc.factory.New(cir.Conn(0))
 	switch cmd {
 	case value_object.CmdData:
-		if err := tx.SendData(cid, sid, enc); err != nil {
+		if err := tx.TransmitData(cid, sid, enc); err != nil {
 			return SendDataOutput{}, err
 		}
 	case value_object.CmdBegin:
-		if err := tx.SendBegin(cid, sid, enc); err != nil {
+		if err := tx.InitiateStream(cid, sid, enc); err != nil {
 			return SendDataOutput{}, err
 		}
 	default:

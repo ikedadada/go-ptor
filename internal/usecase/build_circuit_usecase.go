@@ -43,12 +43,12 @@ type BuildCircuitUseCase interface {
 type buildCircuitUseCaseImpl struct {
 	rr     repository.RelayRepository
 	cr     repository.CircuitRepository
-	dialer service.CircuitDialer
+	dialer service.CircuitBuildService
 	crypto service.CryptoService
 }
 
 // NewBuildCircuitUseCase creates a use case for building circuits.
-func NewBuildCircuitUseCase(rr repository.RelayRepository, cr repository.CircuitRepository, d service.CircuitDialer, c service.CryptoService) BuildCircuitUseCase {
+func NewBuildCircuitUseCase(rr repository.RelayRepository, cr repository.CircuitRepository, d service.CircuitBuildService, c service.CryptoService) BuildCircuitUseCase {
 	return &buildCircuitUseCaseImpl{rr: rr, cr: cr, dialer: d, crypto: c}
 }
 
@@ -166,7 +166,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 	}
 	dch := make(chan dialRes, 1)
 	go func() {
-		c, err := uc.dialer.Dial(selected[0].Endpoint().String())
+		c, err := uc.dialer.ConnectToRelay(selected[0].Endpoint().String())
 		dch <- dialRes{c: c, err: err}
 	}()
 	var conn net.Conn
@@ -187,7 +187,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 		}
 		cliPriv, cliPub, err := uc.crypto.X25519Generate()
 		if err != nil {
-			_ = uc.dialer.SendDestroy(conn, cid)
+			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
@@ -198,45 +198,45 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 			ClientPub: pubArr,
 		})
 		if err != nil {
-			_ = uc.dialer.SendDestroy(conn, cid)
+			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
 		streamID, _ := value_object.StreamIDFrom(0)
 		cell, err := aggregate.NewRelayCell(value_object.CmdExtend, cid, streamID, payload)
 		if err != nil {
-			_ = uc.dialer.SendDestroy(conn, cid)
+			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
 		_ = conn.SetDeadline(time.Now().Add(ioTimeout))
-		if err := uc.dialer.SendCell(conn, cell); err != nil {
-			_ = uc.dialer.SendDestroy(conn, cid)
+		if err := uc.dialer.SendExtendCell(conn, cell); err != nil {
+			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
-		resp, err := uc.dialer.WaitCreated(conn)
+		resp, err := uc.dialer.WaitForCreatedResponse(conn)
 		if err != nil {
-			_ = uc.dialer.SendDestroy(conn, cid)
+			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
 		_ = conn.SetDeadline(time.Time{})
 		created, err := value_object.DecodeCreatedPayload(resp)
 		if err != nil {
-			_ = uc.dialer.SendDestroy(conn, cid)
+			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
 		secret, err := uc.crypto.X25519Shared(cliPriv, created.RelayPub[:])
 		if err != nil {
-			_ = uc.dialer.SendDestroy(conn, cid)
+			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
 		key, nonce, err := uc.crypto.DeriveKeyNonce(secret)
 		if err != nil {
-			_ = uc.dialer.SendDestroy(conn, cid)
+			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
@@ -246,7 +246,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 
 	circuit, err := entity.NewCircuit(cid, relayIDs, keys, nonces, priv)
 	if err != nil {
-		_ = uc.dialer.SendDestroy(conn, cid)
+		_ = uc.dialer.TeardownCircuit(conn, cid)
 		conn.Close()
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 
 	// 5. 保存
 	if err := uc.cr.Save(circuit); err != nil {
-		_ = uc.dialer.SendDestroy(conn, cid)
+		_ = uc.dialer.TeardownCircuit(conn, cid)
 		conn.Close()
 		return nil, fmt.Errorf("save circuit: %w", err)
 	}

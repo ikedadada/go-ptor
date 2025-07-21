@@ -14,21 +14,21 @@ import (
 
 type recordTx struct{ data []byte }
 
-func (r *recordTx) SendData(c value_object.CircuitID, s value_object.StreamID, d []byte) error {
+func (r *recordTx) TransmitData(c value_object.CircuitID, s value_object.StreamID, d []byte) error {
 	r.data = d
 	return nil
 }
-func (r *recordTx) SendBegin(c value_object.CircuitID, s value_object.StreamID, d []byte) error {
+func (r *recordTx) InitiateStream(c value_object.CircuitID, s value_object.StreamID, d []byte) error {
 	r.data = d
 	return nil
 }
-func (r *recordTx) SendEnd(value_object.CircuitID, value_object.StreamID) error { return nil }
-func (r *recordTx) SendDestroy(value_object.CircuitID) error                    { return nil }
-func (r *recordTx) SendConnect(value_object.CircuitID, []byte) error            { return nil }
+func (r *recordTx) TerminateStream(value_object.CircuitID, value_object.StreamID) error { return nil }
+func (r *recordTx) DestroyCircuit(value_object.CircuitID) error                    { return nil }
+func (r *recordTx) EstablishConnection(value_object.CircuitID, []byte) error            { return nil }
 
 type recordFactory struct{ tx *recordTx }
 
-func (m recordFactory) New(net.Conn) service.CircuitTransmitter { return m.tx }
+func (m recordFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
 
 func TestSendData_OnionRoundTrip(t *testing.T) {
 	hops := 3
