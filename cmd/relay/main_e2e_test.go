@@ -4,14 +4,17 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"ikedadada/go-ptor/internal/domain/aggregate"
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/value_object"
+	"ikedadada/go-ptor/internal/usecase/service"
 
 	"github.com/google/uuid"
 )
@@ -82,5 +85,48 @@ func TestRelayMain_E2E(t *testing.T) {
 
 	if !strings.Contains(out.String(), cid.String()) {
 		t.Errorf("log missing cid: %s", out.String())
+	}
+}
+
+func TestDefaultTTLFromEnv(t *testing.T) {
+	os.Setenv("PTOR_TTL_SECONDS", "10")
+	defer os.Unsetenv("PTOR_TTL_SECONDS")
+	if got := defaultTTL(); got != 10*time.Second {
+		t.Fatalf("expected 10s, got %v", got)
+	}
+}
+
+// Additional tests from tcp_dialer_sendcell_test.go
+
+type recordConn struct {
+	bytes.Buffer
+}
+
+func (r *recordConn) Read(b []byte) (int, error)         { return r.Buffer.Read(b) }
+func (r *recordConn) Write(b []byte) (int, error)        { return r.Buffer.Write(b) }
+func (r *recordConn) Close() error                       { return nil }
+func (r *recordConn) LocalAddr() net.Addr                { return nil }
+func (r *recordConn) RemoteAddr() net.Addr               { return nil }
+func (r *recordConn) SetDeadline(t time.Time) error      { return nil }
+func (r *recordConn) SetReadDeadline(t time.Time) error  { return nil }
+func (r *recordConn) SetWriteDeadline(t time.Time) error { return nil }
+
+func TestSendCellWritesFixedPacket(t *testing.T) {
+	conn := &recordConn{}
+	d := service.NewTCPCircuitBuildService()
+	cid := value_object.NewCircuitID()
+	payload := []byte("hello")
+	streamID, _ := value_object.StreamIDFrom(0)
+	cell, err := aggregate.NewRelayCell(value_object.CmdExtend, cid, streamID, payload)
+	if err != nil {
+		t.Fatalf("NewRelayCell error: %v", err)
+	}
+
+	if err := d.SendExtendCell(conn, cell); err != nil {
+		t.Fatalf("SendExtendCell error: %v", err)
+	}
+
+	if conn.Len() != 16+entity.MaxCellSize {
+		t.Fatalf("expected %d bytes, got %d", 16+entity.MaxCellSize, conn.Len())
 	}
 }
