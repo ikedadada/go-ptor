@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
 )
 
@@ -31,7 +31,7 @@ func (m *mockHiddenServiceRepo) FindByAddressString(address string) (*entity.Hid
 	return nil, errors.New("hidden service not found")
 }
 
-func (m *mockHiddenServiceRepo) FindByAddress(addr value_object.HiddenAddr) (*entity.HiddenService, error) {
+func (m *mockHiddenServiceRepo) FindByAddress(addr vo.HiddenAddr) (*entity.HiddenService, error) {
 	return m.FindByAddressString(addr.String())
 }
 
@@ -55,11 +55,11 @@ func (m *mockHiddenServiceRepo) All() ([]*entity.HiddenService, error) {
 }
 
 type mockCircuitRepo struct {
-	circuits map[value_object.CircuitID]*entity.Circuit
+	circuits map[vo.CircuitID]*entity.Circuit
 	err      error
 }
 
-func (m *mockCircuitRepo) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (m *mockCircuitRepo) Find(id vo.CircuitID) (*entity.Circuit, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -71,13 +71,13 @@ func (m *mockCircuitRepo) Find(id value_object.CircuitID) (*entity.Circuit, erro
 
 func (m *mockCircuitRepo) Save(circuit *entity.Circuit) error {
 	if m.circuits == nil {
-		m.circuits = make(map[value_object.CircuitID]*entity.Circuit)
+		m.circuits = make(map[vo.CircuitID]*entity.Circuit)
 	}
 	m.circuits[circuit.ID()] = circuit
 	return m.err
 }
 
-func (m *mockCircuitRepo) Delete(id value_object.CircuitID) error {
+func (m *mockCircuitRepo) Delete(id vo.CircuitID) error {
 	if m.err != nil {
 		return m.err
 	}
@@ -142,8 +142,8 @@ func (m *mockCryptoService) ModifyNonceWithSequence(baseNonce [12]byte, sequence
 
 type mockCellReaderService struct{}
 
-func (m *mockCellReaderService) ReadCell(r io.Reader) (value_object.CircuitID, *entity.Cell, error) {
-	return value_object.NewCircuitID(), nil, errors.New("mock read cell")
+func (m *mockCellReaderService) ReadCell(r io.Reader) (vo.CircuitID, *entity.Cell, error) {
+	return vo.NewCircuitID(), nil, errors.New("mock read cell")
 }
 
 type mockStreamManagerService struct{}
@@ -415,7 +415,7 @@ func TestSOCKS5Controller_ResolveAddress_PortHandling(t *testing.T) {
 
 func TestSOCKS5Controller_ResolveAddress_HiddenService_Success(t *testing.T) {
 	// Create a test hidden service
-	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	relayID, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	
 	// Use deterministic key for consistent testing
 	testSeed := make([]byte, ed25519.SeedSize)
@@ -426,8 +426,8 @@ func TestSOCKS5Controller_ResolveAddress_HiddenService_Success(t *testing.T) {
 	pub := priv.Public().(ed25519.PublicKey)
 	
 	// Create hidden address and public key
-	hiddenAddr := value_object.NewHiddenAddr(pub)
-	pubKey := value_object.Ed25519PubKey{PublicKey: pub}
+	hiddenAddr := vo.NewHiddenAddr(pub)
+	pubKey := vo.Ed25519PubKey{PublicKey: pub}
 	
 	hiddenService := entity.NewHiddenService(hiddenAddr, relayID, pubKey)
 	

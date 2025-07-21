@@ -5,15 +5,15 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 func TestNewRelayCell_Success(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	testData := []byte("test payload")
 	
-	relayCell, err := NewRelayCell(value_object.CmdData, circuitID, streamID, testData)
+	relayCell, err := NewRelayCell(vo.CmdData, circuitID, streamID, testData)
 	if err != nil {
 		t.Fatalf("NewRelayCell failed: %v", err)
 	}
@@ -33,8 +33,8 @@ func TestNewRelayCell_Success(t *testing.T) {
 	}
 	
 	// Verify command
-	if relayCell.Command() != value_object.CmdData {
-		t.Errorf("Command mismatch. Expected: %d, Got: %d", value_object.CmdData, relayCell.Command())
+	if relayCell.Command() != vo.CmdData {
+		t.Errorf("Command mismatch. Expected: %d, Got: %d", vo.CmdData, relayCell.Command())
 	}
 	
 	// Verify data
@@ -50,13 +50,13 @@ func TestNewRelayCell_Success(t *testing.T) {
 }
 
 func TestNewRelayCell_DataTooLarge(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	
 	// Create data larger than MaxPayloadSize
 	largeData := make([]byte, entity.MaxPayloadSize+1)
 	
-	_, err := NewRelayCell(value_object.CmdData, circuitID, streamID, largeData)
+	_, err := NewRelayCell(vo.CmdData, circuitID, streamID, largeData)
 	if err == nil {
 		t.Error("Expected NewRelayCell to fail with data too large")
 	}
@@ -68,10 +68,10 @@ func TestNewRelayCell_DataTooLarge(t *testing.T) {
 }
 
 func TestNewRelayCell_EmptyData(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	
-	relayCell, err := NewRelayCell(value_object.CmdConnect, circuitID, streamID, []byte{})
+	relayCell, err := NewRelayCell(vo.CmdConnect, circuitID, streamID, []byte{})
 	if err != nil {
 		t.Fatalf("NewRelayCell with empty data failed: %v", err)
 	}
@@ -82,11 +82,11 @@ func TestNewRelayCell_EmptyData(t *testing.T) {
 }
 
 func TestRelayCell_DataImmutability(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	originalData := []byte("original data")
 	
-	relayCell, err := NewRelayCell(value_object.CmdData, circuitID, streamID, originalData)
+	relayCell, err := NewRelayCell(vo.CmdData, circuitID, streamID, originalData)
 	if err != nil {
 		t.Fatalf("NewRelayCell failed: %v", err)
 	}
@@ -103,19 +103,19 @@ func TestRelayCell_DataImmutability(t *testing.T) {
 }
 
 func TestRelayCell_IsDataCell(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	
 	tests := []struct {
 		name     string
-		cmd      value_object.CellCommand
+		cmd      vo.CellCommand
 		expected bool
 	}{
-		{"Data cell", value_object.CmdData, true},
-		{"Begin cell", value_object.CmdBegin, false},
-		{"End cell", value_object.CmdEnd, false},
-		{"Connect cell", value_object.CmdConnect, false},
-		{"Extend cell", value_object.CmdExtend, false},
+		{"Data cell", vo.CmdData, true},
+		{"Begin cell", vo.CmdBegin, false},
+		{"End cell", vo.CmdEnd, false},
+		{"Connect cell", vo.CmdConnect, false},
+		{"Extend cell", vo.CmdExtend, false},
 	}
 	
 	for _, tt := range tests {
@@ -133,22 +133,22 @@ func TestRelayCell_IsDataCell(t *testing.T) {
 }
 
 func TestRelayCell_IsControlCell(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	
 	tests := []struct {
 		name     string
-		cmd      value_object.CellCommand
+		cmd      vo.CellCommand
 		expected bool
 	}{
-		{"Begin cell", value_object.CmdBegin, true},
-		{"End cell", value_object.CmdEnd, true},
-		{"Connect cell", value_object.CmdConnect, true},
-		{"Extend cell", value_object.CmdExtend, true},
-		{"Destroy cell", value_object.CmdDestroy, true},
-		{"Created cell", value_object.CmdCreated, true},
-		{"BeginAck cell", value_object.CmdBeginAck, true},
-		{"Data cell", value_object.CmdData, false},
+		{"Begin cell", vo.CmdBegin, true},
+		{"End cell", vo.CmdEnd, true},
+		{"Connect cell", vo.CmdConnect, true},
+		{"Extend cell", vo.CmdExtend, true},
+		{"Destroy cell", vo.CmdDestroy, true},
+		{"Created cell", vo.CmdCreated, true},
+		{"BeginAck cell", vo.CmdBeginAck, true},
+		{"Data cell", vo.CmdData, false},
 	}
 	
 	for _, tt := range tests {
@@ -166,10 +166,10 @@ func TestRelayCell_IsControlCell(t *testing.T) {
 }
 
 func TestRelayCell_EndMarking(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	
-	relayCell, err := NewRelayCell(value_object.CmdData, circuitID, streamID, []byte("test"))
+	relayCell, err := NewRelayCell(vo.CmdData, circuitID, streamID, []byte("test"))
 	if err != nil {
 		t.Fatalf("NewRelayCell failed: %v", err)
 	}
@@ -189,10 +189,10 @@ func TestRelayCell_EndMarking(t *testing.T) {
 }
 
 func TestRelayCell_ValidateForCircuit_Success(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	
-	relayCell, err := NewRelayCell(value_object.CmdData, circuitID, streamID, []byte("test"))
+	relayCell, err := NewRelayCell(vo.CmdData, circuitID, streamID, []byte("test"))
 	if err != nil {
 		t.Fatalf("NewRelayCell failed: %v", err)
 	}
@@ -205,11 +205,11 @@ func TestRelayCell_ValidateForCircuit_Success(t *testing.T) {
 }
 
 func TestRelayCell_ValidateForCircuit_Mismatch(t *testing.T) {
-	circuitID1 := value_object.NewCircuitID()
-	circuitID2 := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID1 := vo.NewCircuitID()
+	circuitID2 := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	
-	relayCell, err := NewRelayCell(value_object.CmdData, circuitID1, streamID, []byte("test"))
+	relayCell, err := NewRelayCell(vo.CmdData, circuitID1, streamID, []byte("test"))
 	if err != nil {
 		t.Fatalf("NewRelayCell failed: %v", err)
 	}
@@ -227,11 +227,11 @@ func TestRelayCell_ValidateForCircuit_Mismatch(t *testing.T) {
 }
 
 func TestRelayCell_Encode(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	testData := []byte("test payload for encoding")
 	
-	relayCell, err := NewRelayCell(value_object.CmdData, circuitID, streamID, testData)
+	relayCell, err := NewRelayCell(vo.CmdData, circuitID, streamID, testData)
 	if err != nil {
 		t.Fatalf("NewRelayCell failed: %v", err)
 	}
@@ -252,11 +252,11 @@ func TestRelayCell_Encode(t *testing.T) {
 }
 
 func TestRelayCell_Cell(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	testData := []byte("test payload")
 	
-	relayCell, err := NewRelayCell(value_object.CmdExtend, circuitID, streamID, testData)
+	relayCell, err := NewRelayCell(vo.CmdExtend, circuitID, streamID, testData)
 	if err != nil {
 		t.Fatalf("NewRelayCell failed: %v", err)
 	}
@@ -264,12 +264,12 @@ func TestRelayCell_Cell(t *testing.T) {
 	cell := relayCell.Cell()
 	
 	// Verify the underlying cell properties
-	if cell.Cmd != value_object.CmdExtend {
-		t.Errorf("Cell command mismatch. Expected: %d, Got: %d", value_object.CmdExtend, cell.Cmd)
+	if cell.Cmd != vo.CmdExtend {
+		t.Errorf("Cell command mismatch. Expected: %d, Got: %d", vo.CmdExtend, cell.Cmd)
 	}
 	
-	if cell.Version != value_object.ProtocolV1 {
-		t.Errorf("Cell version mismatch. Expected: %d, Got: %d", value_object.ProtocolV1, cell.Version)
+	if cell.Version != vo.ProtocolV1 {
+		t.Errorf("Cell version mismatch. Expected: %d, Got: %d", vo.ProtocolV1, cell.Version)
 	}
 	
 	if string(cell.Payload) != string(testData) {
@@ -278,18 +278,18 @@ func TestRelayCell_Cell(t *testing.T) {
 }
 
 func TestRelayCell_DifferentCommands(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	
-	commands := []value_object.CellCommand{
-		value_object.CmdData,
-		value_object.CmdBegin,
-		value_object.CmdEnd,
-		value_object.CmdConnect,
-		value_object.CmdExtend,
-		value_object.CmdDestroy,
-		value_object.CmdCreated,
-		value_object.CmdBeginAck,
+	commands := []vo.CellCommand{
+		vo.CmdData,
+		vo.CmdBegin,
+		vo.CmdEnd,
+		vo.CmdConnect,
+		vo.CmdExtend,
+		vo.CmdDestroy,
+		vo.CmdCreated,
+		vo.CmdBeginAck,
 	}
 	
 	for _, cmd := range commands {
@@ -307,8 +307,8 @@ func TestRelayCell_DifferentCommands(t *testing.T) {
 }
 
 func TestRelayCell_MaxPayloadBoundary(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(1)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(1)
 	
 	// Test with exactly MaxPayloadSize
 	maxData := make([]byte, entity.MaxPayloadSize)
@@ -316,7 +316,7 @@ func TestRelayCell_MaxPayloadBoundary(t *testing.T) {
 		maxData[i] = byte(i % 256)
 	}
 	
-	relayCell, err := NewRelayCell(value_object.CmdData, circuitID, streamID, maxData)
+	relayCell, err := NewRelayCell(vo.CmdData, circuitID, streamID, maxData)
 	if err != nil {
 		t.Fatalf("NewRelayCell should succeed with exactly MaxPayloadSize: %v", err)
 	}
@@ -336,10 +336,10 @@ func TestRelayCell_MaxPayloadBoundary(t *testing.T) {
 }
 
 func TestRelayCell_ZeroStreamID(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(0)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(0)
 	
-	relayCell, err := NewRelayCell(value_object.CmdConnect, circuitID, streamID, []byte("control message"))
+	relayCell, err := NewRelayCell(vo.CmdConnect, circuitID, streamID, []byte("control message"))
 	if err != nil {
 		t.Fatalf("NewRelayCell with zero stream ID failed: %v", err)
 	}
@@ -350,12 +350,12 @@ func TestRelayCell_ZeroStreamID(t *testing.T) {
 }
 
 func TestRelayCell_EncodeDecodeRoundTrip(t *testing.T) {
-	circuitID := value_object.NewCircuitID()
-	streamID, _ := value_object.StreamIDFrom(42)
+	circuitID := vo.NewCircuitID()
+	streamID, _ := vo.StreamIDFrom(42)
 	originalData := []byte("round trip test data")
 	
 	// Create original relay cell
-	originalCell, err := NewRelayCell(value_object.CmdData, circuitID, streamID, originalData)
+	originalCell, err := NewRelayCell(vo.CmdData, circuitID, streamID, originalData)
 	if err != nil {
 		t.Fatalf("NewRelayCell failed: %v", err)
 	}
@@ -377,8 +377,8 @@ func TestRelayCell_EncodeDecodeRoundTrip(t *testing.T) {
 		t.Errorf("Command mismatch after round trip. Expected: %d, Got: %d", originalCell.Command(), decodedCell.Cmd)
 	}
 	
-	if decodedCell.Version != value_object.ProtocolV1 {
-		t.Errorf("Version mismatch after round trip. Expected: %d, Got: %d", value_object.ProtocolV1, decodedCell.Version)
+	if decodedCell.Version != vo.ProtocolV1 {
+		t.Errorf("Version mismatch after round trip. Expected: %d, Got: %d", vo.ProtocolV1, decodedCell.Version)
 	}
 	
 	if string(decodedCell.Payload) != string(originalData) {

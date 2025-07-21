@@ -3,7 +3,7 @@ package aggregate
 import (
 	"fmt"
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 // RelayCell is an aggregate that combines low-level protocol cells
@@ -13,8 +13,8 @@ type RelayCell struct {
 	cell entity.Cell
 	
 	// High-level identifiers
-	circuitID value_object.CircuitID
-	streamID  value_object.StreamID
+	circuitID vo.CircuitID
+	streamID  vo.StreamID
 	
 	// Relay-specific state
 	end bool
@@ -22,9 +22,9 @@ type RelayCell struct {
 
 // NewRelayCell creates a new relay cell aggregate
 func NewRelayCell(
-	cmd value_object.CellCommand,
-	circuitID value_object.CircuitID,
-	streamID value_object.StreamID,
+	cmd vo.CellCommand,
+	circuitID vo.CircuitID,
+	streamID vo.StreamID,
 	data []byte,
 ) (*RelayCell, error) {
 	if len(data) > entity.MaxPayloadSize {
@@ -33,7 +33,7 @@ func NewRelayCell(
 	
 	cell := entity.Cell{
 		Cmd:     cmd,
-		Version: value_object.ProtocolV1,
+		Version: vo.ProtocolV1,
 		Payload: data,
 	}
 	
@@ -51,12 +51,12 @@ func (rc *RelayCell) Cell() entity.Cell {
 }
 
 // CircuitID returns the circuit identifier
-func (rc *RelayCell) CircuitID() value_object.CircuitID {
+func (rc *RelayCell) CircuitID() vo.CircuitID {
 	return rc.circuitID
 }
 
 // StreamID returns the stream identifier
-func (rc *RelayCell) StreamID() value_object.StreamID {
+func (rc *RelayCell) StreamID() vo.StreamID {
 	return rc.streamID
 }
 
@@ -79,7 +79,7 @@ func (rc *RelayCell) MarkEnd() {
 }
 
 // Command returns the cell command
-func (rc *RelayCell) Command() value_object.CellCommand {
+func (rc *RelayCell) Command() vo.CellCommand {
 	return rc.cell.Cmd
 }
 
@@ -90,15 +90,15 @@ func (rc *RelayCell) Encode() ([]byte, error) {
 
 // IsDataCell returns true if this is a data-carrying cell
 func (rc *RelayCell) IsDataCell() bool {
-	return rc.cell.Cmd == value_object.CmdData
+	return rc.cell.Cmd == vo.CmdData
 }
 
 // IsControlCell returns true if this is a control cell
 func (rc *RelayCell) IsControlCell() bool {
 	switch rc.cell.Cmd {
-	case value_object.CmdBegin, value_object.CmdEnd, value_object.CmdConnect, 
-		 value_object.CmdExtend, value_object.CmdDestroy, value_object.CmdCreated, 
-		 value_object.CmdBeginAck:
+	case vo.CmdBegin, vo.CmdEnd, vo.CmdConnect, 
+		 vo.CmdExtend, vo.CmdDestroy, vo.CmdCreated, 
+		 vo.CmdBeginAck:
 		return true
 	default:
 		return false
@@ -106,7 +106,7 @@ func (rc *RelayCell) IsControlCell() bool {
 }
 
 // ValidateForCircuit validates that this cell is appropriate for the given circuit
-func (rc *RelayCell) ValidateForCircuit(expectedCircuitID value_object.CircuitID) error {
+func (rc *RelayCell) ValidateForCircuit(expectedCircuitID vo.CircuitID) error {
 	if rc.circuitID != expectedCircuitID {
 		return fmt.Errorf("circuit ID mismatch: expected %s, got %s", 
 			expectedCircuitID.String(), rc.circuitID.String())
