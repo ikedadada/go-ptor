@@ -25,6 +25,20 @@ The separation keeps business rules isolated from entry points and infrastructur
    go mod download
    ```
 
+## Development
+
+This project uses [Lefthook](https://github.com/evilmartians/lefthook) to run
+formatting and tests automatically. After cloning, install Lefthook and set up
+the Git hooks:
+
+```bash
+go install github.com/evilmartians/lefthook@latest
+lefthook install
+```
+
+The pre-commit hook formats staged Go files with `gofmt`, and the pre-push hook
+runs `go test ./...`.
+
 ## Usage
 
 Each entry in `cmd/` is a standalone binary. You can run them directly with `go run` or build them using `go build`.
