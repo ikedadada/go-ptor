@@ -8,23 +8,23 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 type mockRepoDestroy struct {
 	err    error
-	del    value_object.CircuitID
+	del    vo.CircuitID
 	circ   *entity.Circuit
 	events *[]string
 }
 
-func (m *mockRepoDestroy) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (m *mockRepoDestroy) Find(id vo.CircuitID) (*entity.Circuit, error) {
 	return m.circ, nil
 }
 func (m *mockRepoDestroy) Save(*entity.Circuit) error { return nil }
-func (m *mockRepoDestroy) Delete(id value_object.CircuitID) error {
+func (m *mockRepoDestroy) Delete(id vo.CircuitID) error {
 	m.del = id
 	if m.events != nil {
 		*m.events = append(*m.events, "delete")
@@ -35,41 +35,43 @@ func (m *mockRepoDestroy) ListActive() ([]*entity.Circuit, error) { return nil, 
 
 type mockTxDestroy struct {
 	err     error
-	destroy value_object.CircuitID
-	ends    []value_object.StreamID
+	destroy vo.CircuitID
+	ends    []vo.StreamID
 	events  *[]string
 }
 
-func (m *mockTxDestroy) TransmitData(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTxDestroy) TransmitData(vo.CircuitID, vo.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTxDestroy) InitiateStream(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTxDestroy) InitiateStream(vo.CircuitID, vo.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTxDestroy) TerminateStream(_ value_object.CircuitID, s value_object.StreamID) error {
+func (m *mockTxDestroy) TerminateStream(_ vo.CircuitID, s vo.StreamID) error {
 	m.ends = append(m.ends, s)
 	return nil
 }
-func (m *mockTxDestroy) DestroyCircuit(c value_object.CircuitID) error {
+func (m *mockTxDestroy) DestroyCircuit(c vo.CircuitID) error {
 	if m.events != nil {
 		*m.events = append(*m.events, "destroy")
 	}
 	m.destroy = c
 	return m.err
 }
-func (m *mockTxDestroy) EstablishConnection(value_object.CircuitID, []byte) error { return nil }
+func (m *mockTxDestroy) EstablishConnection(vo.CircuitID, []byte) error { return nil }
 
-type destroyFactory struct{ tx service.CircuitMessagingService }
+type destroyFactory struct {
+	tx service.CircuitMessagingService
+}
 
 func (m destroyFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
 
 func makeCircuitForDestroy() (*entity.Circuit, error) {
-	id := value_object.NewCircuitID()
-	rid, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	key, _ := value_object.NewAESKey()
-	nonce, _ := value_object.NewNonce()
+	id := vo.NewCircuitID()
+	rid, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	c, err := entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
+	c, err := entity.NewCircuit(id, []vo.RelayID{rid}, []vo.AESKey{key}, []vo.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +123,7 @@ func TestDestroyCircuitUsecase(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected error")
 		}
-		if repo.del != (value_object.CircuitID{}) {
+		if repo.del != (vo.CircuitID{}) {
 			t.Errorf("delete should not be called on tx error")
 		}
 	})

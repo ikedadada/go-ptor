@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 func TestStreamTable_AddGetRemove(t *testing.T) {
 	tbl := entity.NewStreamTable()
-	id := value_object.NewStreamIDAuto()
+	id := vo.NewStreamIDAuto()
 	c1, c2 := net.Pipe()
 	defer c2.Close()
 
@@ -34,8 +34,8 @@ func TestStreamTable_AddGetRemove(t *testing.T) {
 
 func TestStreamTable_DestroyAll(t *testing.T) {
 	tbl := entity.NewStreamTable()
-	id1 := value_object.NewStreamIDAuto()
-	id2 := value_object.NewStreamIDAuto()
+	id1 := vo.NewStreamIDAuto()
+	id2 := vo.NewStreamIDAuto()
 	c1, _ := net.Pipe()
 	c2, _ := net.Pipe()
 

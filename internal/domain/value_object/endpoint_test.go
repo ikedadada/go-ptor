@@ -1,7 +1,7 @@
 package value_object_test
 
 import (
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"testing"
 )
 
@@ -18,7 +18,7 @@ func TestEndpoint_Table(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := value_object.NewEndpoint(tt.host, tt.port)
+			_, err := vo.NewEndpoint(tt.host, tt.port)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error for host %s port %d", tt.host, tt.port)
 			}

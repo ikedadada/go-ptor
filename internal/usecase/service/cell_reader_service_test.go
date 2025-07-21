@@ -5,14 +5,14 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
 
 func TestReadCell(t *testing.T) {
 	pcr := service.NewCellReaderService()
-	cid := value_object.NewCircuitID()
-	cellBuf, err := entity.Encode(entity.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: []byte("hi")})
+	cid := vo.NewCircuitID()
+	cellBuf, err := entity.Encode(entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: []byte("hi")})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -24,7 +24,7 @@ func TestReadCell(t *testing.T) {
 	if !cid.Equal(gotCID) {
 		t.Fatalf("cid mismatch")
 	}
-	if gotCell.Cmd != value_object.CmdData || string(gotCell.Payload) != "hi" {
+	if gotCell.Cmd != vo.CmdData || string(gotCell.Payload) != "hi" {
 		t.Fatalf("cell mismatch")
 	}
 }

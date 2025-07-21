@@ -4,7 +4,7 @@ import (
 	"net"
 	"sync"
 
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/infrastructure/util"
 )
 
@@ -15,14 +15,14 @@ var (
 
 type StreamTable struct {
 	mu sync.RWMutex
-	m  map[value_object.StreamID]net.Conn
+	m  map[vo.StreamID]net.Conn
 }
 
 func NewStreamTable() *StreamTable {
-	return &StreamTable{m: make(map[value_object.StreamID]net.Conn)}
+	return &StreamTable{m: make(map[vo.StreamID]net.Conn)}
 }
 
-func (t *StreamTable) Add(id value_object.StreamID, c net.Conn) error {
+func (t *StreamTable) Add(id vo.StreamID, c net.Conn) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if _, ok := t.m[id]; ok {
@@ -32,7 +32,7 @@ func (t *StreamTable) Add(id value_object.StreamID, c net.Conn) error {
 	return nil
 }
 
-func (t *StreamTable) Get(id value_object.StreamID) (net.Conn, error) {
+func (t *StreamTable) Get(id vo.StreamID) (net.Conn, error) {
 	t.mu.RLock()
 	c, ok := t.m[id]
 	t.mu.RUnlock()
@@ -42,7 +42,7 @@ func (t *StreamTable) Get(id value_object.StreamID) (net.Conn, error) {
 	return c, nil
 }
 
-func (t *StreamTable) Remove(id value_object.StreamID) error {
+func (t *StreamTable) Remove(id vo.StreamID) error {
 	t.mu.Lock()
 	c, ok := t.m[id]
 	if !ok {

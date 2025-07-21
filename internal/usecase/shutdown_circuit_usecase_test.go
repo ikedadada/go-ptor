@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
@@ -17,14 +17,14 @@ type mockCircuitRepoShutdown struct {
 	circuit   *entity.Circuit
 	findErr   error
 	deleteErr error
-	deleted   value_object.CircuitID
+	deleted   vo.CircuitID
 }
 
-func (m *mockCircuitRepoShutdown) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (m *mockCircuitRepoShutdown) Find(id vo.CircuitID) (*entity.Circuit, error) {
 	return m.circuit, m.findErr
 }
 func (m *mockCircuitRepoShutdown) Save(*entity.Circuit) error { return nil }
-func (m *mockCircuitRepoShutdown) Delete(id value_object.CircuitID) error {
+func (m *mockCircuitRepoShutdown) Delete(id vo.CircuitID) error {
 	m.deleted = id
 	return m.deleteErr
 }
@@ -32,45 +32,47 @@ func (m *mockCircuitRepoShutdown) ListActive() ([]*entity.Circuit, error) { retu
 
 type mockTransmitterShutdown struct {
 	endCalls []struct {
-		cid value_object.CircuitID
-		sid value_object.StreamID
+		cid vo.CircuitID
+		sid vo.StreamID
 	}
 }
 
-func (m *mockTransmitterShutdown) TerminateStream(c value_object.CircuitID, s value_object.StreamID) error {
+func (m *mockTransmitterShutdown) TerminateStream(c vo.CircuitID, s vo.StreamID) error {
 	m.endCalls = append(m.endCalls, struct {
-		cid value_object.CircuitID
-		sid value_object.StreamID
+		cid vo.CircuitID
+		sid vo.StreamID
 	}{c, s})
 	return nil
 }
-func (m *mockTransmitterShutdown) InitiateStream(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTransmitterShutdown) InitiateStream(vo.CircuitID, vo.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTransmitterShutdown) TransmitData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+func (m *mockTransmitterShutdown) TransmitData(c vo.CircuitID, s vo.StreamID, data []byte) error {
 	return nil
 }
-func (m *mockTransmitterShutdown) DestroyCircuit(value_object.CircuitID) error         { return nil }
-func (m *mockTransmitterShutdown) EstablishConnection(value_object.CircuitID, []byte) error { return nil }
+func (m *mockTransmitterShutdown) DestroyCircuit(vo.CircuitID) error              { return nil }
+func (m *mockTransmitterShutdown) EstablishConnection(vo.CircuitID, []byte) error { return nil }
 
-type shutdownFactory struct{ tx service.CircuitMessagingService }
+type shutdownFactory struct {
+	tx service.CircuitMessagingService
+}
 
 func (m shutdownFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
 
 func makeTestCircuitShutdown() (*entity.Circuit, error) {
-	id, err := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
+	id, err := vo.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		return nil, err
 	}
-	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	relayID, err := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		return nil, err
 	}
-	key, err := value_object.NewAESKey()
+	key, err := vo.NewAESKey()
 	if err != nil {
 		return nil, err
 	}
-	nonce, err := value_object.NewNonce()
+	nonce, err := vo.NewNonce()
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +80,7 @@ func makeTestCircuitShutdown() (*entity.Circuit, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
+	c, err := entity.NewCircuit(id, []vo.RelayID{relayID}, []vo.AESKey{key}, []vo.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, err
 	}

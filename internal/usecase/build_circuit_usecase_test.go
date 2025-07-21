@@ -11,7 +11,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/aggregate"
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
@@ -25,7 +25,7 @@ type mockRelayRepo struct {
 func (m *mockRelayRepo) AllOnline() ([]*entity.Relay, error) {
 	return m.online, m.err
 }
-func (m *mockRelayRepo) FindByID(id value_object.RelayID) (*entity.Relay, error) {
+func (m *mockRelayRepo) FindByID(id vo.RelayID) (*entity.Relay, error) {
 	if m.findByIDRelay != nil && m.findByIDRelay.ID().Equal(id) {
 		return m.findByIDRelay, m.err
 	}
@@ -47,9 +47,9 @@ func (m *mockCircuitRepo) Save(c *entity.Circuit) error {
 	m.saved = c
 	return m.err
 }
-func (m *mockCircuitRepo) Find(_ value_object.CircuitID) (*entity.Circuit, error) { return nil, nil }
-func (m *mockCircuitRepo) Delete(_ value_object.CircuitID) error                  { return nil }
-func (m *mockCircuitRepo) ListActive() ([]*entity.Circuit, error)                 { return nil, nil }
+func (m *mockCircuitRepo) Find(_ vo.CircuitID) (*entity.Circuit, error) { return nil, nil }
+func (m *mockCircuitRepo) Delete(_ vo.CircuitID) error                  { return nil }
+func (m *mockCircuitRepo) ListActive() ([]*entity.Circuit, error)       { return nil, nil }
 
 type mockDialer struct {
 	dialCalled    int
@@ -71,10 +71,10 @@ func (m *mockDialer) WaitForCreatedResponse(net.Conn) ([]byte, error) {
 	kp, _ := ecdh.X25519().GenerateKey(rand.Reader)
 	var pub [32]byte
 	copy(pub[:], kp.PublicKey().Bytes())
-	b, _ := value_object.EncodeCreatedPayload(&value_object.CreatedPayload{RelayPub: pub})
+	b, _ := vo.EncodeCreatedPayload(&vo.CreatedPayload{RelayPub: pub})
 	return b, nil
 }
-func (m *mockDialer) TeardownCircuit(net.Conn, value_object.CircuitID) error {
+func (m *mockDialer) TeardownCircuit(net.Conn, vo.CircuitID) error {
 	m.destroyCalled++
 	return nil
 }
@@ -91,12 +91,12 @@ func (dummyConn) SetReadDeadline(time.Time) error  { return nil }
 func (dummyConn) SetWriteDeadline(time.Time) error { return nil }
 
 func makeTestRelay(id string) (*entity.Relay, error) {
-	relayID, err := value_object.NewRelayID(id)
+	relayID, err := vo.NewRelayID(id)
 	if err != nil {
 		return nil, err
 	}
-	endpoint, _ := value_object.NewEndpoint("127.0.0.1", 9000)
-	pubKey := value_object.RSAPubKey{} // Use a zero-value or mock key for testing
+	endpoint, _ := vo.NewEndpoint("127.0.0.1", 9000)
+	pubKey := vo.RSAPubKey{} // Use a zero-value or mock key for testing
 	relay := entity.NewRelay(relayID, endpoint, pubKey)
 	relay.SetOnline() // Ensure the relay is marked as online
 	return relay, nil

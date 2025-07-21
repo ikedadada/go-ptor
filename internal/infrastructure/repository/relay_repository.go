@@ -9,7 +9,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/infrastructure/http"
 )
 
@@ -37,7 +37,7 @@ func NewRelayRepository(httpClient http.HTTPClient, directoryURL string) (reposi
 
 	for _, r := range rs {
 		// Validate and construct RelayID
-		rid, err := value_object.NewRelayID(r.ID)
+		rid, err := vo.NewRelayID(r.ID)
 		if err != nil {
 			return nil, fmt.Errorf("invalid relay id %q: %w", r.ID, err)
 		}
@@ -54,13 +54,13 @@ func NewRelayRepository(httpClient http.HTTPClient, directoryURL string) (reposi
 		}
 
 		// Construct endpoint value object
-		ep, err := value_object.NewEndpoint(host, uint16(port))
+		ep, err := vo.NewEndpoint(host, uint16(port))
 		if err != nil {
 			return nil, fmt.Errorf("new endpoint: %w", err)
 		}
 
 		// Parse public key
-		pk, err := value_object.RSAPubKeyFromPEM([]byte(r.PubKey))
+		pk, err := vo.RSAPubKeyFromPEM([]byte(r.PubKey))
 		if err != nil {
 			return nil, fmt.Errorf("parse pubkey: %w", err)
 		}
@@ -93,7 +93,7 @@ func (r *relayRepositoryImpl) Save(rel *entity.Relay) error {
 	return nil
 }
 
-func (r *relayRepositoryImpl) FindByID(id value_object.RelayID) (*entity.Relay, error) {
+func (r *relayRepositoryImpl) FindByID(id vo.RelayID) (*entity.Relay, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, rel := range r.s {

@@ -7,30 +7,30 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
 )
 
 type mockRepoEnd struct {
 	cir   *entity.Circuit
 	find  error
-	delID value_object.CircuitID
+	delID vo.CircuitID
 }
 
-func (m *mockRepoEnd) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (m *mockRepoEnd) Find(id vo.CircuitID) (*entity.Circuit, error) {
 	return m.cir, m.find
 }
 func (m *mockRepoEnd) Save(*entity.Circuit) error             { return nil }
-func (m *mockRepoEnd) Delete(id value_object.CircuitID) error { m.delID = id; return nil }
+func (m *mockRepoEnd) Delete(id vo.CircuitID) error           { m.delID = id; return nil }
 func (m *mockRepoEnd) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
-func makeCircuitForEnd() (*entity.Circuit, value_object.StreamID, error) {
-	id := value_object.NewCircuitID()
-	rid, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	key, _ := value_object.NewAESKey()
-	nonce, _ := value_object.NewNonce()
+func makeCircuitForEnd() (*entity.Circuit, vo.StreamID, error) {
+	id := vo.NewCircuitID()
+	rid, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	cir, err := entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
+	cir, err := entity.NewCircuit(id, []vo.RelayID{rid}, []vo.AESKey{key}, []vo.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, 0, err
 	}

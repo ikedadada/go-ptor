@@ -7,7 +7,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
@@ -17,38 +17,40 @@ type mockCircuitRepoClose struct {
 	err     error
 }
 
-func (m *mockCircuitRepoClose) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (m *mockCircuitRepoClose) Find(id vo.CircuitID) (*entity.Circuit, error) {
 	return m.circuit, m.err
 }
 func (m *mockCircuitRepoClose) Save(*entity.Circuit) error             { return nil }
-func (m *mockCircuitRepoClose) Delete(value_object.CircuitID) error    { return nil }
+func (m *mockCircuitRepoClose) Delete(vo.CircuitID) error              { return nil }
 func (m *mockCircuitRepoClose) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
 type mockTransmitterClose struct {
 	err  error
 	ends []struct {
-		cid value_object.CircuitID
-		sid value_object.StreamID
+		cid vo.CircuitID
+		sid vo.StreamID
 	}
 }
 
-func (m *mockTransmitterClose) TerminateStream(c value_object.CircuitID, s value_object.StreamID) error {
+func (m *mockTransmitterClose) TerminateStream(c vo.CircuitID, s vo.StreamID) error {
 	m.ends = append(m.ends, struct {
-		cid value_object.CircuitID
-		sid value_object.StreamID
+		cid vo.CircuitID
+		sid vo.StreamID
 	}{c, s})
 	return m.err
 }
-func (m *mockTransmitterClose) InitiateStream(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTransmitterClose) InitiateStream(vo.CircuitID, vo.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTransmitterClose) TransmitData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+func (m *mockTransmitterClose) TransmitData(c vo.CircuitID, s vo.StreamID, data []byte) error {
 	return nil
 }
-func (m *mockTransmitterClose) DestroyCircuit(value_object.CircuitID) error         { return nil }
-func (m *mockTransmitterClose) EstablishConnection(value_object.CircuitID, []byte) error { return nil }
+func (m *mockTransmitterClose) DestroyCircuit(vo.CircuitID) error              { return nil }
+func (m *mockTransmitterClose) EstablishConnection(vo.CircuitID, []byte) error { return nil }
 
-type closeFactory struct{ tx useSvc.CircuitMessagingService }
+type closeFactory struct {
+	tx useSvc.CircuitMessagingService
+}
 
 func (m closeFactory) New(net.Conn) useSvc.CircuitMessagingService { return m.tx }
 

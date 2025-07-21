@@ -5,16 +5,16 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 type circuitRepository struct {
 	mu sync.RWMutex
-	m  map[value_object.CircuitID]*entity.Circuit
+	m  map[vo.CircuitID]*entity.Circuit
 }
 
 func NewCircuitRepository() repository.CircuitRepository {
-	return &circuitRepository{m: make(map[value_object.CircuitID]*entity.Circuit)}
+	return &circuitRepository{m: make(map[vo.CircuitID]*entity.Circuit)}
 }
 
 func (r *circuitRepository) Save(c *entity.Circuit) error {
@@ -23,7 +23,7 @@ func (r *circuitRepository) Save(c *entity.Circuit) error {
 	r.m[c.ID()] = c
 	return nil
 }
-func (r *circuitRepository) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (r *circuitRepository) Find(id vo.CircuitID) (*entity.Circuit, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	c, ok := r.m[id]
@@ -32,7 +32,7 @@ func (r *circuitRepository) Find(id value_object.CircuitID) (*entity.Circuit, er
 	}
 	return c, nil
 }
-func (r *circuitRepository) Delete(id value_object.CircuitID) error {
+func (r *circuitRepository) Delete(id vo.CircuitID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.m[id]; ok {

@@ -6,12 +6,12 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"testing"
 )
 
 func makeTestRelay() (*entity.Relay, error) {
-	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	relayID, err := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		return nil, err
 	}
@@ -25,11 +25,11 @@ func makeTestRelay() (*entity.Relay, error) {
 		return nil, err
 	}
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pkixBytes})
-	rsaPub, err := value_object.RSAPubKeyFromPEM(pemBytes)
+	rsaPub, err := vo.RSAPubKeyFromPEM(pemBytes)
 	if err != nil {
 		return nil, err
 	}
-	end, err := value_object.NewEndpoint("127.0.0.1", 5000)
+	end, err := vo.NewEndpoint("127.0.0.1", 5000)
 	if err != nil {
 		return nil, err
 	}

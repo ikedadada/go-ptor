@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -54,8 +54,8 @@ func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *tes
 		t.Fatalf("Dial error: %v", err)
 	}
 	tx := service.NewTCPCircuitMessagingService(conn)
-	cid := value_object.NewCircuitID()
-	sid := value_object.NewStreamIDAuto()
+	cid := vo.NewCircuitID()
+	sid := vo.NewStreamIDAuto()
 	data := []byte("hello")
 
 	err = tx.TransmitData(cid, sid, data)
@@ -71,7 +71,7 @@ func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *tes
 		copy(cidBuf[:], msg[:16])
 		var u uuid.UUID
 		copy(u[:], cidBuf[:])
-		gotCID, err := value_object.CircuitIDFrom(u.String())
+		gotCID, err := vo.CircuitIDFrom(u.String())
 		if err != nil {
 			t.Fatalf("cid parse: %v", err)
 		}
@@ -82,10 +82,10 @@ func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *tes
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if cell.Cmd != value_object.CmdData {
+		if cell.Cmd != vo.CmdData {
 			t.Errorf("unexpected cmd %d", cell.Cmd)
 		}
-		p, err := value_object.DecodeDataPayload(cell.Payload)
+		p, err := vo.DecodeDataPayload(cell.Payload)
 		if err != nil {
 			t.Fatalf("payload: %v", err)
 		}
@@ -109,7 +109,7 @@ func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *tes
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if cell.Cmd != value_object.CmdBegin {
+		if cell.Cmd != vo.CmdBegin {
 			t.Errorf("unexpected cmd %d", cell.Cmd)
 		}
 	case <-time.After(time.Second):
@@ -129,7 +129,7 @@ func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *tes
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if cell.Cmd != value_object.CmdConnect {
+		if cell.Cmd != vo.CmdConnect {
 			t.Errorf("expected CONNECT cmd, got %d", cell.Cmd)
 		}
 	case <-time.After(time.Second):
@@ -149,7 +149,7 @@ func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *tes
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if cell.Cmd != value_object.CmdEnd {
+		if cell.Cmd != vo.CmdEnd {
 			t.Errorf("expected END cmd, got %d", cell.Cmd)
 		}
 	case <-time.After(time.Second):
@@ -169,7 +169,7 @@ func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *tes
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if cell.Cmd != value_object.CmdDestroy {
+		if cell.Cmd != vo.CmdDestroy {
 			t.Errorf("expected DESTROY cmd, got %d", cell.Cmd)
 		}
 	case <-time.After(time.Second):
@@ -185,8 +185,8 @@ func TestTCPCircuitMessagingService_TransmitData_tooBig_realConn(t *testing.T) {
 		t.Fatalf("Dial error: %v", err)
 	}
 	tx := service.NewTCPCircuitMessagingService(conn)
-	cid := value_object.NewCircuitID()
-	sid := value_object.NewStreamIDAuto()
+	cid := vo.NewCircuitID()
+	sid := vo.NewStreamIDAuto()
 	big := make([]byte, entity.MaxPayloadSize+1)
 	err = tx.TransmitData(cid, sid, big)
 	if err == nil || err.Error() != "data too big" {

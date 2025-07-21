@@ -8,7 +8,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/infrastructure/http"
 )
 
@@ -38,16 +38,16 @@ func NewHiddenServiceRepository(httpClient http.HTTPClient, directoryURL string)
 
 	for _, h := range hs {
 		// Parse hidden service address
-		hiddenAddr := value_object.HiddenAddrFromString(h.Address)
+		hiddenAddr := vo.HiddenAddrFromString(h.Address)
 
 		// Parse relay ID
-		relayID, err := value_object.NewRelayID(h.Relay)
+		relayID, err := vo.NewRelayID(h.Relay)
 		if err != nil {
 			return nil, fmt.Errorf("invalid relay id %q: %w", h.Relay, err)
 		}
 
 		// Parse public key (supports both RSA and Ed25519)
-		pubKey, err := value_object.ParsePublicKeyFromPEM([]byte(h.PubKey))
+		pubKey, err := vo.ParsePublicKeyFromPEM([]byte(h.PubKey))
 		if err != nil {
 			return nil, fmt.Errorf("parse pubkey %q: %w", h.PubKey, err)
 		}
@@ -64,7 +64,7 @@ func NewHiddenServiceRepository(httpClient http.HTTPClient, directoryURL string)
 	}, nil
 }
 
-func (r *hiddenServiceRepositoryImpl) FindByAddress(address value_object.HiddenAddr) (*entity.HiddenService, error) {
+func (r *hiddenServiceRepositoryImpl) FindByAddress(address vo.HiddenAddr) (*entity.HiddenService, error) {
 	return r.FindByAddressString(address.String())
 }
 

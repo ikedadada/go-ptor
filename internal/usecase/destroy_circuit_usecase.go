@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -35,7 +35,7 @@ func NewDestroyCircuitUsecase(r repository.CircuitRepository, f useSvc.Messaging
 }
 
 func (uc *destroyCircuitUsecaseImpl) Handle(in DestroyCircuitInput) (DestroyCircuitOutput, error) {
-	cid, err := value_object.CircuitIDFrom(in.CircuitID)
+	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return DestroyCircuitOutput{}, fmt.Errorf("parse circuit id: %w", err)
 	}

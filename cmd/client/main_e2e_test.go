@@ -21,9 +21,10 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"github.com/google/uuid"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 func freePort(t *testing.T) string {
@@ -123,7 +124,7 @@ func TestClientMain_E2E(t *testing.T) {
 		},
 	}
 	hiddenServices := []map[string]interface{}{}
-	
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/relays", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -260,10 +261,10 @@ func TestClientMain_HiddenService(t *testing.T) {
 	relKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	relDer, _ := x509.MarshalPKIXPublicKey(&relKey.PublicKey)
 	relPem := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: relDer}))
-	hidAddr := value_object.NewHiddenAddr(key.Public().(ed25519.PublicKey)).String()
+	hidAddr := vo.NewHiddenAddr(key.Public().(ed25519.PublicKey)).String()
 	exitID := uuid.NewString()
 	midID := uuid.NewString()
-	
+
 	// Create data in new array format
 	relays := []map[string]interface{}{
 		{
@@ -284,7 +285,7 @@ func TestClientMain_HiddenService(t *testing.T) {
 			"pubkey":  hidPem,
 		},
 	}
-	
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/relays", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -320,13 +321,13 @@ func TestClientMain_HiddenService(t *testing.T) {
 	if !bytes.Contains(out, []byte("ok")) {
 		t.Fatalf("unexpected response: %s", out)
 	}
-	
+
 	// Stop relay processes to avoid race condition when reading buffers
 	rcancel()
 	rcmd.Wait()
 	cancel2()
 	rcmd2.Wait()
-	
+
 	if !strings.Contains(rout.String(), "cmd=2") {
 		t.Fatalf("exit relay did not see CONNECT")
 	}

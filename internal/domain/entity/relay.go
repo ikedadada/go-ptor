@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 type RelayStatus uint8
@@ -16,9 +16,9 @@ const (
 
 // Relay は Aggregate Root
 type Relay struct {
-	id       value_object.RelayID
-	endpoint value_object.Endpoint
-	pubKey   value_object.RSAPubKey
+	id       vo.RelayID
+	endpoint vo.Endpoint
+	pubKey   vo.RSAPubKey
 
 	status  atomic.Uint32 // RelayStatus
 	success atomic.Uint64 // セル転送成功数
@@ -27,7 +27,7 @@ type Relay struct {
 }
 
 // コンストラクタ
-func NewRelay(id value_object.RelayID, ep value_object.Endpoint, pk value_object.RSAPubKey) *Relay {
+func NewRelay(id vo.RelayID, ep vo.Endpoint, pk vo.RSAPubKey) *Relay {
 	r := &Relay{
 		id:       id,
 		endpoint: ep,
@@ -38,9 +38,9 @@ func NewRelay(id value_object.RelayID, ep value_object.Endpoint, pk value_object
 }
 
 // 不変な値オブジェクト取り出し
-func (r *Relay) ID() value_object.RelayID        { return r.id }
-func (r *Relay) Endpoint() value_object.Endpoint { return r.endpoint }
-func (r *Relay) PubKey() value_object.RSAPubKey  { return r.pubKey }
+func (r *Relay) ID() vo.RelayID        { return r.id }
+func (r *Relay) Endpoint() vo.Endpoint { return r.endpoint }
+func (r *Relay) PubKey() vo.RSAPubKey  { return r.pubKey }
 
 // 状態系
 func (r *Relay) Status() RelayStatus { return RelayStatus(r.status.Load()) }

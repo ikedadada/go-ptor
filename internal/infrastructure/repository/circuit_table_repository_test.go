@@ -8,14 +8,14 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	repoif "ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
 func TestCircuitTableRepo_AddFindDelete(t *testing.T) {
 	tbl := repoimpl.NewCircuitTableRepository(time.Second)
-	id := value_object.NewCircuitID()
-	st := entity.NewConnState(value_object.AESKey{}, value_object.Nonce{}, nil, nil)
+	id := vo.NewCircuitID()
+	st := entity.NewConnState(vo.AESKey{}, vo.Nonce{}, nil, nil)
 	if err := tbl.Add(id, st); err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -32,9 +32,9 @@ func TestCircuitTableRepo_AddFindDelete(t *testing.T) {
 
 func TestCircuitTableRepo_GC(t *testing.T) {
 	tbl := repoimpl.NewCircuitTableRepository(500 * time.Millisecond)
-	id := value_object.NewCircuitID()
+	id := vo.NewCircuitID()
 	up, down := net.Pipe()
-	st := entity.NewConnState(value_object.AESKey{}, value_object.Nonce{}, up, down)
+	st := entity.NewConnState(vo.AESKey{}, vo.Nonce{}, up, down)
 	if err := tbl.Add(id, st); err != nil {
 		t.Fatalf("add: %v", err)
 	}

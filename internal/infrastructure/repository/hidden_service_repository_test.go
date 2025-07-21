@@ -10,7 +10,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	repoif "ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
@@ -21,7 +21,7 @@ func TestHiddenServiceRepo_FindByAddressString(t *testing.T) {
 		Relay   string `json:"relay"`
 		PubKey  string `json:"pubkey"`
 	}
-	
+
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -31,7 +31,7 @@ func TestHiddenServiceRepo_FindByAddressString(t *testing.T) {
 		t.Fatalf("marshal pkix: %v", err)
 	}
 	pemStr := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
-	
+
 	mockClient := &mockHTTPClient{
 		response: []hiddenServiceDTO{
 			{
@@ -55,7 +55,7 @@ func TestHiddenServiceRepo_FindByAddressString(t *testing.T) {
 	if hs.Address().String() != "TEST.PTOR" {
 		t.Errorf("unexpected address: got %s, want TEST.PTOR", hs.Address().String())
 	}
-	
+
 	// Test uppercase lookup
 	hs2, err := repo.FindByAddressString("TEST.PTOR")
 	if err != nil {
@@ -72,7 +72,7 @@ func TestHiddenServiceRepo_FindByAddressString_NotFound(t *testing.T) {
 		Relay   string `json:"relay"`
 		PubKey  string `json:"pubkey"`
 	}
-	
+
 	mockClient := &mockHTTPClient{
 		response: []hiddenServiceDTO{},
 	}
@@ -94,7 +94,7 @@ func TestHiddenServiceRepo_All(t *testing.T) {
 		Relay   string `json:"relay"`
 		PubKey  string `json:"pubkey"`
 	}
-	
+
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -104,7 +104,7 @@ func TestHiddenServiceRepo_All(t *testing.T) {
 		t.Fatalf("marshal pkix: %v", err)
 	}
 	pemStr := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
-	
+
 	mockClient := &mockHTTPClient{
 		response: []hiddenServiceDTO{
 			{
@@ -129,7 +129,7 @@ func TestHiddenServiceRepo_All(t *testing.T) {
 	if err != nil {
 		t.Fatalf("All: %v", err)
 	}
-	
+
 	if len(all) != 2 {
 		t.Errorf("expected 2 hidden services, got %d", len(all))
 	}
@@ -141,7 +141,7 @@ func TestHiddenServiceRepo_Save(t *testing.T) {
 		Relay   string `json:"relay"`
 		PubKey  string `json:"pubkey"`
 	}
-	
+
 	mockClient := &mockHTTPClient{
 		response: []hiddenServiceDTO{},
 	}
@@ -151,25 +151,25 @@ func TestHiddenServiceRepo_Save(t *testing.T) {
 		t.Fatalf("NewHiddenServiceRepository: %v", err)
 	}
 
-	addr := value_object.HiddenAddrFromString("new.ptor")
-	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	addr := vo.HiddenAddrFromString("new.ptor")
+	relayID, err := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		t.Fatalf("NewRelayID: %v", err)
 	}
-	
+
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	pubKey := value_object.RSAPubKey{PublicKey: &key.PublicKey}
-	
+	pubKey := vo.RSAPubKey{PublicKey: &key.PublicKey}
+
 	hs := entity.NewHiddenService(addr, relayID, pubKey)
-	
+
 	err = repo.Save(hs)
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	
+
 	// Verify it was saved
 	found, err := repo.FindByAddressString("new.ptor")
 	if err != nil {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 // HandleEndInput represents a received END cell.
@@ -33,7 +33,7 @@ func NewHandleEndUsecase(r repository.CircuitRepository) HandleEndUseCase {
 }
 
 func (uc *handleEndUsecaseImpl) Handle(in HandleEndInput) (HandleEndOutput, error) {
-	cid, err := value_object.CircuitIDFrom(in.CircuitID)
+	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return HandleEndOutput{}, fmt.Errorf("parse circuit id: %w", err)
 	}
@@ -52,7 +52,7 @@ func (uc *handleEndUsecaseImpl) Handle(in HandleEndInput) (HandleEndOutput, erro
 		return HandleEndOutput{Closed: true}, nil
 	}
 
-	sid, err := value_object.StreamIDFrom(in.StreamID)
+	sid, err := vo.StreamIDFrom(in.StreamID)
 	if err != nil {
 		return HandleEndOutput{}, fmt.Errorf("parse stream id: %w", err)
 	}

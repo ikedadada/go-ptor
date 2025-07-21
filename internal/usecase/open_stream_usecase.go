@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 // OpenStreamInput specifies which circuit to open a new stream for.
@@ -35,7 +35,7 @@ func NewOpenStreamUsecase(cr repository.CircuitRepository) *openStreamUseCaseImp
 
 // Handle: 既存 Circuit を取得 → StreamState 生成 → DTO で返却
 func (uc *openStreamUseCaseImpl) Handle(in OpenStreamInput) (OpenStreamOutput, error) {
-	cid, err := value_object.CircuitIDFrom(in.CircuitID)
+	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return OpenStreamOutput{}, fmt.Errorf("parse circuit id: %w", err)
 	}

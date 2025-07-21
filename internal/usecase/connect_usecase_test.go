@@ -9,7 +9,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
 	"ikedadada/go-ptor/internal/usecase/service"
 )
@@ -19,44 +19,44 @@ type mockRepoConnect struct {
 	err     error
 }
 
-func (m *mockRepoConnect) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (m *mockRepoConnect) Find(id vo.CircuitID) (*entity.Circuit, error) {
 	return m.circuit, m.err
 }
 func (m *mockRepoConnect) Save(*entity.Circuit) error             { return nil }
-func (m *mockRepoConnect) Delete(value_object.CircuitID) error    { return nil }
+func (m *mockRepoConnect) Delete(vo.CircuitID) error              { return nil }
 func (m *mockRepoConnect) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
 type mockTxConnect struct {
-	cid     value_object.CircuitID
+	cid     vo.CircuitID
 	payload []byte
 	err     error
 }
 
-func (m *mockTxConnect) TransmitData(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTxConnect) TransmitData(vo.CircuitID, vo.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTxConnect) InitiateStream(value_object.CircuitID, value_object.StreamID, []byte) error {
+func (m *mockTxConnect) InitiateStream(vo.CircuitID, vo.StreamID, []byte) error {
 	return nil
 }
-func (m *mockTxConnect) EstablishConnection(c value_object.CircuitID, d []byte) error {
+func (m *mockTxConnect) EstablishConnection(c vo.CircuitID, d []byte) error {
 	m.cid = c
 	m.payload = d
 	return m.err
 }
-func (m *mockTxConnect) TerminateStream(value_object.CircuitID, value_object.StreamID) error { return nil }
-func (m *mockTxConnect) DestroyCircuit(value_object.CircuitID) error                    { return nil }
+func (m *mockTxConnect) TerminateStream(vo.CircuitID, vo.StreamID) error { return nil }
+func (m *mockTxConnect) DestroyCircuit(vo.CircuitID) error               { return nil }
 
 type connectFactory struct{ tx *mockTxConnect }
 
 func (c connectFactory) New(net.Conn) service.CircuitMessagingService { return c.tx }
 
 func makeTestCircuitConnect() (*entity.Circuit, error) {
-	id := value_object.NewCircuitID()
-	rid, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	key, _ := value_object.NewAESKey()
-	nonce, _ := value_object.NewNonce()
+	id := vo.NewCircuitID()
+	rid, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	return entity.NewCircuit(id, []value_object.RelayID{rid}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
+	return entity.NewCircuit(id, []vo.RelayID{rid}, []vo.AESKey{key}, []vo.Nonce{nonce}, priv)
 }
 
 func TestConnectUseCase_Handle(t *testing.T) {
@@ -65,7 +65,7 @@ func TestConnectUseCase_Handle(t *testing.T) {
 		t.Fatalf("setup: %v", err)
 	}
 	cid := cir.ID().String()
-	payload, _ := value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: "x"})
+	payload, _ := vo.EncodeConnectPayload(&vo.ConnectPayload{Target: "x"})
 
 	tests := []struct {
 		name  string

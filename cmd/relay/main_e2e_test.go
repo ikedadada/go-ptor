@@ -13,7 +13,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/aggregate"
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase/service"
 
 	"github.com/google/uuid"
@@ -73,8 +73,8 @@ func TestRelayMain_E2E(t *testing.T) {
 	cid := uuid.New()
 	sid := uint16(1)
 	data := []byte("ok")
-	inner, _ := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: sid, Data: data})
-	cellBuf, _ := entity.Encode(entity.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: inner})
+	inner, _ := vo.EncodeDataPayload(&vo.DataPayload{StreamID: sid, Data: data})
+	cellBuf, _ := entity.Encode(entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: inner})
 	outBuf := append(cid[:], cellBuf...)
 	c.Write(outBuf)
 	c.Close()
@@ -114,10 +114,10 @@ func (r *recordConn) SetWriteDeadline(t time.Time) error { return nil }
 func TestSendCellWritesFixedPacket(t *testing.T) {
 	conn := &recordConn{}
 	d := service.NewTCPCircuitBuildService()
-	cid := value_object.NewCircuitID()
+	cid := vo.NewCircuitID()
 	payload := []byte("hello")
-	streamID, _ := value_object.StreamIDFrom(0)
-	cell, err := aggregate.NewRelayCell(value_object.CmdExtend, cid, streamID, payload)
+	streamID, _ := vo.StreamIDFrom(0)
+	cell, err := aggregate.NewRelayCell(vo.CmdExtend, cid, streamID, payload)
 	if err != nil {
 		t.Fatalf("NewRelayCell error: %v", err)
 	}

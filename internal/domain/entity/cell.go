@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 const (
@@ -18,8 +18,8 @@ const (
 // This is the fundamental unit of communication between nodes in the network.
 // For higher-level relay operations, see aggregate.RelayCell.
 type Cell struct {
-	Cmd     value_object.CellCommand     // Command type (CmdExtend, CmdData, etc.)
-	Version value_object.ProtocolVersion // Protocol version
+	Cmd     vo.CellCommand     // Command type (CmdExtend, CmdData, etc.)
+	Version vo.ProtocolVersion // Protocol version
 	Payload []byte                       // Cell payload data
 }
 
@@ -46,11 +46,11 @@ func Decode(buf []byte) (*Cell, error) {
 	if len(buf) != MaxCellSize {
 		return nil, fmt.Errorf("invalid cell length: %d", len(buf))
 	}
-	cmd := value_object.CellCommand(buf[0])
+	cmd := vo.CellCommand(buf[0])
 	if !cmd.IsValid() {
 		return nil, fmt.Errorf("invalid cell command: %d", buf[0])
 	}
-	version := value_object.ProtocolVersion(buf[1])
+	version := vo.ProtocolVersion(buf[1])
 	if !version.IsSupported() {
 		return nil, fmt.Errorf("unsupported protocol version: %d", buf[1])
 	}

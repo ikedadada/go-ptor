@@ -9,16 +9,16 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	repoif "ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
 func makeTestRelay(status entity.RelayStatus, idStr string) (*entity.Relay, error) {
-	relayID, err := value_object.NewRelayID(idStr)
+	relayID, err := vo.NewRelayID(idStr)
 	if err != nil {
 		return nil, err
 	}
-	end, err := value_object.NewEndpoint("127.0.0.1", 5000)
+	end, err := vo.NewEndpoint("127.0.0.1", 5000)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +26,7 @@ func makeTestRelay(status entity.RelayStatus, idStr string) (*entity.Relay, erro
 	if err != nil {
 		return nil, err
 	}
-	rel := entity.NewRelay(relayID, end, value_object.RSAPubKey{PublicKey: &key.PublicKey})
+	rel := entity.NewRelay(relayID, end, vo.RSAPubKey{PublicKey: &key.PublicKey})
 	switch status {
 	case entity.Online:
 		rel.SetOnline()
@@ -100,7 +100,7 @@ func TestRelayRepo_FindByID_NotFound(t *testing.T) {
 		t.Fatalf("NewRelayRepository: %v", err)
 	}
 
-	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440001")
+	relayID, err := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440001")
 	if err != nil {
 		t.Fatalf("NewRelayID: %v", err)
 	}

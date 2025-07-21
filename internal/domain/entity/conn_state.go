@@ -4,15 +4,15 @@ import (
 	"net"
 	"time"
 
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 // MessageType is defined in circuit.go to avoid duplication
 
 // ConnState represents per-circuit connection information held by a relay.
 type ConnState struct {
-	key                 value_object.AESKey
-	baseNonce           value_object.Nonce
+	key                 vo.AESKey
+	baseNonce           vo.Nonce
 	beginCounter        uint64 // Counter for BEGIN commands
 	dataCounter         uint64 // Counter for DATA commands (downstream)
 	upstreamDataCounter uint64 // Counter for upstream DATA commands
@@ -25,18 +25,18 @@ type ConnState struct {
 }
 
 // NewConnState returns a new ConnState instance.
-func NewConnState(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn) *ConnState {
+func NewConnState(key vo.AESKey, nonce vo.Nonce, up, down net.Conn) *ConnState {
 	return &ConnState{key: key, baseNonce: nonce, beginCounter: 0, dataCounter: 0, upstreamDataCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
 }
 
 // NewConnStateWithCounters returns a new ConnState instance preserving counter values.
-func NewConnStateWithCounters(key value_object.AESKey, nonce value_object.Nonce, up, down net.Conn, beginCounter, dataCounter uint64) *ConnState {
+func NewConnStateWithCounters(key vo.AESKey, nonce vo.Nonce, up, down net.Conn, beginCounter, dataCounter uint64) *ConnState {
 	return &ConnState{key: key, baseNonce: nonce, beginCounter: beginCounter, dataCounter: dataCounter, upstreamDataCounter: 0, up: up, down: down, last: time.Now(), tbl: NewStreamTable(), hidden: false, served: false}
 }
 
 // Key returns the symmetric key for this circuit hop.
-func (s *ConnState) Key() value_object.AESKey  { return s.key }
-func (s *ConnState) Nonce() value_object.Nonce { return s.baseNonce }
+func (s *ConnState) Key() vo.AESKey  { return s.key }
+func (s *ConnState) Nonce() vo.Nonce { return s.baseNonce }
 
 // GetCounters returns the current counter values
 func (s *ConnState) GetCounters() (beginCounter, dataCounter uint64) {
@@ -44,7 +44,7 @@ func (s *ConnState) GetCounters() (beginCounter, dataCounter uint64) {
 }
 
 // BeginNonce generates the next unique nonce for BEGIN commands
-func (s *ConnState) BeginNonce() value_object.Nonce {
+func (s *ConnState) BeginNonce() vo.Nonce {
 	nonce := s.baseNonce
 
 	// XOR begin counter into last 8 bytes
@@ -59,7 +59,7 @@ func (s *ConnState) BeginNonce() value_object.Nonce {
 }
 
 // DataNonce generates the next unique nonce for DATA commands
-func (s *ConnState) DataNonce() value_object.Nonce {
+func (s *ConnState) DataNonce() vo.Nonce {
 	nonce := s.baseNonce
 
 	// XOR data counter into last 8 bytes
@@ -74,7 +74,7 @@ func (s *ConnState) DataNonce() value_object.Nonce {
 }
 
 // UpstreamDataNonce generates the next unique nonce for upstream DATA commands
-func (s *ConnState) UpstreamDataNonce() value_object.Nonce {
+func (s *ConnState) UpstreamDataNonce() vo.Nonce {
 	nonce := s.baseNonce
 
 	// XOR upstream data counter into last 8 bytes
@@ -129,7 +129,7 @@ func (s *ConnState) Close() {
 }
 
 // GetMessageTypeNonce returns the next nonce for the given message type
-func (s *ConnState) GetMessageTypeNonce(messageType MessageType) value_object.Nonce {
+func (s *ConnState) GetMessageTypeNonce(messageType MessageType) vo.Nonce {
 	switch messageType {
 	case MessageTypeBegin, MessageTypeConnect:
 		return s.BeginNonce()

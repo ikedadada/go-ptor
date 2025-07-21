@@ -8,7 +8,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
 )
 
@@ -17,27 +17,27 @@ type mockCircuitRepoOpen struct {
 	err     error
 }
 
-func (m *mockCircuitRepoOpen) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (m *mockCircuitRepoOpen) Find(id vo.CircuitID) (*entity.Circuit, error) {
 	return m.circuit, m.err
 }
 func (m *mockCircuitRepoOpen) Save(*entity.Circuit) error             { return nil }
-func (m *mockCircuitRepoOpen) Delete(value_object.CircuitID) error    { return nil }
+func (m *mockCircuitRepoOpen) Delete(vo.CircuitID) error              { return nil }
 func (m *mockCircuitRepoOpen) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
 func makeTestCircuit() (*entity.Circuit, error) {
-	id, err := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
+	id, err := vo.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		return nil, err
 	}
-	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	relayID, err := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		return nil, err
 	}
-	key, err := value_object.NewAESKey()
+	key, err := vo.NewAESKey()
 	if err != nil {
 		return nil, err
 	}
-	nonce, err := value_object.NewNonce()
+	nonce, err := vo.NewNonce()
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func makeTestCircuit() (*entity.Circuit, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
+	c, err := entity.NewCircuit(id, []vo.RelayID{relayID}, []vo.AESKey{key}, []vo.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, err
 	}

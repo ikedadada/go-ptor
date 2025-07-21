@@ -6,36 +6,36 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 func TestNewCircuit_Table(t *testing.T) {
-	id, err := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
+	id, err := vo.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		t.Fatalf("CircuitIDFrom: %v", err)
 	}
-	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	relayID, err := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		t.Fatalf("NewRelayID: %v", err)
 	}
-	key, err := value_object.AESKeyFrom(make([]byte, 32))
+	key, err := vo.AESKeyFrom(make([]byte, 32))
 	if err != nil {
 		t.Fatalf("AESKeyFrom: %v", err)
 	}
-	nonce, err := value_object.NonceFrom(make([]byte, 12))
+	nonce, err := vo.NonceFrom(make([]byte, 12))
 	if err != nil {
 		t.Fatalf("NonceFrom: %v", err)
 	}
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	tests := []struct {
 		name       string
-		relays     []value_object.RelayID
-		keys       []value_object.AESKey
-		nonces     []value_object.Nonce
+		relays     []vo.RelayID
+		keys       []vo.AESKey
+		nonces     []vo.Nonce
 		expectsErr bool
 	}{
-		{"ok", []value_object.RelayID{relayID, relayID, relayID}, []value_object.AESKey{key, key, key}, []value_object.Nonce{nonce, nonce, nonce}, false},
-		{"mismatch len", []value_object.RelayID{relayID}, []value_object.AESKey{key, key}, []value_object.Nonce{nonce, nonce}, true},
+		{"ok", []vo.RelayID{relayID, relayID, relayID}, []vo.AESKey{key, key, key}, []vo.Nonce{nonce, nonce, nonce}, false},
+		{"mismatch len", []vo.RelayID{relayID}, []vo.AESKey{key, key}, []vo.Nonce{nonce, nonce}, true},
 		{"empty", nil, nil, nil, true},
 	}
 	for _, tt := range tests {
@@ -55,19 +55,19 @@ func TestNewCircuit_Table(t *testing.T) {
 }
 
 func TestCircuit_StreamManagement(t *testing.T) {
-	id, err := value_object.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
+	id, err := vo.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		t.Fatalf("CircuitIDFrom: %v", err)
 	}
-	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	relayID, err := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		t.Fatalf("NewRelayID: %v", err)
 	}
-	key, err := value_object.AESKeyFrom(make([]byte, 32))
+	key, err := vo.AESKeyFrom(make([]byte, 32))
 	if err != nil {
 		t.Fatalf("AESKeyFrom: %v", err)
 	}
-	nonce, err := value_object.NonceFrom(make([]byte, 12))
+	nonce, err := vo.NonceFrom(make([]byte, 12))
 	if err != nil {
 		t.Fatalf("NonceFrom: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestCircuit_StreamManagement(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-			c, err := entity.NewCircuit(id, []value_object.RelayID{relayID, relayID, relayID}, []value_object.AESKey{key, key, key}, []value_object.Nonce{nonce, nonce, nonce}, priv)
+			c, err := entity.NewCircuit(id, []vo.RelayID{relayID, relayID, relayID}, []vo.AESKey{key, key, key}, []vo.Nonce{nonce, nonce, nonce}, priv)
 			if err != nil {
 				t.Fatalf("NewCircuit: %v", err)
 			}

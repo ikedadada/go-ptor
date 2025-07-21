@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -37,7 +37,7 @@ func NewShutdownCircuitUsecase(cr repository.CircuitRepository, f useSvc.Messagi
 // CircuitRepository から削除する。
 func (uc *shutdownCircuitUseCaseImpl) Handle(in ShutdownCircuitInput) (ShutdownCircuitOutput, error) {
 	// --- 1. CircuitID パース & Circuit 取得
-	cid, err := value_object.CircuitIDFrom(in.CircuitID)
+	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return ShutdownCircuitOutput{}, fmt.Errorf("parse circuit id: %w", err)
 	}

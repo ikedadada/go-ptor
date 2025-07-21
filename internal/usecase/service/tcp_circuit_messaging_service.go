@@ -6,17 +6,17 @@ import (
 	"sync"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 // CircuitMessagingService はセル転送を担当するサービス。
 // 回路 ID + ストリーム ID + データを受け取り、セル化してネットワークに送る。
 type CircuitMessagingService interface {
-	TransmitData(c value_object.CircuitID, s value_object.StreamID, data []byte) error
-	InitiateStream(c value_object.CircuitID, s value_object.StreamID, data []byte) error
-	EstablishConnection(c value_object.CircuitID, data []byte) error
-	TerminateStream(c value_object.CircuitID, s value_object.StreamID) error
-	DestroyCircuit(c value_object.CircuitID) error
+	TransmitData(c vo.CircuitID, s vo.StreamID, data []byte) error
+	InitiateStream(c vo.CircuitID, s vo.StreamID, data []byte) error
+	EstablishConnection(c vo.CircuitID, data []byte) error
+	TerminateStream(c vo.CircuitID, s vo.StreamID) error
+	DestroyCircuit(c vo.CircuitID) error
 }
 
 // MessagingServiceFactory produces a CircuitMessagingService bound to a given connection.
@@ -43,11 +43,11 @@ func NewTCPCircuitMessagingService(conn net.Conn) CircuitMessagingService {
 	return &TCPCircuitMessagingService{conn: conn}
 }
 
-func (t *TCPCircuitMessagingService) send(cmd value_object.CellCommand, cid value_object.CircuitID, payload []byte) error {
+func (t *TCPCircuitMessagingService) send(cmd vo.CellCommand, cid vo.CircuitID, payload []byte) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	cell := entity.Cell{Cmd: cmd, Version: value_object.ProtocolV1, Payload: payload}
+	cell := entity.Cell{Cmd: cmd, Version: vo.ProtocolV1, Payload: payload}
 	buf, err := entity.Encode(cell)
 	if err != nil {
 		return err
@@ -57,39 +57,39 @@ func (t *TCPCircuitMessagingService) send(cmd value_object.CellCommand, cid valu
 	return err
 }
 
-func (t *TCPCircuitMessagingService) TransmitData(cid value_object.CircuitID, s value_object.StreamID, d []byte) error {
+func (t *TCPCircuitMessagingService) TransmitData(cid vo.CircuitID, s vo.StreamID, d []byte) error {
 	if len(d) > entity.MaxPayloadSize {
 		return fmt.Errorf("data too big")
 	}
-	p, err := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: s.UInt16(), Data: d})
+	p, err := vo.EncodeDataPayload(&vo.DataPayload{StreamID: s.UInt16(), Data: d})
 	if err != nil {
 		return err
 	}
-	return t.send(value_object.CmdData, cid, p)
+	return t.send(vo.CmdData, cid, p)
 }
 
-func (t *TCPCircuitMessagingService) InitiateStream(cid value_object.CircuitID, _ value_object.StreamID, d []byte) error {
+func (t *TCPCircuitMessagingService) InitiateStream(cid vo.CircuitID, _ vo.StreamID, d []byte) error {
 	if len(d) > entity.MaxPayloadSize {
 		return fmt.Errorf("data too big")
 	}
-	return t.send(value_object.CmdBegin, cid, d)
+	return t.send(vo.CmdBegin, cid, d)
 }
 
-func (t *TCPCircuitMessagingService) EstablishConnection(cid value_object.CircuitID, d []byte) error {
+func (t *TCPCircuitMessagingService) EstablishConnection(cid vo.CircuitID, d []byte) error {
 	if len(d) > entity.MaxPayloadSize {
 		return fmt.Errorf("data too big")
 	}
-	return t.send(value_object.CmdConnect, cid, d)
+	return t.send(vo.CmdConnect, cid, d)
 }
 
-func (t *TCPCircuitMessagingService) TerminateStream(cid value_object.CircuitID, s value_object.StreamID) error {
-	p, err := value_object.EncodeDataPayload(&value_object.DataPayload{StreamID: s.UInt16()})
+func (t *TCPCircuitMessagingService) TerminateStream(cid vo.CircuitID, s vo.StreamID) error {
+	p, err := vo.EncodeDataPayload(&vo.DataPayload{StreamID: s.UInt16()})
 	if err != nil {
 		return err
 	}
-	return t.send(value_object.CmdEnd, cid, p)
+	return t.send(vo.CmdEnd, cid, p)
 }
 
-func (t *TCPCircuitMessagingService) DestroyCircuit(cid value_object.CircuitID) error {
-	return t.send(value_object.CmdDestroy, cid, nil)
+func (t *TCPCircuitMessagingService) DestroyCircuit(cid vo.CircuitID) error {
+	return t.send(vo.CmdDestroy, cid, nil)
 }

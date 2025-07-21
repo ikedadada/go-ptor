@@ -6,23 +6,23 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	repoif "ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 type circuitTableRepository struct {
 	mu  sync.RWMutex
 	ttl time.Duration
-	m   map[value_object.CircuitID]*entity.ConnState
+	m   map[vo.CircuitID]*entity.ConnState
 }
 
 // NewCircuitTableRepository creates an in-memory circuit table with automatic cleanup.
 func NewCircuitTableRepository(ttl time.Duration) repoif.CircuitTableRepository {
-	r := &circuitTableRepository{ttl: ttl, m: make(map[value_object.CircuitID]*entity.ConnState)}
+	r := &circuitTableRepository{ttl: ttl, m: make(map[vo.CircuitID]*entity.ConnState)}
 	go r.gc()
 	return r
 }
 
-func (r *circuitTableRepository) Add(id value_object.CircuitID, st *entity.ConnState) error {
+func (r *circuitTableRepository) Add(id vo.CircuitID, st *entity.ConnState) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	st.Touch()
@@ -30,7 +30,7 @@ func (r *circuitTableRepository) Add(id value_object.CircuitID, st *entity.ConnS
 	return nil
 }
 
-func (r *circuitTableRepository) Find(id value_object.CircuitID) (*entity.ConnState, error) {
+func (r *circuitTableRepository) Find(id vo.CircuitID) (*entity.ConnState, error) {
 	r.mu.RLock()
 	st, ok := r.m[id]
 	if ok {
@@ -43,7 +43,7 @@ func (r *circuitTableRepository) Find(id value_object.CircuitID) (*entity.ConnSt
 	return st, nil
 }
 
-func (r *circuitTableRepository) Delete(id value_object.CircuitID) error {
+func (r *circuitTableRepository) Delete(id vo.CircuitID) error {
 	r.mu.Lock()
 	st, ok := r.m[id]
 	if ok {

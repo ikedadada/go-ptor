@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -13,7 +13,7 @@ type SendDataInput struct {
 	CircuitID string
 	StreamID  uint16
 	Data      []byte
-	Cmd       value_object.CellCommand // default CmdData
+	Cmd       vo.CellCommand // default CmdData
 }
 
 // SendDataOutput reports how many bytes were sent.
@@ -38,11 +38,11 @@ func NewSendDataUsecase(cr repository.CircuitRepository, f useSvc.MessagingServi
 }
 
 func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) {
-	cid, err := value_object.CircuitIDFrom(in.CircuitID)
+	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return SendDataOutput{}, err
 	}
-	sid, err := value_object.StreamIDFrom(in.StreamID)
+	sid, err := vo.StreamIDFrom(in.StreamID)
 	if err != nil {
 		return SendDataOutput{}, err
 	}
@@ -68,7 +68,7 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	plain := in.Data
 	cmd := in.Cmd
 	if cmd == 0 {
-		cmd = value_object.CmdData
+		cmd = vo.CmdData
 	}
 	keys := make([][32]byte, 0, len(cir.Hops()))
 	nonces := make([][12]byte, 0, len(cir.Hops()))
@@ -76,8 +76,8 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	// Generate nonces in normal order for array indexing
 	for i := range cir.Hops() {
 		keys = append(keys, cir.HopKey(i))
-		var nonce value_object.Nonce
-		if cmd == value_object.CmdBegin {
+		var nonce vo.Nonce
+		if cmd == vo.CmdBegin {
 			nonce = cir.HopBeginNonce(i)
 		} else {
 			nonce = cir.HopDataNonce(i)
@@ -95,11 +95,11 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	log.Printf("multi-seal success cid=%s encLen=%d", in.CircuitID, len(enc))
 	tx := uc.factory.New(cir.Conn(0))
 	switch cmd {
-	case value_object.CmdData:
+	case vo.CmdData:
 		if err := tx.TransmitData(cid, sid, enc); err != nil {
 			return SendDataOutput{}, err
 		}
-	case value_object.CmdBegin:
+	case vo.CmdBegin:
 		if err := tx.InitiateStream(cid, sid, enc); err != nil {
 			return SendDataOutput{}, err
 		}

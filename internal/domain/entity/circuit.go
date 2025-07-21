@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 // MessageType represents the type of message for nonce management
@@ -23,7 +23,7 @@ const (
 // ---- StreamState ----------------------------------------------------------
 
 type StreamState struct {
-	ID     value_object.StreamID
+	ID     vo.StreamID
 	Closed bool
 	// 追加情報が欲しければここに (bytesSent/recv など)
 }
@@ -31,23 +31,23 @@ type StreamState struct {
 // ---- Circuit --------------------------------------------------------------
 
 type Circuit struct {
-	id   value_object.CircuitID
-	hops []value_object.RelayID
+	id   vo.CircuitID
+	hops []vo.RelayID
 
-	keys                map[int]value_object.AESKey // per-hop AES key
-	baseNonces          map[int]value_object.Nonce  // per-hop base Nonce
+	keys                map[int]vo.AESKey // per-hop AES key
+	baseNonces          map[int]vo.Nonce  // per-hop base Nonce
 	beginCounter        map[int]uint64              // per-hop BEGIN counter
 	dataCounter         map[int]uint64              // per-hop DATA counter (downstream)
 	upstreamDataCounter map[int]uint64              // per-hop upstream DATA counter
 	priv                *rsa.PrivateKey
 	conns               []net.Conn
 	strmMu              sync.RWMutex
-	stream              map[value_object.StreamID]*StreamState
+	stream              map[vo.StreamID]*StreamState
 }
 
 // NewCircuit は 3 ホップ分の RelayID と鍵束を受け取って生成。
-func NewCircuit(id value_object.CircuitID, relays []value_object.RelayID,
-	keys []value_object.AESKey, nonces []value_object.Nonce, priv *rsa.PrivateKey) (*Circuit, error) {
+func NewCircuit(id vo.CircuitID, relays []vo.RelayID,
+	keys []vo.AESKey, nonces []vo.Nonce, priv *rsa.PrivateKey) (*Circuit, error) {
 
 	if len(relays) == 0 || len(relays) != len(keys) || len(keys) != len(nonces) {
 		return nil, errors.New("hops / keys / nonces length mismatch")
@@ -55,8 +55,8 @@ func NewCircuit(id value_object.CircuitID, relays []value_object.RelayID,
 	if priv == nil {
 		return nil, errors.New("rsa key required")
 	}
-	keyMap := make(map[int]value_object.AESKey, len(keys))
-	ncMap := make(map[int]value_object.Nonce, len(nonces))
+	keyMap := make(map[int]vo.AESKey, len(keys))
+	ncMap := make(map[int]vo.Nonce, len(nonces))
 	beginCounterMap := make(map[int]uint64, len(nonces))
 	dataCounterMap := make(map[int]uint64, len(nonces))
 	upstreamDataCounterMap := make(map[int]uint64, len(nonces))
@@ -77,22 +77,22 @@ func NewCircuit(id value_object.CircuitID, relays []value_object.RelayID,
 		upstreamDataCounter: upstreamDataCounterMap,
 		priv:                priv,
 		conns:               make([]net.Conn, len(relays)),
-		stream:              make(map[value_object.StreamID]*StreamState),
+		stream:              make(map[vo.StreamID]*StreamState),
 	}, nil
 }
 
 // ----------------------------------------------------------------------------
 // 不変部
 
-func (c *Circuit) ID() value_object.CircuitID { return c.id }
-func (c *Circuit) Hops() []value_object.RelayID {
-	return append([]value_object.RelayID(nil), c.hops...)
+func (c *Circuit) ID() vo.CircuitID { return c.id }
+func (c *Circuit) Hops() []vo.RelayID {
+	return append([]vo.RelayID(nil), c.hops...)
 }
-func (c *Circuit) HopKey(idx int) value_object.AESKey      { return c.keys[idx] }
-func (c *Circuit) HopBaseNonce(idx int) value_object.Nonce { return c.baseNonces[idx] }
+func (c *Circuit) HopKey(idx int) vo.AESKey      { return c.keys[idx] }
+func (c *Circuit) HopBaseNonce(idx int) vo.Nonce { return c.baseNonces[idx] }
 
 // HopBeginNonce generates the next unique nonce for BEGIN commands at hop idx
-func (c *Circuit) HopBeginNonce(idx int) value_object.Nonce {
+func (c *Circuit) HopBeginNonce(idx int) vo.Nonce {
 	nonce := c.baseNonces[idx]
 
 	// XOR begin counter into last 8 bytes
@@ -107,7 +107,7 @@ func (c *Circuit) HopBeginNonce(idx int) value_object.Nonce {
 }
 
 // HopBeginNoncePeek returns the next nonce without incrementing counter
-func (c *Circuit) HopBeginNoncePeek(idx int) value_object.Nonce {
+func (c *Circuit) HopBeginNoncePeek(idx int) vo.Nonce {
 	nonce := c.baseNonces[idx]
 
 	// XOR begin counter into last 8 bytes
@@ -121,7 +121,7 @@ func (c *Circuit) HopBeginNoncePeek(idx int) value_object.Nonce {
 }
 
 // HopDataNonce generates the next unique nonce for DATA commands at hop idx
-func (c *Circuit) HopDataNonce(idx int) value_object.Nonce {
+func (c *Circuit) HopDataNonce(idx int) vo.Nonce {
 	nonce := c.baseNonces[idx]
 
 	// XOR data counter into last 8 bytes
@@ -136,7 +136,7 @@ func (c *Circuit) HopDataNonce(idx int) value_object.Nonce {
 }
 
 // HopDataNoncePeek returns the next nonce without incrementing counter
-func (c *Circuit) HopDataNoncePeek(idx int) value_object.Nonce {
+func (c *Circuit) HopDataNoncePeek(idx int) vo.Nonce {
 	nonce := c.baseNonces[idx]
 
 	// XOR data counter into last 8 bytes
@@ -150,7 +150,7 @@ func (c *Circuit) HopDataNoncePeek(idx int) value_object.Nonce {
 }
 
 // HopUpstreamDataNonce generates the next unique nonce for upstream DATA commands at hop idx
-func (c *Circuit) HopUpstreamDataNonce(idx int) value_object.Nonce {
+func (c *Circuit) HopUpstreamDataNonce(idx int) vo.Nonce {
 	nonce := c.baseNonces[idx]
 
 	// XOR upstream data counter into last 8 bytes
@@ -165,7 +165,7 @@ func (c *Circuit) HopUpstreamDataNonce(idx int) value_object.Nonce {
 }
 
 // HopUpstreamDataNoncePeek returns the next upstream nonce without incrementing counter
-func (c *Circuit) HopUpstreamDataNoncePeek(idx int) value_object.Nonce {
+func (c *Circuit) HopUpstreamDataNoncePeek(idx int) vo.Nonce {
 	nonce := c.baseNonces[idx]
 
 	// XOR upstream data counter into last 8 bytes
@@ -189,10 +189,10 @@ func (c *Circuit) RSAPublic() *rsa.PublicKey {
 // WipeKeys zeroes all symmetric keys and forgets the RSA private key.
 func (c *Circuit) WipeKeys() {
 	for i := range c.keys {
-		c.keys[i] = value_object.AESKey{}
+		c.keys[i] = vo.AESKey{}
 	}
 	for i := range c.baseNonces {
-		c.baseNonces[i] = value_object.Nonce{}
+		c.baseNonces[i] = vo.Nonce{}
 	}
 	c.priv = nil
 }
@@ -204,13 +204,13 @@ func (c *Circuit) OpenStream() (*StreamState, error) {
 	c.strmMu.Lock()
 	defer c.strmMu.Unlock()
 
-	sid := value_object.NewStreamIDAuto()
+	sid := vo.NewStreamIDAuto()
 	state := &StreamState{ID: sid}
 	c.stream[sid] = state
 	return state, nil
 }
 
-func (c *Circuit) CloseStream(id value_object.StreamID) {
+func (c *Circuit) CloseStream(id vo.StreamID) {
 	c.strmMu.Lock()
 	defer c.strmMu.Unlock()
 	if st, ok := c.stream[id]; ok {
@@ -218,10 +218,10 @@ func (c *Circuit) CloseStream(id value_object.StreamID) {
 	}
 }
 
-func (c *Circuit) ActiveStreams() []value_object.StreamID {
+func (c *Circuit) ActiveStreams() []vo.StreamID {
 	c.strmMu.RLock()
 	defer c.strmMu.RUnlock()
-	out := make([]value_object.StreamID, 0, len(c.stream))
+	out := make([]vo.StreamID, 0, len(c.stream))
 	for id, st := range c.stream {
 		if !st.Closed {
 			out = append(out, id)
@@ -254,7 +254,7 @@ func (c *Circuit) String() string {
 }
 
 // GetMessageTypeNonce returns the next nonce for the given message type and hop
-func (c *Circuit) GetMessageTypeNonce(hopIndex int, messageType MessageType) value_object.Nonce {
+func (c *Circuit) GetMessageTypeNonce(hopIndex int, messageType MessageType) vo.Nonce {
 	switch messageType {
 	case MessageTypeBegin, MessageTypeConnect:
 		return c.HopBeginNonce(hopIndex)

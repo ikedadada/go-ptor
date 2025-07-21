@@ -7,7 +7,7 @@ import (
 	"net"
 
 	"ikedadada/go-ptor/internal/domain/aggregate"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 // CircuitBuildService abstracts the network operations needed during circuit build.
@@ -19,7 +19,7 @@ type CircuitBuildService interface {
 	// WaitForCreatedResponse waits for a CREATED payload from the relay.
 	WaitForCreatedResponse(conn net.Conn) ([]byte, error)
 	// TeardownCircuit notifies the relay about circuit teardown.
-	TeardownCircuit(conn net.Conn, cid value_object.CircuitID) error
+	TeardownCircuit(conn net.Conn, cid vo.CircuitID) error
 }
 
 // TCPCircuitBuildService implements service.CircuitBuildService over raw TCP connections.
@@ -45,7 +45,7 @@ func (TCPCircuitBuildService) WaitForCreatedResponse(conn net.Conn) ([]byte, err
 	if _, err := io.ReadFull(conn, hdr[:]); err != nil {
 		return nil, err
 	}
-	if value_object.CellCommand(hdr[16]) != value_object.CmdCreated || value_object.ProtocolVersion(hdr[17]) != value_object.ProtocolV1 {
+	if vo.CellCommand(hdr[16]) != vo.CmdCreated || vo.ProtocolVersion(hdr[17]) != vo.ProtocolV1 {
 		return nil, fmt.Errorf("invalid created header")
 	}
 	l := binary.BigEndian.Uint16(hdr[18:20])
@@ -59,7 +59,7 @@ func (TCPCircuitBuildService) WaitForCreatedResponse(conn net.Conn) ([]byte, err
 	return payload, nil
 }
 
-func (TCPCircuitBuildService) TeardownCircuit(conn net.Conn, cid value_object.CircuitID) error {
+func (TCPCircuitBuildService) TeardownCircuit(conn net.Conn, cid vo.CircuitID) error {
 	var buf [20]byte
 	copy(buf[:16], cid.Bytes())
 	buf[18] = 0xFE

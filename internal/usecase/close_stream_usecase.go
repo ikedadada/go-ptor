@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -35,11 +35,11 @@ func NewCloseStreamUsecase(cr repository.CircuitRepository, f useSvc.MessagingSe
 }
 
 func (uc *closeStreamUsecaseImpl) Handle(in CloseStreamInput) (CloseStreamOutput, error) {
-	cid, err := value_object.CircuitIDFrom(in.CircuitID)
+	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return CloseStreamOutput{}, err
 	}
-	sid, err := value_object.StreamIDFrom(in.StreamID)
+	sid, err := vo.StreamIDFrom(in.StreamID)
 	if err != nil {
 		return CloseStreamOutput{}, err
 	}

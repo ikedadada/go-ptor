@@ -9,7 +9,7 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
@@ -19,28 +19,30 @@ type mockCircuitRepoSend struct {
 	err     error
 }
 
-func (m *mockCircuitRepoSend) Find(id value_object.CircuitID) (*entity.Circuit, error) {
+func (m *mockCircuitRepoSend) Find(id vo.CircuitID) (*entity.Circuit, error) {
 	return m.circuit, m.err
 }
 func (m *mockCircuitRepoSend) Save(*entity.Circuit) error             { return nil }
-func (m *mockCircuitRepoSend) Delete(value_object.CircuitID) error    { return nil }
+func (m *mockCircuitRepoSend) Delete(vo.CircuitID) error              { return nil }
 func (m *mockCircuitRepoSend) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
 type mockTransmitterSend struct{ err error }
 
-func (m *mockTransmitterSend) TransmitData(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+func (m *mockTransmitterSend) TransmitData(c vo.CircuitID, s vo.StreamID, data []byte) error {
 	return m.err
 }
-func (m *mockTransmitterSend) InitiateStream(c value_object.CircuitID, s value_object.StreamID, data []byte) error {
+func (m *mockTransmitterSend) InitiateStream(c vo.CircuitID, s vo.StreamID, data []byte) error {
 	return m.err
 }
-func (m *mockTransmitterSend) TerminateStream(c value_object.CircuitID, s value_object.StreamID) error {
+func (m *mockTransmitterSend) TerminateStream(c vo.CircuitID, s vo.StreamID) error {
 	return nil
 }
-func (m *mockTransmitterSend) DestroyCircuit(value_object.CircuitID) error         { return nil }
-func (m *mockTransmitterSend) EstablishConnection(value_object.CircuitID, []byte) error { return nil }
+func (m *mockTransmitterSend) DestroyCircuit(vo.CircuitID) error              { return nil }
+func (m *mockTransmitterSend) EstablishConnection(vo.CircuitID, []byte) error { return nil }
 
-type sendFactory struct{ tx useSvc.CircuitMessagingService }
+type sendFactory struct {
+	tx useSvc.CircuitMessagingService
+}
 
 func (m sendFactory) New(net.Conn) useSvc.CircuitMessagingService { return m.tx }
 
@@ -62,7 +64,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 		expectsErr bool
 	}{
 		{"ok", &mockCircuitRepoSend{circuit: circuit}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, false},
-		{"begin", &mockCircuitRepoSend{circuit: circuit}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("target"), Cmd: value_object.CmdBegin}, false},
+		{"begin", &mockCircuitRepoSend{circuit: circuit}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("target"), Cmd: vo.CmdBegin}, false},
 		{"circuit not found", &mockCircuitRepoSend{circuit: nil, err: errors.New("not found")}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
 		{"bad id", &mockCircuitRepoSend{circuit: nil}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: "bad-uuid", StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
 		{"tx error", &mockCircuitRepoSend{circuit: circuit}, sendFactory{&mockTransmitterSend{err: errors.New("fail")}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
@@ -87,17 +89,17 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 
 type recordTx struct{ data []byte }
 
-func (r *recordTx) TransmitData(c value_object.CircuitID, s value_object.StreamID, d []byte) error {
+func (r *recordTx) TransmitData(c vo.CircuitID, s vo.StreamID, d []byte) error {
 	r.data = d
 	return nil
 }
-func (r *recordTx) InitiateStream(c value_object.CircuitID, s value_object.StreamID, d []byte) error {
+func (r *recordTx) InitiateStream(c vo.CircuitID, s vo.StreamID, d []byte) error {
 	r.data = d
 	return nil
 }
-func (r *recordTx) TerminateStream(value_object.CircuitID, value_object.StreamID) error { return nil }
-func (r *recordTx) DestroyCircuit(value_object.CircuitID) error                    { return nil }
-func (r *recordTx) EstablishConnection(value_object.CircuitID, []byte) error            { return nil }
+func (r *recordTx) TerminateStream(vo.CircuitID, vo.StreamID) error { return nil }
+func (r *recordTx) DestroyCircuit(vo.CircuitID) error               { return nil }
+func (r *recordTx) EstablishConnection(vo.CircuitID, []byte) error  { return nil }
 
 type recordFactory struct{ tx *recordTx }
 
@@ -105,19 +107,19 @@ func (m recordFactory) New(net.Conn) useSvc.CircuitMessagingService { return m.t
 
 func TestSendData_OnionRoundTrip(t *testing.T) {
 	hops := 3
-	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	ids := make([]value_object.RelayID, hops)
-	keys := make([]value_object.AESKey, hops)
-	nonces := make([]value_object.Nonce, hops)
+	relayID, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	ids := make([]vo.RelayID, hops)
+	keys := make([]vo.AESKey, hops)
+	nonces := make([]vo.Nonce, hops)
 	for i := 0; i < hops; i++ {
 		ids[i] = relayID
-		k, _ := value_object.NewAESKey()
-		n, _ := value_object.NewNonce()
+		k, _ := vo.NewAESKey()
+		n, _ := vo.NewNonce()
 		keys[i] = k
 		nonces[i] = n
 	}
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	cir, err := entity.NewCircuit(value_object.NewCircuitID(), ids, keys, nonces, priv)
+	cir, err := entity.NewCircuit(vo.NewCircuitID(), ids, keys, nonces, priv)
 	if err != nil {
 		t.Fatalf("circuit: %v", err)
 	}
@@ -149,19 +151,19 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 
 func TestSendData_BeginRoundTrip(t *testing.T) {
 	hops := 2
-	relayID, _ := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-	ids := make([]value_object.RelayID, hops)
-	keys := make([]value_object.AESKey, hops)
-	nonces := make([]value_object.Nonce, hops)
+	relayID, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+	ids := make([]vo.RelayID, hops)
+	keys := make([]vo.AESKey, hops)
+	nonces := make([]vo.Nonce, hops)
 	for i := 0; i < hops; i++ {
 		ids[i] = relayID
-		k, _ := value_object.NewAESKey()
-		n, _ := value_object.NewNonce()
+		k, _ := vo.NewAESKey()
+		n, _ := vo.NewNonce()
 		keys[i] = k
 		nonces[i] = n
 	}
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	cir, err := entity.NewCircuit(value_object.NewCircuitID(), ids, keys, nonces, priv)
+	cir, err := entity.NewCircuit(vo.NewCircuitID(), ids, keys, nonces, priv)
 	if err != nil {
 		t.Fatalf("circuit: %v", err)
 	}
@@ -171,8 +173,8 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 	tx := &recordTx{}
 	crypto := useSvc.NewCryptoService()
 	uc := usecase.NewSendDataUsecase(repo, recordFactory{tx}, crypto)
-	payload, _ := value_object.EncodeBeginPayload(&value_object.BeginPayload{StreamID: st.ID.UInt16(), Target: "example.com:80"})
-	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: payload, Cmd: value_object.CmdBegin}); err != nil {
+	payload, _ := vo.EncodeBeginPayload(&vo.BeginPayload{StreamID: st.ID.UInt16(), Target: "example.com:80"})
+	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: payload, Cmd: vo.CmdBegin}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 

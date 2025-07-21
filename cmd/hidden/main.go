@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 func main() {
@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	addr := value_object.NewHiddenAddr(priv.Public().(ed25519.PublicKey))
+	addr := vo.NewHiddenAddr(priv.Public().(ed25519.PublicKey))
 	fmt.Println("Hidden address:", addr.String())
 
 	ln, err := net.Listen("tcp", *listen)

@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"ikedadada/go-ptor/internal/domain/entity"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 )
 
 func TestEncodeDecode(t *testing.T) {
 	payload := []byte("hello")
-	c := entity.Cell{Cmd: value_object.CmdData, Version: value_object.ProtocolV1, Payload: payload}
+	c := entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
 	buf, err := entity.Encode(c)
 	if err != nil {
 		t.Fatalf("encode: %v", err)

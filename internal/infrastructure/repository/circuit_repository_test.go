@@ -8,20 +8,20 @@ import (
 
 	"ikedadada/go-ptor/internal/domain/entity"
 	repoif "ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/infrastructure/repository"
 )
 
-func makeTestCircuit(id value_object.CircuitID) (*entity.Circuit, error) {
-	relayID, err := value_object.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+func makeTestCircuit(id vo.CircuitID) (*entity.Circuit, error) {
+	relayID, err := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	if err != nil {
 		return nil, err
 	}
-	key, err := value_object.NewAESKey()
+	key, err := vo.NewAESKey()
 	if err != nil {
 		return nil, err
 	}
-	nonce, err := value_object.NewNonce()
+	nonce, err := vo.NewNonce()
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func makeTestCircuit(id value_object.CircuitID) (*entity.Circuit, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := entity.NewCircuit(id, []value_object.RelayID{relayID}, []value_object.AESKey{key}, []value_object.Nonce{nonce}, priv)
+	c, err := entity.NewCircuit(id, []vo.RelayID{relayID}, []vo.AESKey{key}, []vo.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func makeTestCircuit(id value_object.CircuitID) (*entity.Circuit, error) {
 
 func TestCircuitRepo_Save_Find_Delete(t *testing.T) {
 	repo := repository.NewCircuitRepository()
-	id := value_object.NewCircuitID()
+	id := vo.NewCircuitID()
 	c, err := makeTestCircuit(id)
 	if err != nil {
 		t.Fatalf("setup circuit: %v", err)
@@ -73,8 +73,8 @@ func TestCircuitRepo_Save_Find_Delete(t *testing.T) {
 
 func TestCircuitRepo_ListActive(t *testing.T) {
 	repo := repository.NewCircuitRepository()
-	id1 := value_object.NewCircuitID()
-	id2 := value_object.NewCircuitID()
+	id1 := vo.NewCircuitID()
+	id2 := vo.NewCircuitID()
 	c1, err := makeTestCircuit(id1)
 	if err != nil {
 		t.Fatalf("setup circuit1: %v", err)

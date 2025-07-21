@@ -1,7 +1,7 @@
 package value_object_test
 
 import (
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"testing"
 	"time"
 )
@@ -21,7 +21,7 @@ func TestTimeStamp_Table(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ts := value_object.TimeStampFrom(tt.input)
+			ts := vo.TimeStampFrom(tt.input)
 			if ts.Unix() != tt.expectsUnix {
 				t.Errorf("expected unix %d, got %d", tt.expectsUnix, ts.Unix())
 			}

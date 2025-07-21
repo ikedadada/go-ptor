@@ -1,7 +1,7 @@
 package value_object_test
 
 import (
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"testing"
 )
 
@@ -17,7 +17,7 @@ func TestRelayID_Table(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := value_object.NewRelayID(tt.input)
+			_, err := vo.NewRelayID(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error for input %s", tt.input)
 			}

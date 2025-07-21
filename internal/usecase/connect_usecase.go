@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	useSvc "ikedadada/go-ptor/internal/usecase/service"
 )
 
@@ -37,7 +37,7 @@ func NewConnectUseCase(r repository.CircuitRepository, f useSvc.MessagingService
 }
 
 func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
-	cid, err := value_object.CircuitIDFrom(in.CircuitID)
+	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return ConnectOutput{}, fmt.Errorf("parse circuit id: %w", err)
 	}
@@ -47,7 +47,7 @@ func (uc *connectUsecaseImpl) Handle(in ConnectInput) (ConnectOutput, error) {
 	}
 	payload := []byte{}
 	if in.Target != "" {
-		payload, err = value_object.EncodeConnectPayload(&value_object.ConnectPayload{Target: in.Target})
+		payload, err = vo.EncodeConnectPayload(&vo.ConnectPayload{Target: in.Target})
 		if err != nil {
 			return ConnectOutput{}, err
 		}

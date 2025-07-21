@@ -1,7 +1,7 @@
 package value_object_test
 
 import (
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"testing"
 )
 
@@ -17,7 +17,7 @@ func TestStreamID_Table(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			id, err := value_object.StreamIDFrom(tt.input)
+			id, err := vo.StreamIDFrom(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error for input %d", tt.input)
 			}
