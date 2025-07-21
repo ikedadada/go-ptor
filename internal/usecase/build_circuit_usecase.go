@@ -10,7 +10,7 @@ import (
 	"ikedadada/go-ptor/internal/domain/aggregate"
 	"ikedadada/go-ptor/internal/domain/entity"
 	"ikedadada/go-ptor/internal/domain/repository"
-	"ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/internal/domain/value_object"
 	"ikedadada/go-ptor/internal/usecase/service"
 	"net"
 	"time"
@@ -30,7 +30,7 @@ type BuildCircuitOutput struct {
 	Hops      []string                `json:"relay_ids"`
 	Keys      [][]byte                `json:"aes_keys"` // Base64 等はプレゼン層で
 	Nonces    [][]byte                `json:"nonces"`   // 同上
-	AddrList  []value_object.Endpoint `json:"endpoints"`
+	AddrList  []vo.Endpoint `json:"endpoints"`
 }
 
 // BuildCircuitUseCase creates new circuits according to the input parameters.
@@ -54,10 +54,10 @@ func NewBuildCircuitUseCase(rr repository.RelayRepository, cr repository.Circuit
 
 func (uc *buildCircuitUseCaseImpl) Handle(in BuildCircuitInput) (BuildCircuitOutput, error) {
 	// hops 引数を service に渡して Circuit を生成
-	exitID := value_object.RelayID{}
+	exitID := vo.RelayID{}
 	if in.ExitRelayID != "" {
 		var err error
-		exitID, err = value_object.NewRelayID(in.ExitRelayID)
+		exitID, err = vo.NewRelayID(in.ExitRelayID)
 		if err != nil {
 			return BuildCircuitOutput{}, err
 		}
@@ -87,7 +87,7 @@ func (uc *buildCircuitUseCaseImpl) Handle(in BuildCircuitInput) (BuildCircuitOut
 	return out, nil
 }
 
-func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*entity.Circuit, error) {
+func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Circuit, error) {
 	if hops <= 0 {
 		hops = 3
 	}
@@ -101,7 +101,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 	}
 
 	var exitRelay *entity.Relay
-	if exit != (value_object.RelayID{}) {
+	if exit != (vo.RelayID{}) {
 		r, err := uc.rr.FindByID(exit)
 		if err != nil {
 			return nil, fmt.Errorf("exit relay not found: %w", err)
@@ -140,9 +140,9 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 		selected = append(selected, exitRelay)
 	}
 
-	relayIDs := make([]value_object.RelayID, 0, hops)
-	keys := make([]value_object.AESKey, hops)
-	nonces := make([]value_object.Nonce, hops)
+	relayIDs := make([]vo.RelayID, 0, hops)
+	keys := make([]vo.AESKey, hops)
+	nonces := make([]vo.Nonce, hops)
 
 	for _, r := range selected {
 		relayIDs = append(relayIDs, r.ID())
@@ -154,7 +154,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 	}
 
 	// 3. CircuitID 生成
-	cid := value_object.NewCircuitID()
+	cid := vo.NewCircuitID()
 
 	// --- build circuit over the network ---
 	const ioTimeout = 10 * time.Second
@@ -193,7 +193,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 		}
 		var pubArr [32]byte
 		copy(pubArr[:], cliPub)
-		payload, err := value_object.EncodeExtendPayload(&value_object.ExtendPayload{
+		payload, err := vo.EncodeExtendPayload(&vo.ExtendPayload{
 			NextHop:   next,
 			ClientPub: pubArr,
 		})
@@ -202,8 +202,8 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 			conn.Close()
 			return nil, err
 		}
-		streamID, _ := value_object.StreamIDFrom(0)
-		cell, err := aggregate.NewRelayCell(value_object.CmdExtend, cid, streamID, payload)
+		streamID, _ := vo.StreamIDFrom(0)
+		cell, err := aggregate.NewRelayCell(vo.CmdExtend, cid, streamID, payload)
 		if err != nil {
 			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
@@ -222,7 +222,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit value_object.RelayID) (*
 			return nil, err
 		}
 		_ = conn.SetDeadline(time.Time{})
-		created, err := value_object.DecodeCreatedPayload(resp)
+		created, err := vo.DecodeCreatedPayload(resp)
 		if err != nil {
 			_ = uc.dialer.TeardownCircuit(conn, cid)
 			conn.Close()
