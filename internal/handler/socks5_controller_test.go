@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"errors"
 	"io"
+	"net"
 	"strings"
 	"testing"
 
@@ -144,6 +145,13 @@ type mockCellReaderService struct{}
 func (m *mockCellReaderService) ReadCell(r io.Reader) (value_object.CircuitID, *entity.Cell, error) {
 	return value_object.NewCircuitID(), nil, errors.New("mock read cell")
 }
+
+type mockStreamManagerService struct{}
+
+func (m *mockStreamManagerService) Add(id uint16, conn net.Conn)       {}
+func (m *mockStreamManagerService) Get(id uint16) (net.Conn, bool)     { return nil, false }
+func (m *mockStreamManagerService) Remove(id uint16)                    {}
+func (m *mockStreamManagerService) CloseAll()                          {}
 
 // Simple mock implementations for use cases
 type mockBuildCircuitUseCase struct{}

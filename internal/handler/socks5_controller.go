@@ -129,7 +129,7 @@ func (c *SOCKS5Controller) HandleConnection(conn net.Conn) {
 	log.Printf("circuit built successfully cid=%s", circuitID)
 
 	cid, _ := value_object.CircuitIDFrom(circuitID)
-	sm := usecase.NewStreamManager()
+	sm := useSvc.NewStreamManagerService()
 	go c.recvLoop(cid, sm)
 
 	if hidden {
@@ -210,7 +210,7 @@ func (c *SOCKS5Controller) resolveAddress(host string, port int) (string, string
 }
 
 // recvLoop handles incoming data from the circuit
-func (c *SOCKS5Controller) recvLoop(cid value_object.CircuitID, sm usecase.StreamManager) {
+func (c *SOCKS5Controller) recvLoop(cid value_object.CircuitID, sm useSvc.StreamManagerService) {
 	cir, err := c.circuitRepo.Find(cid)
 	if err != nil {
 		log.Println("find circuit:", err)
