@@ -1,16 +1,32 @@
 # go-ptor
 
-This repository demonstrates a simple multi-layer Go project. Code is organized following the layered layout described in `docs/style_backend.md`:
+This repository demonstrates a Domain-Driven Design (DDD) Go project implementing an educational onion routing network. Code is organized following clean architecture principles with proper separation of concerns:
 
 ```
-internal/
-  domain/        # core models and business logic
-  usecase/       # application orchestration logic
-  handler/       # HTTP/CLI adapters (thin layer)
-  infrastructure/ # external systems and drivers
+shared/                   # Common domain and technical services
+  domain/                # Core domain models (Entity, ValueObject, Repository, Aggregate)
+  service/               # Technical services (CryptoService, CellReaderService, etc.)
+
+cmd/client/              # SOCKS5 proxy client service
+  usecase/               # Client business logic (circuit building, stream management)
+  infrastructure/        # Client-specific infrastructure
+  handler/               # SOCKS5 controller
+
+cmd/relay/               # Onion routing relay service
+  usecase/               # Relay business logic (cell processing)
+  infrastructure/        # Relay-specific infrastructure
+
+cmd/directory/           # HTTP-based directory service
+cmd/hidden/              # Hidden service TCP proxy
+cmd/httpdemo/            # Demo HTTP server
+cmd/keygen/              # Key generation utility
 ```
 
-The separation keeps business rules isolated from entry points and infrastructure code.
+The architecture separates:
+- **Domain logic** (shared across services)
+- **Technical services** (shared implementations like crypto)
+- **Business logic** (service-specific usecases)
+- **Infrastructure** (service-specific external dependencies)
 
 ## Requirements
 

@@ -15,9 +15,9 @@ import (
 	"strconv"
 	"time"
 
-	repoimpl "ikedadada/go-ptor/internal/infrastructure/repository"
-	"ikedadada/go-ptor/internal/usecase"
-	"ikedadada/go-ptor/internal/usecase/service"
+	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/usecase"
+	"ikedadada/go-ptor/shared/service"
 )
 
 func main() {

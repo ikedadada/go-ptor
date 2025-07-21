@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ikedadada/go-ptor/internal/handler"
-	"ikedadada/go-ptor/internal/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/client/handler"
+	"ikedadada/go-ptor/cmd/client/infrastructure/repository"
 )
 
 // Mock HTTPClient for testing

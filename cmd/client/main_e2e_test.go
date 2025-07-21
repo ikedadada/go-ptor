@@ -21,7 +21,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	vo "ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"strings"
 
 	"github.com/google/uuid"

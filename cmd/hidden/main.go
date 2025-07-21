@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	vo "ikedadada/go-ptor/internal/domain/value_object"
+	vo "ikedadada/go-ptor/shared/domain/value_object"
 )
 
 func main() {

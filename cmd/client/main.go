@@ -5,11 +5,11 @@ import (
 	"log"
 	"net"
 
-	"ikedadada/go-ptor/internal/handler"
-	"ikedadada/go-ptor/internal/infrastructure/http"
-	infraRepo "ikedadada/go-ptor/internal/infrastructure/repository"
-	"ikedadada/go-ptor/internal/usecase"
-	"ikedadada/go-ptor/internal/usecase/service"
+	"ikedadada/go-ptor/cmd/client/handler"
+	"ikedadada/go-ptor/cmd/client/infrastructure/http"
+	infraRepo "ikedadada/go-ptor/cmd/client/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/client/usecase"
+	"ikedadada/go-ptor/shared/service"
 )
 
 func main() {
