@@ -45,7 +45,7 @@ func main() {
 	buildUC := usecase.NewBuildCircuitUseCase(relayRepository, circuitRepository, dialer, cryptoSvc)
 
 	factory := service.TCPMessagingServiceFactory{}
-	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
+	openUC := usecase.NewOpenStreamUseCase(circuitRepository)
 	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, factory)
 	sendUC := usecase.NewSendDataUsecase(circuitRepository, factory, cryptoSvc)
 	connectUC := usecase.NewSendConnectUseCase(circuitRepository, factory, cryptoSvc)
