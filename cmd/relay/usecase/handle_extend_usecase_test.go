@@ -56,12 +56,25 @@ func TestHandleExtendUseCase_Extend(t *testing.T) {
 		t.Fatalf("read body: %v", err)
 	}
 
-	// ensure entry created
-	time.Sleep(10 * time.Millisecond)
-	st, err := repo.Find(cid)
-	if err != nil {
-		t.Fatalf("entry not created: %v", err)
+	// ensure entry created with retry
+	var st *entity.ConnState
+	var err error
+	timeout := time.After(100 * time.Millisecond)
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			t.Fatal("timeout waiting for entry creation")
+		case <-ticker.C:
+			st, err = repo.Find(cid)
+			if err == nil {
+				goto found // Entry created successfully
+			}
+		}
 	}
+found:
 	if st.Down() != nil {
 		st.Down().Close()
 	}

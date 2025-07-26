@@ -27,15 +27,23 @@ func freePort(t *testing.T) string {
 }
 
 func waitDial(addr string, d time.Duration) (net.Conn, error) {
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
-		c, err := net.Dial("tcp", addr)
-		if err == nil {
-			return c, nil
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			c, err := net.Dial("tcp", addr)
+			if err == nil {
+				return c, nil
+			}
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
-	return nil, context.DeadlineExceeded
 }
 
 func buildBin(t *testing.T) string {

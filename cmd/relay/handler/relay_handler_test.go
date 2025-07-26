@@ -232,8 +232,14 @@ func TestRelayHandler_ServeConn(t *testing.T) {
 	// Create pipe connection
 	conn1, conn2 := net.Pipe()
 
+	// Channel to signal goroutine completion
+	done := make(chan struct{})
+
 	// Start serving connection
-	go h.ServeConn(conn1)
+	go func() {
+		defer close(done)
+		h.ServeConn(conn1)
+	}()
 
 	// Send extend cell
 	_, pub, _ := crypto.X25519Generate()
@@ -270,6 +276,11 @@ func TestRelayHandler_ServeConn(t *testing.T) {
 	conn1.Close()
 	conn2.Close()
 
-	// Allow time for cleanup
-	time.Sleep(10 * time.Millisecond)
+	// Wait for goroutine to complete with timeout
+	select {
+	case <-done:
+		// ServeConn completed successfully
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timeout waiting for ServeConn to complete")
+	}
 }
