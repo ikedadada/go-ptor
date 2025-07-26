@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,24 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// safeBuffer wraps bytes.Buffer with mutex for concurrent access
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (sb *safeBuffer) Write(p []byte) (n int, err error) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return sb.buf.Write(p)
+}
+
+func (sb *safeBuffer) String() string {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return sb.buf.String()
+}
 
 func freePort(t *testing.T) string {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -30,15 +49,23 @@ func freePort(t *testing.T) string {
 }
 
 func waitDial(addr string, d time.Duration) (net.Conn, error) {
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
-		c, err := net.Dial("tcp", addr)
-		if err == nil {
-			return c, nil
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			c, err := net.Dial("tcp", addr)
+			if err == nil {
+				return c, nil
+			}
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
-	return nil, context.DeadlineExceeded
 }
 
 func buildBin(t *testing.T) string {
@@ -54,9 +81,9 @@ func TestRelayMain_E2E(t *testing.T) {
 	addr := freePort(t)
 	exe := buildBin(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	var out bytes.Buffer
+	out := &safeBuffer{}
 	cmd := exec.CommandContext(ctx, exe, "-listen", addr)
-	cmd.Stderr = &out
+	cmd.Stderr = out
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start relay: %v", err)
 	}
@@ -79,12 +106,25 @@ func TestRelayMain_E2E(t *testing.T) {
 	c.Write(outBuf)
 	c.Close()
 
-	time.Sleep(100 * time.Millisecond)
-	cancel()
-	cmd.Wait()
+	// Wait for log output with timeout
+	timeout := time.After(500 * time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
 
-	if !strings.Contains(out.String(), cid.String()) {
-		t.Errorf("log missing cid: %s", out.String())
+	for {
+		select {
+		case <-timeout:
+			cancel()
+			cmd.Wait()
+			t.Errorf("timeout waiting for log output with cid: %s", out.String())
+			return
+		case <-ticker.C:
+			if strings.Contains(out.String(), cid.String()) {
+				cancel()
+				cmd.Wait()
+				return // Success: found expected log output
+			}
+		}
 	}
 }
 
