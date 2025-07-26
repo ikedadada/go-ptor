@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,24 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// safeBuffer wraps bytes.Buffer with mutex for concurrent access
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (sb *safeBuffer) Write(p []byte) (n int, err error) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return sb.buf.Write(p)
+}
+
+func (sb *safeBuffer) String() string {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return sb.buf.String()
+}
 
 func freePort(t *testing.T) string {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -62,9 +81,9 @@ func TestRelayMain_E2E(t *testing.T) {
 	addr := freePort(t)
 	exe := buildBin(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	var out bytes.Buffer
+	out := &safeBuffer{}
 	cmd := exec.CommandContext(ctx, exe, "-listen", addr)
-	cmd.Stderr = &out
+	cmd.Stderr = out
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start relay: %v", err)
 	}
