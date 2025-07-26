@@ -3,20 +3,17 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
-	"errors"
 	"flag"
-	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
 	"strconv"
 	"time"
 
+	"ikedadada/go-ptor/cmd/relay/handler"
 	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
+	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
 )
 
@@ -25,20 +22,45 @@ func main() {
 	privPath := flag.String("priv", "", "RSA private key")
 	ttl := flag.Duration("ttl", defaultTTL(), "circuit entry TTL")
 	flag.Parse()
-	var priv *rsa.PrivateKey
+	var priv vo.PrivateKey
 	var err error
 	if *privPath == "" {
-		priv, err = rsa.GenerateKey(rand.Reader, 2048)
+		rawKey, genErr := rsa.GenerateKey(rand.Reader, 2048)
+		if genErr != nil {
+			log.Fatal(genErr)
+		}
+		priv = vo.NewRSAPrivKey(rawKey)
 	} else {
-		priv, err = loadRSAPriv(*privPath)
-	}
-	if err != nil {
-		log.Fatal(err)
+		priv, err = loadPrivateKey(*privPath)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	repo := repoimpl.NewConnStateRepository(*ttl)
 	cryptoSvc := service.NewCryptoService()
 	reader := service.NewCellReaderService()
-	uc := usecase.NewRelayUseCase(priv, repo, cryptoSvc, reader)
+	cellSender := service.NewCellSenderService()
+
+	// Create individual usecases
+	extendUC := usecase.NewExtendUseCase(priv, repo, cryptoSvc, cellSender)
+	beginUC := usecase.NewBeginUseCase(repo, cryptoSvc, cellSender)
+	dataUC := usecase.NewDataUseCase(repo, cryptoSvc, cellSender)
+	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewConnectUseCase(repo, cryptoSvc, cellSender)
+
+	// Create handler with all usecases
+	relayHandler := handler.NewRelayHandler(
+		repo,
+		reader,
+		cellSender,
+		extendUC,
+		beginUC,
+		dataUC,
+		endStreamUC,
+		destroyUC,
+		connectUC,
+	)
 
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
@@ -52,38 +74,19 @@ func main() {
 		}
 		log.Printf("request connection from %s", c.RemoteAddr())
 		go func(conn net.Conn) {
-			uc.ServeConn(conn)
+			relayHandler.ServeConn(conn)
 			log.Printf("response connection closed %s", conn.RemoteAddr())
 		}(c)
 	}
 }
 
-// loadRSAPriv loads an RSA private key from a PEM file.
-func loadRSAPriv(path string) (*rsa.PrivateKey, error) {
+// loadPrivateKey loads a private key from a PEM file and returns it as a PrivateKey value object.
+func loadPrivateKey(path string) (vo.PrivateKey, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	blk, _ := pem.Decode(b)
-	if blk == nil {
-		return nil, io.ErrUnexpectedEOF
-	}
-	switch blk.Type {
-	case "RSA PRIVATE KEY":
-		return x509.ParsePKCS1PrivateKey(blk.Bytes)
-	case "PRIVATE KEY":
-		key, err := x509.ParsePKCS8PrivateKey(blk.Bytes)
-		if err != nil {
-			return nil, err
-		}
-		rsaKey, ok := key.(*rsa.PrivateKey)
-		if !ok {
-			return nil, errors.New("not RSA private key")
-		}
-		return rsaKey, nil
-	default:
-		return nil, fmt.Errorf("unsupported key type %q", blk.Type)
-	}
+	return vo.ParsePrivateKeyFromPEM(b)
 }
 
 // defaultTTL returns the TTL for circuit entries derived from the

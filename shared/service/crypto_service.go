@@ -12,12 +12,16 @@ import (
 	"log"
 
 	"golang.org/x/crypto/hkdf"
+	vo "ikedadada/go-ptor/shared/domain/value_object"
 )
 
 // CryptoService provides common cryptographic operations used by the application.
 type CryptoService interface {
 	RSAEncrypt(pub *rsa.PublicKey, in []byte) ([]byte, error)
 	RSADecrypt(priv *rsa.PrivateKey, in []byte) ([]byte, error)
+	// New methods using value objects
+	RSAEncryptVO(pub vo.RSAPubKey, in []byte) ([]byte, error)
+	RSADecryptVO(priv vo.PrivateKey, in []byte) ([]byte, error)
 	AESSeal(key [32]byte, nonce [12]byte, plain []byte) ([]byte, error)
 	AESOpen(key [32]byte, nonce [12]byte, enc []byte) ([]byte, error)
 	// AESMultiSeal applies AESSeal repeatedly with the given keys and nonces
@@ -50,6 +54,21 @@ func (*cryptoServiceImpl) RSAEncrypt(pub *rsa.PublicKey, in []byte) ([]byte, err
 
 func (*cryptoServiceImpl) RSADecrypt(priv *rsa.PrivateKey, in []byte) ([]byte, error) {
 	return rsa.DecryptOAEP(sha256.New(), rand.Reader, priv, in, nil)
+}
+
+func (c *cryptoServiceImpl) RSAEncryptVO(pub vo.RSAPubKey, in []byte) ([]byte, error) {
+	return c.RSAEncrypt(pub.PublicKey, in)
+}
+
+func (c *cryptoServiceImpl) RSADecryptVO(priv vo.PrivateKey, in []byte) ([]byte, error) {
+	key, ok := priv.(*vo.RSAPrivKey)
+	if !ok {
+		return nil, fmt.Errorf("unsupported private key type for RSA operations: %s", priv.KeyType())
+	}
+	if key == nil {
+		return nil, fmt.Errorf("RSA private key is nil")
+	}
+	return c.RSADecrypt(key.RSAKey(), in)
 }
 
 func (*cryptoServiceImpl) AESSeal(key [32]byte, nonce [12]byte, plain []byte) ([]byte, error) {
