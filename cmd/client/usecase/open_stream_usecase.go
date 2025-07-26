@@ -29,7 +29,7 @@ type openStreamUseCaseImpl struct {
 }
 
 // NewOpenStreamUsecase returns a use case to open streams on circuits.
-func NewOpenStreamUsecase(cr repository.CircuitRepository) *openStreamUseCaseImpl {
+func NewOpenStreamUsecase(cr repository.CircuitRepository) OpenStreamUseCase {
 	return &openStreamUseCaseImpl{cr: cr}
 }
 

@@ -21,7 +21,7 @@ type SOCKS5Controller struct {
 	cryptoSvc   service.CryptoService
 	crSvc       service.CellReaderService
 	buildUC     usecase.BuildCircuitUseCase
-	connectUC   usecase.ConnectUseCase
+	connectUC   usecase.SendConnectUseCase
 	openUC      usecase.OpenStreamUseCase
 	closeUC     usecase.CloseStreamUseCase
 	sendUC      usecase.SendDataUseCase
@@ -36,7 +36,7 @@ func NewSOCKS5Controller(
 	cryptoSvc service.CryptoService,
 	crSvc service.CellReaderService,
 	buildUC usecase.BuildCircuitUseCase,
-	connectUC usecase.ConnectUseCase,
+	connectUC usecase.SendConnectUseCase,
 	openUC usecase.OpenStreamUseCase,
 	closeUC usecase.CloseStreamUseCase,
 	sendUC usecase.SendDataUseCase,
@@ -180,7 +180,7 @@ func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitID,
 
 	// Connect to hidden service if needed
 	if exitID != "" {
-		if _, err := c.connectUC.Handle(usecase.ConnectInput{CircuitID: circuitID}); err != nil {
+		if _, err := c.connectUC.Handle(usecase.SendConnectInput{CircuitID: circuitID}); err != nil {
 			log.Println("connect hidden:", err)
 		}
 	}

@@ -48,7 +48,7 @@ func main() {
 	openUC := usecase.NewOpenStreamUsecase(circuitRepository)
 	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, factory)
 	sendUC := usecase.NewSendDataUsecase(circuitRepository, factory, cryptoSvc)
-	connectUC := usecase.NewConnectUseCase(circuitRepository, factory, cryptoSvc)
+	connectUC := usecase.NewSendConnectUseCase(circuitRepository, factory, cryptoSvc)
 	endUC := usecase.NewHandleEndUsecase(circuitRepository)
 
 	// Create SOCKS5 controller

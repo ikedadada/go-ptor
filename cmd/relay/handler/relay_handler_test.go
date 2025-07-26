@@ -25,12 +25,12 @@ func TestRelayHandler_HandleCellExtend(t *testing.T) {
 
 	// Create cell sender and usecases
 	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewExtendUseCase(priv, repo, crypto, cellSender)
-	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+	extendUC := usecase.NewHandleExtendUseCase(priv, repo, crypto, cellSender)
+	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
 
 	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 
@@ -83,12 +83,12 @@ func TestRelayHandler_HandleCellBeginAck(t *testing.T) {
 
 	// Create dummy usecases (not used for this test)
 	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewExtendUseCase(nil, repo, crypto, cellSender)
-	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+	extendUC := usecase.NewHandleExtendUseCase(nil, repo, crypto, cellSender)
+	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
 
 	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 
@@ -134,12 +134,12 @@ func TestRelayHandler_HandleCellDestroy(t *testing.T) {
 
 	// Create dummy usecases
 	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewExtendUseCase(nil, repo, crypto, cellSender)
-	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+	extendUC := usecase.NewHandleExtendUseCase(nil, repo, crypto, cellSender)
+	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
 
 	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 
@@ -192,12 +192,12 @@ func TestRelayHandler_HandleCellEndUnknown(t *testing.T) {
 
 	// Create dummy usecases
 	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewExtendUseCase(nil, repo, crypto, cellSender)
-	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+	extendUC := usecase.NewHandleExtendUseCase(nil, repo, crypto, cellSender)
+	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
 
 	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 
@@ -220,12 +220,12 @@ func TestRelayHandler_ServeConn(t *testing.T) {
 
 	// Create cell sender and usecases
 	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewExtendUseCase(priv, repo, crypto, cellSender)
-	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+	extendUC := usecase.NewHandleExtendUseCase(priv, repo, crypto, cellSender)
+	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
 
 	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 

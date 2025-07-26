@@ -42,12 +42,12 @@ func main() {
 	cellSender := service.NewCellSenderService()
 
 	// Create individual usecases
-	extendUC := usecase.NewExtendUseCase(priv, repo, cryptoSvc, cellSender)
-	beginUC := usecase.NewBeginUseCase(repo, cryptoSvc, cellSender)
-	dataUC := usecase.NewDataUseCase(repo, cryptoSvc, cellSender)
-	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewConnectUseCase(repo, cryptoSvc, cellSender)
+	extendUC := usecase.NewHandleExtendUseCase(priv, repo, cryptoSvc, cellSender)
+	beginUC := usecase.NewHandleBeginUseCase(repo, cryptoSvc, cellSender)
+	dataUC := usecase.NewHandleDataUseCase(repo, cryptoSvc, cellSender)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewHandleConnectUseCase(repo, cryptoSvc, cellSender)
 
 	// Create handler with all usecases
 	relayHandler := handler.NewRelayHandler(

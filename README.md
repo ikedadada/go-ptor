@@ -55,6 +55,172 @@ lefthook install
 The pre-commit hook formats staged Go files with `gofmt`, and the pre-push hook
 runs `go test ./...`.
 
+## Cell Commands and Protocol Flow
+
+This implementation uses 8 different cell commands to manage circuit building, stream establishment, and data transfer across the onion routing network.
+
+### Cell Command Types
+
+| Command | Value | Purpose | Direction |
+|---------|-------|---------|-----------|
+| `EXTEND` | 0x01 | Circuit extension request | Client → Relay |
+| `CONNECT` | 0x02 | Hidden service connection | Client → Exit Relay |
+| `DATA` | 0x03 | Application data transfer | Bidirectional |
+| `END` | 0x04 | Stream termination | Bidirectional |
+| `DESTROY` | 0x05 | Circuit teardown | Bidirectional |
+| `BEGIN` | 0x06 | Stream initiation | Client → Exit Relay |
+| `BEGIN_ACK` | 0x07 | Stream acknowledgment | Exit Relay → Client |
+| `CREATED` | 0x08 | Circuit extension response | Relay → Client |
+
+### Protocol Sequence Diagrams
+
+#### 1. Circuit Building Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant R1 as Relay 1
+    participant R2 as Relay 2
+    participant R3 as Exit Relay
+
+    C->>R1: EXTEND (to R2)
+    R1->>R2: EXTEND (to R3)
+    R2->>R3: EXTEND
+    R3->>R2: CREATED
+    R2->>R1: CREATED
+    R1->>C: CREATED
+    
+    Note over C,R3: Circuit established with 3 hops
+```
+
+#### 2. Hidden Service Connection Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant R1 as Relay 1
+    participant R2 as Relay 2
+    participant R3 as Exit Relay
+    participant HS as Hidden Service
+
+    Note over C,R3: Circuit already established
+    
+    C->>R1: CONNECT (onion encrypted)
+    R1->>R2: CONNECT (onion encrypted)
+    R2->>R3: CONNECT (encrypted for R3)
+    R3->>HS: TCP Connection
+    HS->>R3: Connection Established
+    R3->>R2: (Connection success)
+    R2->>R1: (Connection success)
+    R1->>C: (Connection success)
+    
+    Note over C,HS: Ready for stream operations
+```
+
+#### 3. Stream Establishment and Data Transfer
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant R1 as Relay 1
+    participant R2 as Relay 2
+    participant R3 as Exit Relay
+    participant HS as Hidden Service
+
+    Note over C,HS: Circuit and connection established
+    
+    C->>R1: BEGIN (onion encrypted)
+    R1->>R2: BEGIN (onion encrypted)
+    R2->>R3: BEGIN (encrypted for R3)
+    R3->>HS: Stream Request
+    HS->>R3: Stream Accepted
+    R3->>R2: BEGIN_ACK
+    R2->>R1: BEGIN_ACK
+    R1->>C: BEGIN_ACK
+    
+    Note over C,HS: Stream established, data transfer begins
+    
+    C->>R1: DATA (application data)
+    R1->>R2: DATA
+    R2->>R3: DATA
+    R3->>HS: Raw Data
+    
+    HS->>R3: Response Data
+    R3->>R2: DATA (encrypted)
+    R2->>R1: DATA (double encrypted)
+    R1->>C: DATA (triple encrypted)
+```
+
+#### 4. Stream Termination Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant R1 as Relay 1
+    participant R2 as Relay 2
+    participant R3 as Exit Relay
+    participant HS as Hidden Service
+
+    Note over C,HS: During active data transfer
+    
+    alt Client-initiated termination
+        C->>R1: END
+        R1->>R2: END
+        R2->>R3: END
+        R3->>HS: Close Stream
+    else Service-initiated termination
+        HS->>R3: Close Stream
+        R3->>R2: END
+        R2->>R1: END
+        R1->>C: END
+    end
+    
+    Note over C,HS: Stream terminated, circuit remains active
+```
+
+#### 5. Circuit Teardown Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant R1 as Relay 1
+    participant R2 as Relay 2
+    participant R3 as Exit Relay
+
+    Note over C,R3: When circuit is no longer needed
+    
+    alt Client-initiated teardown
+        C->>R1: DESTROY
+        R1->>R2: DESTROY
+        R2->>R3: DESTROY
+    else Relay-initiated teardown (error/timeout)
+        R2->>R1: DESTROY
+        R1->>C: DESTROY
+        R2->>R3: DESTROY
+    end
+    
+    Note over C,R3: Circuit completely torn down
+```
+
+### UseCase Architecture
+
+The implementation separates these commands into focused UseCases:
+
+**Client UseCases:**
+- `BuildCircuitUseCase` - Handles circuit building with EXTEND/CREATED commands
+- `SendConnectUseCase` - Manages CONNECT commands for hidden services
+- `OpenStreamUseCase` - Initiates streams with BEGIN commands
+- `SendDataUseCase` - Transfers application data with DATA/BEGIN commands
+- `CloseStreamUseCase` - Terminates streams with END commands
+
+**Relay UseCases:**
+- `HandleExtendUseCase` - Processes EXTEND commands and responds with CREATED
+- `HandleConnectUseCase` - Establishes connections to hidden services
+- `HandleBeginUseCase` - Handles stream initialization and sends BEGIN_ACK
+- `HandleDataUseCase` - Forwards DATA between circuit hops and external connections
+- `HandleEndStreamUseCase` - Processes stream termination
+- `HandleDestroyUseCase` - Handles circuit teardown
+
 ## Usage
 
 Each entry in `cmd/` is a standalone binary. You can run them directly with `go run` or build them using `go build`.

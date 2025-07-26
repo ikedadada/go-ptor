@@ -18,12 +18,12 @@ type RelayHandler struct {
 	repo        repository.ConnStateRepository
 	crs         service.CellReaderService
 	cellSender  service.CellSenderService
-	extendUC    usecase.ExtendUseCase
-	beginUC     usecase.BeginUseCase
-	dataUC      usecase.DataUseCase
-	endStreamUC usecase.EndStreamUseCase
-	destroyUC   usecase.DestroyUseCase
-	connectUC   usecase.ConnectUseCase
+	extendUC    usecase.HandleExtendUseCase
+	beginUC     usecase.HandleBeginUseCase
+	dataUC      usecase.HandleDataUseCase
+	endStreamUC usecase.HandleEndStreamUseCase
+	destroyUC   usecase.HandleDestroyUseCase
+	connectUC   usecase.HandleConnectUseCase
 }
 
 // NewRelayHandler creates a new relay handler
@@ -31,12 +31,12 @@ func NewRelayHandler(
 	repo repository.ConnStateRepository,
 	crs service.CellReaderService,
 	cellSender service.CellSenderService,
-	extendUC usecase.ExtendUseCase,
-	beginUC usecase.BeginUseCase,
-	dataUC usecase.DataUseCase,
-	endStreamUC usecase.EndStreamUseCase,
-	destroyUC usecase.DestroyUseCase,
-	connectUC usecase.ConnectUseCase,
+	extendUC usecase.HandleExtendUseCase,
+	beginUC usecase.HandleBeginUseCase,
+	dataUC usecase.HandleDataUseCase,
+	endStreamUC usecase.HandleEndStreamUseCase,
+	destroyUC usecase.HandleDestroyUseCase,
+	connectUC usecase.HandleConnectUseCase,
 ) *RelayHandler {
 	return &RelayHandler{
 		repo:        repo,
