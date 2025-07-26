@@ -26,7 +26,8 @@ func TestNewCircuit_Table(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NonceFrom: %v", err)
 	}
-	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	priv := vo.NewRSAPrivKey(rawKey)
 	tests := []struct {
 		name       string
 		relays     []vo.RelayID
@@ -78,7 +79,8 @@ func TestCircuit_StreamManagement(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+			rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+			priv := vo.NewRSAPrivKey(rawKey)
 			c, err := entity.NewCircuit(id, []vo.RelayID{relayID, relayID, relayID}, []vo.AESKey{key, key, key}, []vo.Nonce{nonce, nonce, nonce}, priv)
 			if err != nil {
 				t.Fatalf("NewCircuit: %v", err)

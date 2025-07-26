@@ -41,10 +41,11 @@ func makeTestCircuit() (*entity.Circuit, error) {
 	if err != nil {
 		return nil, err
 	}
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	rawKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, err
 	}
+	priv := vo.NewRSAPrivKey(rawKey)
 	c, err := entity.NewCircuit(id, []vo.RelayID{relayID}, []vo.AESKey{key}, []vo.Nonce{nonce}, priv)
 	if err != nil {
 		return nil, err

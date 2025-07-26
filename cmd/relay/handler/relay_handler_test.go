@@ -1,0 +1,275 @@
+package handler_test
+
+import (
+	"crypto/rand"
+	"crypto/rsa"
+	"io"
+	"net"
+	"testing"
+	"time"
+
+	"ikedadada/go-ptor/cmd/relay/handler"
+	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/usecase"
+	"ikedadada/go-ptor/shared/domain/entity"
+	vo "ikedadada/go-ptor/shared/domain/value_object"
+	"ikedadada/go-ptor/shared/service"
+)
+
+func TestRelayHandler_HandleCellExtend(t *testing.T) {
+	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	priv := vo.NewRSAPrivKey(rawKey)
+	repo := repoimpl.NewConnStateRepository(time.Second)
+	crypto := service.NewCryptoService()
+	reader := service.NewCellReaderService()
+
+	// Create cell sender and usecases
+	cellSender := service.NewCellSenderService()
+	extendUC := usecase.NewExtendUseCase(priv, repo, crypto, cellSender)
+	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+
+	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+
+	// Create extend cell
+	_, pub, _ := crypto.X25519Generate()
+	var pubArr [32]byte
+	copy(pubArr[:], pub)
+	payload, _ := vo.EncodeExtendPayload(&vo.ExtendPayload{ClientPub: pubArr})
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
+
+	up1, up2 := net.Pipe()
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.HandleCell(up1, cid, cell) }()
+
+	// Should create circuit and send created response
+	hdr := make([]byte, 20)
+	if _, err := io.ReadFull(up2, hdr); err != nil {
+		t.Fatalf("read header: %v", err)
+	}
+	if vo.CellCommand(hdr[16]) != vo.CmdCreated {
+		t.Fatalf("expected created, got %d", hdr[16])
+	}
+	// Read payload
+	l := int(hdr[18])<<8 | int(hdr[19])
+	if l > 0 {
+		payload := make([]byte, l)
+		if _, err := io.ReadFull(up2, payload); err != nil {
+			t.Fatalf("read payload: %v", err)
+		}
+	}
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("handle cell error: %v", err)
+	}
+
+	// Circuit should be created
+	if _, err := repo.Find(cid); err != nil {
+		t.Fatalf("circuit not created: %v", err)
+	}
+
+	up1.Close()
+	up2.Close()
+}
+
+func TestRelayHandler_HandleCellBeginAck(t *testing.T) {
+	repo := repoimpl.NewConnStateRepository(time.Second)
+	crypto := service.NewCryptoService()
+	reader := service.NewCellReaderService()
+
+	// Create dummy usecases (not used for this test)
+	cellSender := service.NewCellSenderService()
+	extendUC := usecase.NewExtendUseCase(nil, repo, crypto, cellSender)
+	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+
+	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+
+	// Create state
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	cid := vo.NewCircuitID()
+	up1, up2 := net.Pipe()
+
+	st := entity.NewConnState(key, nonce, up1, nil)
+	repo.Add(cid, st)
+
+	// Create begin ack cell
+	cell := &entity.Cell{Cmd: vo.CmdBeginAck, Version: vo.ProtocolV1}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.HandleCell(up1, cid, cell) }()
+
+	// Should forward cell upstream
+	buf := make([]byte, 16+entity.MaxCellSize)
+	if _, err := io.ReadFull(up2, buf); err != nil {
+		t.Fatalf("read forward: %v", err)
+	}
+	fwd, err := entity.Decode(buf[16:])
+	if err != nil {
+		t.Fatalf("decode forward: %v", err)
+	}
+	if fwd.Cmd != vo.CmdBeginAck {
+		t.Fatalf("cmd %d", fwd.Cmd)
+	}
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("handle cell error: %v", err)
+	}
+
+	st.Up().Close()
+}
+
+func TestRelayHandler_HandleCellDestroy(t *testing.T) {
+	repo := repoimpl.NewConnStateRepository(time.Second)
+	crypto := service.NewCryptoService()
+	reader := service.NewCellReaderService()
+
+	// Create dummy usecases
+	cellSender := service.NewCellSenderService()
+	extendUC := usecase.NewExtendUseCase(nil, repo, crypto, cellSender)
+	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+
+	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+
+	// Create state
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	cid := vo.NewCircuitID()
+	up1, _ := net.Pipe()
+	down1, down2 := net.Pipe()
+
+	st := entity.NewConnState(key, nonce, up1, down1)
+	repo.Add(cid, st)
+
+	// Create destroy cell
+	cell := &entity.Cell{Cmd: vo.CmdDestroy, Version: vo.ProtocolV1}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.HandleCell(up1, cid, cell) }()
+
+	// Should forward destroy cell downstream
+	buf := make([]byte, 528)
+	if _, err := io.ReadFull(down2, buf); err != nil {
+		t.Fatalf("read forward: %v", err)
+	}
+	fwd, err := entity.Decode(buf[16:])
+	if err != nil {
+		t.Fatalf("decode forward: %v", err)
+	}
+	if fwd.Cmd != vo.CmdDestroy {
+		t.Fatalf("cmd %d", fwd.Cmd)
+	}
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("handle cell error: %v", err)
+	}
+
+	// Circuit should be deleted
+	if _, err := repo.Find(cid); err == nil {
+		t.Errorf("circuit not deleted")
+	}
+
+	st.Up().Close()
+	st.Down().Close()
+}
+
+func TestRelayHandler_HandleCellEndUnknown(t *testing.T) {
+	repo := repoimpl.NewConnStateRepository(time.Second)
+	crypto := service.NewCryptoService()
+	reader := service.NewCellReaderService()
+
+	// Create dummy usecases
+	cellSender := service.NewCellSenderService()
+	extendUC := usecase.NewExtendUseCase(nil, repo, crypto, cellSender)
+	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+
+	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+
+	// Create end cell for unknown circuit
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: nil}
+
+	// Should ignore end for unknown circuit
+	if err := h.HandleCell(nil, cid, cell); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRelayHandler_ServeConn(t *testing.T) {
+	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	priv := vo.NewRSAPrivKey(rawKey)
+	repo := repoimpl.NewConnStateRepository(time.Second)
+	crypto := service.NewCryptoService()
+	reader := service.NewCellReaderService()
+
+	// Create cell sender and usecases
+	cellSender := service.NewCellSenderService()
+	extendUC := usecase.NewExtendUseCase(priv, repo, crypto, cellSender)
+	beginUC := usecase.NewBeginUseCase(repo, crypto, cellSender)
+	dataUC := usecase.NewDataUseCase(repo, crypto, cellSender)
+	endStreamUC := usecase.NewEndStreamUseCase(repo, cellSender)
+	destroyUC := usecase.NewDestroyUseCase(repo, cellSender)
+	connectUC := usecase.NewConnectUseCase(repo, crypto, cellSender)
+
+	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+
+	// Create pipe connection
+	conn1, conn2 := net.Pipe()
+
+	// Start serving connection
+	go h.ServeConn(conn1)
+
+	// Send extend cell
+	_, pub, _ := crypto.X25519Generate()
+	var pubArr [32]byte
+	copy(pubArr[:], pub)
+	payload, _ := vo.EncodeExtendPayload(&vo.ExtendPayload{ClientPub: pubArr})
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
+	cellData, _ := entity.Encode(*cell)
+	fullCell := append(cid.Bytes(), cellData...)
+
+	_, err := conn2.Write(fullCell)
+	if err != nil {
+		t.Fatalf("write cell: %v", err)
+	}
+
+	// Should receive created response
+	hdr := make([]byte, 20)
+	if _, err := io.ReadFull(conn2, hdr); err != nil {
+		t.Fatalf("read header: %v", err)
+	}
+	if vo.CellCommand(hdr[16]) != vo.CmdCreated {
+		t.Fatalf("expected created, got %d", hdr[16])
+	}
+	// Read payload
+	l := int(hdr[18])<<8 | int(hdr[19])
+	if l > 0 {
+		payload := make([]byte, l)
+		if _, err := io.ReadFull(conn2, payload); err != nil {
+			t.Fatalf("read payload: %v", err)
+		}
+	}
+
+	conn1.Close()
+	conn2.Close()
+
+	// Allow time for cleanup
+	time.Sleep(10 * time.Millisecond)
+}

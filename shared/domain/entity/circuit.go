@@ -1,7 +1,6 @@
 package entity
 
 import (
-	"crypto/rsa"
 	"errors"
 	"fmt"
 	"net"
@@ -39,7 +38,7 @@ type Circuit struct {
 	beginCounter        map[int]uint64    // per-hop BEGIN counter
 	dataCounter         map[int]uint64    // per-hop DATA counter (downstream)
 	upstreamDataCounter map[int]uint64    // per-hop upstream DATA counter
-	priv                *rsa.PrivateKey
+	priv                vo.PrivateKey
 	conns               []net.Conn
 	strmMu              sync.RWMutex
 	stream              map[vo.StreamID]*StreamState
@@ -47,7 +46,7 @@ type Circuit struct {
 
 // NewCircuit は 3 ホップ分の RelayID と鍵束を受け取って生成。
 func NewCircuit(id vo.CircuitID, relays []vo.RelayID,
-	keys []vo.AESKey, nonces []vo.Nonce, priv *rsa.PrivateKey) (*Circuit, error) {
+	keys []vo.AESKey, nonces []vo.Nonce, priv vo.PrivateKey) (*Circuit, error) {
 
 	if len(relays) == 0 || len(relays) != len(keys) || len(keys) != len(nonces) {
 		return nil, errors.New("hops / keys / nonces length mismatch")
@@ -178,12 +177,12 @@ func (c *Circuit) HopUpstreamDataNoncePeek(idx int) vo.Nonce {
 	return nonce
 }
 
-func (c *Circuit) RSAPrivate() *rsa.PrivateKey { return c.priv }
-func (c *Circuit) RSAPublic() *rsa.PublicKey {
+func (c *Circuit) RSAPrivate() vo.PrivateKey { return c.priv }
+func (c *Circuit) RSAPublic() vo.PublicKey {
 	if c.priv == nil {
 		return nil
 	}
-	return &c.priv.PublicKey
+	return c.priv.PublicKey()
 }
 
 // WipeKeys zeroes all symmetric keys and forgets the RSA private key.

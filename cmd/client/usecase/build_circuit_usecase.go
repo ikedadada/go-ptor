@@ -148,10 +148,11 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Cir
 		relayIDs = append(relayIDs, r.ID())
 	}
 
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	rawKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, fmt.Errorf("generate rsa key: %w", err)
 	}
+	priv := vo.NewRSAPrivKey(rawKey)
 
 	// 3. CircuitID 生成
 	cid := vo.NewCircuitID()

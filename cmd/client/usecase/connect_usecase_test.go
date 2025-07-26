@@ -55,7 +55,8 @@ func makeTestCircuitConnect() (*entity.Circuit, error) {
 	rid, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
-	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	priv := vo.NewRSAPrivKey(rawKey)
 	return entity.NewCircuit(id, []vo.RelayID{rid}, []vo.AESKey{key}, []vo.Nonce{nonce}, priv)
 }
 

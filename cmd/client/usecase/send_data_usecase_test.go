@@ -118,7 +118,8 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 		keys[i] = k
 		nonces[i] = n
 	}
-	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	priv := vo.NewRSAPrivKey(rawKey)
 	cir, err := entity.NewCircuit(vo.NewCircuitID(), ids, keys, nonces, priv)
 	if err != nil {
 		t.Fatalf("circuit: %v", err)
@@ -162,7 +163,8 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 		keys[i] = k
 		nonces[i] = n
 	}
-	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	priv := vo.NewRSAPrivKey(rawKey)
 	cir, err := entity.NewCircuit(vo.NewCircuitID(), ids, keys, nonces, priv)
 	if err != nil {
 		t.Fatalf("circuit: %v", err)
