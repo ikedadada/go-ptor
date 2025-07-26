@@ -14,7 +14,7 @@ import (
 	"ikedadada/go-ptor/shared/service"
 )
 
-func TestConnectUseCase_ConnectMiddle(t *testing.T) {
+func TestHandleConnectUseCase_ConnectMiddle(t *testing.T) {
 	repo := repoimpl.NewConnStateRepository(time.Second)
 	crypto := service.NewCryptoService()
 	cellSender := service.NewCellSenderService()
@@ -68,7 +68,7 @@ func TestConnectUseCase_ConnectMiddle(t *testing.T) {
 	st.Down().Close()
 }
 
-func TestConnectUseCase_ConnectExit(t *testing.T) {
+func TestHandleConnectUseCase_ConnectExit(t *testing.T) {
 	repo := repoimpl.NewConnStateRepository(time.Second)
 	crypto := service.NewCryptoService()
 	cellSender := service.NewCellSenderService()
@@ -130,7 +130,7 @@ func TestConnectUseCase_ConnectExit(t *testing.T) {
 	}
 }
 
-func TestConnectUseCase_ConnectExitWithEnvAddr(t *testing.T) {
+func TestHandleConnectUseCase_ConnectExitWithEnvAddr(t *testing.T) {
 	repo := repoimpl.NewConnStateRepository(time.Second)
 	crypto := service.NewCryptoService()
 	cellSender := service.NewCellSenderService()
@@ -195,7 +195,7 @@ func TestConnectUseCase_ConnectExitWithEnvAddr(t *testing.T) {
 	}
 }
 
-func TestConnectUseCase_ConnectExitDialFail(t *testing.T) {
+func TestHandleConnectUseCase_ConnectExitDialFail(t *testing.T) {
 	repo := repoimpl.NewConnStateRepository(time.Second)
 	crypto := service.NewCryptoService()
 	cellSender := service.NewCellSenderService()
