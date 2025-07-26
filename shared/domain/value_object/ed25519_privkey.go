@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 )
 
 type Ed25519PrivKey struct {
@@ -77,7 +78,7 @@ func Ed25519PrivKeyFromPEM(pemBytes []byte) (*Ed25519PrivKey, error) {
 
 	ed25519Key, ok := key.(ed25519.PrivateKey)
 	if !ok {
-		return nil, ErrUnsupportedKeyType
+		return nil, fmt.Errorf("%w: expected ed25519.PrivateKey, but got %T", ErrUnsupportedKeyType, key)
 	}
 
 	return NewEd25519PrivKey(ed25519Key), nil

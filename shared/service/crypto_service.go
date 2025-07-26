@@ -61,15 +61,14 @@ func (c *cryptoServiceImpl) RSAEncryptVO(pub vo.RSAPubKey, in []byte) ([]byte, e
 }
 
 func (c *cryptoServiceImpl) RSADecryptVO(priv vo.PrivateKey, in []byte) ([]byte, error) {
-	switch key := priv.(type) {
-	case *vo.RSAPrivKey:
-		if key == nil {
-			return nil, fmt.Errorf("RSA private key is nil")
-		}
-		return c.RSADecrypt(key.RSAKey(), in)
-	default:
+	key, ok := priv.(*vo.RSAPrivKey)
+	if !ok {
 		return nil, fmt.Errorf("unsupported private key type for RSA operations: %s", priv.KeyType())
 	}
+	if key == nil {
+		return nil, fmt.Errorf("RSA private key is nil")
+	}
+	return c.RSADecrypt(key.RSAKey(), in)
 }
 
 func (*cryptoServiceImpl) AESSeal(key [32]byte, nonce [12]byte, plain []byte) ([]byte, error) {

@@ -3,6 +3,7 @@ package value_object_test
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"strings"
 	"testing"
 
 	vo "ikedadada/go-ptor/shared/domain/value_object"
@@ -42,10 +43,10 @@ func TestRSAPrivKey_ToPEM(t *testing.T) {
 
 	// Verify PEM starts with correct header
 	pemStr := string(pem)
-	if !containsString(pemStr, "-----BEGIN RSA PRIVATE KEY-----") {
+	if !strings.Contains(pemStr, "-----BEGIN RSA PRIVATE KEY-----") {
 		t.Error("PEM should start with RSA PRIVATE KEY header")
 	}
-	if !containsString(pemStr, "-----END RSA PRIVATE KEY-----") {
+	if !strings.Contains(pemStr, "-----END RSA PRIVATE KEY-----") {
 		t.Error("PEM should end with RSA PRIVATE KEY footer")
 	}
 
@@ -174,9 +175,4 @@ func TestRSAPrivKey_Interface(t *testing.T) {
 	if privKey.ToPEM() == nil {
 		t.Error("Interface method ToPEM() failed")
 	}
-}
-
-// Helper function to check if string contains substring
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsString(s[1:], substr)))
 }
