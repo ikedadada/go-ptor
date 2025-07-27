@@ -86,19 +86,31 @@ func TestHandleBeginUseCase_BeginExit(t *testing.T) {
 	st := entity.NewConnState(key, nonce, up1, nil)
 	csRepo.Add(cid, st)
 
-	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to create listener: %v", err)
+	}
 	defer ln.Close()
 	acceptCh := make(chan net.Conn, 1)
-	go func() { c, _ := ln.Accept(); acceptCh <- c }()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			t.Logf("Accept failed: %v", err)
+		}
+		acceptCh <- c
+	}()
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
-	plain, _ := peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{StreamID: 1, Target: ln.Addr().String()})
+	target := ln.Addr().String()
+	t.Logf("Target address: %s", target)
+	plain, _ := peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{StreamID: 1, Target: target})
 	enc, _ := cSvc.AESSeal(key, nonce, plain)
 	cell := &entity.Cell{Cmd: vo.CmdBegin, Version: vo.ProtocolV1, Payload: enc}
 
-	go uc.Begin(st, cid, cell, ensureServeDown)
+	errCh := make(chan error, 1)
+	go func() { errCh <- uc.Begin(st, cid, cell, ensureServeDown) }()
 
 	// Should send ack upstream
 	buf := make([]byte, 16+entity.MaxCellSize)
@@ -109,18 +121,23 @@ func TestHandleBeginUseCase_BeginExit(t *testing.T) {
 		t.Fatalf("ack cmd %d", buf[16])
 	}
 
-	// Should establish connection to target
-	c := <-acceptCh
-	if c == nil {
-		t.Fatalf("no connection")
+	// Wait for Begin operation to complete first
+	if err := <-errCh; err != nil {
+		t.Fatalf("begin error: %v", err)
 	}
-	c.Close()
 
 	// Should store stream in repository
 	sid, _ := vo.StreamIDFrom(1)
 	if _, err := csRepo.GetStream(cid, sid); err != nil {
 		t.Fatalf("stream not stored: %v", err)
 	}
+
+	// Should establish connection to target
+	c := <-acceptCh
+	if c == nil {
+		t.Fatalf("no connection")
+	}
+	c.Close()
 
 	st.Up().Close()
 	csRepo.DestroyAllStreams(cid)
