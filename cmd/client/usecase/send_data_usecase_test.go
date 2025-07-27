@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"time"
 
 	"ikedadada/go-ptor/cmd/client/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
@@ -26,25 +27,27 @@ func (m *mockCircuitRepoSend) Save(*entity.Circuit) error             { return n
 func (m *mockCircuitRepoSend) Delete(vo.CircuitID) error              { return nil }
 func (m *mockCircuitRepoSend) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
-type mockTransmitterSend struct{ err error }
-
-func (m *mockTransmitterSend) TransmitData(c vo.CircuitID, s vo.StreamID, data []byte) error {
-	return m.err
-}
-func (m *mockTransmitterSend) InitiateStream(c vo.CircuitID, s vo.StreamID, data []byte) error {
-	return m.err
-}
-func (m *mockTransmitterSend) TerminateStream(c vo.CircuitID, s vo.StreamID) error {
-	return nil
-}
-func (m *mockTransmitterSend) DestroyCircuit(vo.CircuitID) error              { return nil }
-func (m *mockTransmitterSend) EstablishConnection(vo.CircuitID, []byte) error { return nil }
-
-type sendFactory struct {
-	tx service.CircuitMessagingService
+type mockConnForSendData struct {
+	lastWritten []byte
+	err         error
 }
 
-func (m sendFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
+func (m *mockConnForSendData) Write(p []byte) (n int, err error) {
+	if m.err != nil {
+		return 0, m.err
+	}
+	m.lastWritten = make([]byte, len(p))
+	copy(m.lastWritten, p)
+	return len(p), nil
+}
+
+func (m *mockConnForSendData) Read([]byte) (int, error)         { return 0, nil }
+func (m *mockConnForSendData) Close() error                     { return nil }
+func (m *mockConnForSendData) LocalAddr() net.Addr              { return nil }
+func (m *mockConnForSendData) RemoteAddr() net.Addr             { return nil }
+func (m *mockConnForSendData) SetDeadline(time.Time) error      { return nil }
+func (m *mockConnForSendData) SetReadDeadline(time.Time) error  { return nil }
+func (m *mockConnForSendData) SetWriteDeadline(time.Time) error { return nil }
 
 func TestSendDataInteractor_Handle(t *testing.T) {
 	circuit, err := makeTestCircuit()
@@ -56,26 +59,28 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 		t.Fatalf("open stream: %v", err)
 	}
 
+	// Set up connection for the circuit
+	conn := &mockConnForSendData{}
+	circuit.SetConn(0, conn)
+
 	tests := []struct {
 		name       string
 		cRepo      repository.CircuitRepository
-		fac        service.MessagingServiceFactory
 		input      usecase.SendDataInput
 		expectsErr bool
 	}{
-		{"ok", &mockCircuitRepoSend{circuit: circuit}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, false},
-		{"begin", &mockCircuitRepoSend{circuit: circuit}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("target"), Cmd: vo.CmdBegin}, false},
-		{"circuit not found", &mockCircuitRepoSend{circuit: nil, err: errors.New("not found")}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
-		{"bad id", &mockCircuitRepoSend{circuit: nil}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: "bad-uuid", StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
-		{"tx error", &mockCircuitRepoSend{circuit: circuit}, sendFactory{&mockTransmitterSend{err: errors.New("fail")}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
-		{"stream not active", &mockCircuitRepoSend{circuit: &entity.Circuit{}}, sendFactory{&mockTransmitterSend{}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
+		{"ok", &mockCircuitRepoSend{circuit: circuit}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, false},
+		{"begin", &mockCircuitRepoSend{circuit: circuit}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("target"), Cmd: vo.CmdBegin}, false},
+		{"circuit not found", &mockCircuitRepoSend{circuit: nil, err: errors.New("not found")}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
+		{"bad id", &mockCircuitRepoSend{circuit: nil}, usecase.SendDataInput{CircuitID: "bad-uuid", StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
+		{"stream not active", &mockCircuitRepoSend{circuit: &entity.Circuit{}}, usecase.SendDataInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16(), Data: []byte("hello")}, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cSvc := service.NewCryptoService()
 			peSvc := service.NewPayloadEncodingService()
-			uc := usecase.NewSendDataUseCase(tt.cRepo, tt.fac, cSvc, peSvc)
+			uc := usecase.NewSendDataUseCase(tt.cRepo, cSvc, peSvc)
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")
@@ -89,23 +94,24 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 
 // Additional tests from send_data_roundtrip_test.go
 
-type recordTx struct{ data []byte }
-
-func (r *recordTx) TransmitData(c vo.CircuitID, s vo.StreamID, d []byte) error {
-	r.data = d
-	return nil
+type recordConn struct {
+	data []byte
 }
-func (r *recordTx) InitiateStream(c vo.CircuitID, s vo.StreamID, d []byte) error {
-	r.data = d
-	return nil
+
+func (r *recordConn) Write(p []byte) (n int, err error) {
+	if len(p) >= 16 { // Skip circuit ID
+		r.data = p[16:]
+	}
+	return len(p), nil
 }
-func (r *recordTx) TerminateStream(vo.CircuitID, vo.StreamID) error { return nil }
-func (r *recordTx) DestroyCircuit(vo.CircuitID) error               { return nil }
-func (r *recordTx) EstablishConnection(vo.CircuitID, []byte) error  { return nil }
 
-type recordFactory struct{ tx *recordTx }
-
-func (m recordFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
+func (r *recordConn) Read([]byte) (int, error)         { return 0, nil }
+func (r *recordConn) Close() error                     { return nil }
+func (r *recordConn) LocalAddr() net.Addr              { return nil }
+func (r *recordConn) RemoteAddr() net.Addr             { return nil }
+func (r *recordConn) SetDeadline(time.Time) error      { return nil }
+func (r *recordConn) SetReadDeadline(time.Time) error  { return nil }
+func (r *recordConn) SetWriteDeadline(time.Time) error { return nil }
 
 func TestSendData_OnionRoundTrip(t *testing.T) {
 	hops := 3
@@ -128,14 +134,22 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 	}
 	st, _ := cir.OpenStream()
 
+	conn := &recordConn{}
+	cir.SetConn(0, conn)
+
 	cRepo := &mockCircuitRepoSend{circuit: cir}
-	tx := &recordTx{}
 	cSvc := service.NewCryptoService()
 	peSvc := service.NewPayloadEncodingService()
-	uc := usecase.NewSendDataUseCase(cRepo, recordFactory{tx}, cSvc, peSvc)
+	uc := usecase.NewSendDataUseCase(cRepo, cSvc, peSvc)
 	data := []byte("hello")
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: data}); err != nil {
 		t.Fatalf("handle: %v", err)
+	}
+
+	// Decode cell from written data
+	cell, err := entity.Decode(conn.data)
+	if err != nil {
+		t.Fatalf("decode cell: %v", err)
 	}
 
 	k2 := make([][32]byte, hops)
@@ -144,7 +158,7 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 		k2[i] = keys[i]
 		n2[i] = nonces[i]
 	}
-	out, err := cSvc.AESMultiOpen(k2, n2, tx.data)
+	out, err := cSvc.AESMultiOpen(k2, n2, cell.Payload)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
 	}
@@ -174,14 +188,22 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 	}
 	st, _ := cir.OpenStream()
 
+	conn := &recordConn{}
+	cir.SetConn(0, conn)
+
 	cRepo := &mockCircuitRepoSend{circuit: cir}
-	tx := &recordTx{}
 	cSvc := service.NewCryptoService()
 	peSvc := service.NewPayloadEncodingService()
-	uc := usecase.NewSendDataUseCase(cRepo, recordFactory{tx}, cSvc, peSvc)
+	uc := usecase.NewSendDataUseCase(cRepo, cSvc, peSvc)
 	payload, _ := peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{StreamID: st.ID.UInt16(), Target: "example.com:80"})
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: payload, Cmd: vo.CmdBegin}); err != nil {
 		t.Fatalf("handle: %v", err)
+	}
+
+	// Decode cell from written data
+	cell, err := entity.Decode(conn.data)
+	if err != nil {
+		t.Fatalf("decode cell: %v", err)
 	}
 
 	k2 := make([][32]byte, hops)
@@ -190,7 +212,7 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 		k2[i] = keys[i]
 		n2[i] = nonces[i]
 	}
-	out, err := cSvc.AESMultiOpen(k2, n2, tx.data)
+	out, err := cSvc.AESMultiOpen(k2, n2, cell.Payload)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
 	}

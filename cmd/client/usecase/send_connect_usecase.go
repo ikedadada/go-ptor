@@ -3,6 +3,7 @@ package usecase
 import (
 	"fmt"
 
+	"ikedadada/go-ptor/shared/domain/entity"
 	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
@@ -26,15 +27,14 @@ type SendConnectUseCase interface {
 }
 
 type sendConnectUseCaseImpl struct {
-	cRepo   repository.CircuitRepository
-	factory service.MessagingServiceFactory
-	cSvc    service.CryptoService
-	peSvc   service.PayloadEncodingService
+	cRepo repository.CircuitRepository
+	cSvc  service.CryptoService
+	peSvc service.PayloadEncodingService
 }
 
 // NewSendConnectUseCase creates a use case for CONNECT cells.
-func NewSendConnectUseCase(cRepo repository.CircuitRepository, f service.MessagingServiceFactory, cSvc service.CryptoService, peSvc service.PayloadEncodingService) SendConnectUseCase {
-	return &sendConnectUseCaseImpl{cRepo: cRepo, factory: f, cSvc: cSvc, peSvc: peSvc}
+func NewSendConnectUseCase(cRepo repository.CircuitRepository, cSvc service.CryptoService, peSvc service.PayloadEncodingService) SendConnectUseCase {
+	return &sendConnectUseCaseImpl{cRepo: cRepo, cSvc: cSvc, peSvc: peSvc}
 }
 
 func (uc *sendConnectUseCaseImpl) Handle(in SendConnectInput) (SendConnectOutput, error) {
@@ -68,9 +68,11 @@ func (uc *sendConnectUseCaseImpl) Handle(in SendConnectInput) (SendConnectOutput
 		return SendConnectOutput{}, err
 	}
 
-	conn := cir.Conn(0)
-	tx := uc.factory.New(conn)
-	if err := tx.EstablishConnection(cid, enc); err != nil {
+	cell, err := entity.NewCell(vo.CmdConnect, enc)
+	if err != nil {
+		return SendConnectOutput{}, err
+	}
+	if err := cell.SendToConnection(cir.Conn(0), cid); err != nil {
 		return SendConnectOutput{}, err
 	}
 	return SendConnectOutput{Sent: true}, nil

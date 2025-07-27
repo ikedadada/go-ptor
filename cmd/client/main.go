@@ -45,11 +45,10 @@ func main() {
 	peSvc := service.NewPayloadEncodingService()
 	buildUC := usecase.NewBuildCircuitUseCase(rRepo, cRepo, cbSvc, cSvc, peSvc)
 
-	factory := service.NewTCPMessagingServiceFactory(peSvc)
 	openUC := usecase.NewOpenStreamUseCase(cRepo)
-	closeUC := usecase.NewCloseStreamUseCase(cRepo, factory)
-	sendUC := usecase.NewSendDataUseCase(cRepo, factory, cSvc, peSvc)
-	connectUC := usecase.NewSendConnectUseCase(cRepo, factory, cSvc, peSvc)
+	closeUC := usecase.NewCloseStreamUseCase(cRepo, peSvc)
+	sendUC := usecase.NewSendDataUseCase(cRepo, cSvc, peSvc)
+	connectUC := usecase.NewSendConnectUseCase(cRepo, cSvc, peSvc)
 	endUC := usecase.NewHandleEndUseCase(cRepo)
 
 	// Create SOCKS5 controller

@@ -2,10 +2,12 @@ package usecase
 
 import (
 	"fmt"
+	"log"
+
+	"ikedadada/go-ptor/shared/domain/entity"
 	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
-	"log"
 )
 
 // SendDataInput represents application data to forward on a circuit.
@@ -27,15 +29,14 @@ type SendDataUseCase interface {
 }
 
 type sendDataUseCaseImpl struct {
-	cRepo   repository.CircuitRepository
-	factory service.MessagingServiceFactory
-	cSvc    service.CryptoService
-	peSvc   service.PayloadEncodingService
+	cRepo repository.CircuitRepository
+	cSvc  service.CryptoService
+	peSvc service.PayloadEncodingService
 }
 
 // NewSendDataUseCase returns a use case for sending data cells.
-func NewSendDataUseCase(cRepo repository.CircuitRepository, f service.MessagingServiceFactory, cSvc service.CryptoService, peSvc service.PayloadEncodingService) SendDataUseCase {
-	return &sendDataUseCaseImpl{cRepo: cRepo, factory: f, cSvc: cSvc, peSvc: peSvc}
+func NewSendDataUseCase(cRepo repository.CircuitRepository, cSvc service.CryptoService, peSvc service.PayloadEncodingService) SendDataUseCase {
+	return &sendDataUseCaseImpl{cRepo: cRepo, cSvc: cSvc, peSvc: peSvc}
 }
 
 func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) {
@@ -94,18 +95,13 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 		return SendDataOutput{}, err
 	}
 	log.Printf("multi-seal success cid=%s encLen=%d", in.CircuitID, len(enc))
-	tx := uc.factory.New(cir.Conn(0))
-	switch cmd {
-	case vo.CmdData:
-		if err := tx.TransmitData(cid, sid, enc); err != nil {
-			return SendDataOutput{}, err
-		}
-	case vo.CmdBegin:
-		if err := tx.InitiateStream(cid, sid, enc); err != nil {
-			return SendDataOutput{}, err
-		}
-	default:
-		return SendDataOutput{}, fmt.Errorf("unsupported cmd")
+
+	cell, err := entity.NewCell(cmd, enc)
+	if err != nil {
+		return SendDataOutput{}, err
+	}
+	if err := cell.SendToConnection(cir.Conn(0), cid); err != nil {
+		return SendDataOutput{}, err
 	}
 	return SendDataOutput{BytesSent: len(in.Data)}, nil
 }
