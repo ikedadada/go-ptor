@@ -40,7 +40,7 @@ func NewCell(cmd vo.CellCommand, payload []byte) (*Cell, error) {
 // SendToConnection encodes the cell and sends it over the connection with circuit ID prefix.
 func (c *Cell) SendToConnection(conn net.Conn, cid vo.CircuitID) error {
 	if conn == nil {
-		return fmt.Errorf("connection is nil")
+		return fmt.Errorf("connection is nil for circuit %s - circuit may not be properly established", cid)
 	}
 	buf, err := Encode(*c)
 	if err != nil {
