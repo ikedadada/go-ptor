@@ -23,16 +23,16 @@ type HandleEndUseCase interface {
 	Handle(in HandleEndInput) (HandleEndOutput, error)
 }
 
-type handleEndUsecaseImpl struct {
+type handleEndUseCaseImpl struct {
 	repo repository.CircuitRepository
 }
 
-// NewHandleEndUsecase creates a use case for handling END cells.
-func NewHandleEndUsecase(r repository.CircuitRepository) HandleEndUseCase {
-	return &handleEndUsecaseImpl{repo: r}
+// NewHandleEndUseCase creates a use case for handling END cells.
+func NewHandleEndUseCase(r repository.CircuitRepository) HandleEndUseCase {
+	return &handleEndUseCaseImpl{repo: r}
 }
 
-func (uc *handleEndUsecaseImpl) Handle(in HandleEndInput) (HandleEndOutput, error) {
+func (uc *handleEndUseCaseImpl) Handle(in HandleEndInput) (HandleEndOutput, error) {
 	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return HandleEndOutput{}, fmt.Errorf("parse circuit id: %w", err)

@@ -24,17 +24,17 @@ type CloseStreamUseCase interface {
 	Handle(in CloseStreamInput) (CloseStreamOutput, error)
 }
 
-type closeStreamUsecaseImpl struct {
+type closeStreamUseCaseImpl struct {
 	cr      repository.CircuitRepository
 	factory service.MessagingServiceFactory
 }
 
-// NewCloseStreamUsecase creates a use case for closing streams.
-func NewCloseStreamUsecase(cr repository.CircuitRepository, f service.MessagingServiceFactory) CloseStreamUseCase {
-	return &closeStreamUsecaseImpl{cr: cr, factory: f}
+// NewCloseStreamUseCase creates a use case for closing streams.
+func NewCloseStreamUseCase(cr repository.CircuitRepository, f service.MessagingServiceFactory) CloseStreamUseCase {
+	return &closeStreamUseCaseImpl{cr: cr, factory: f}
 }
 
-func (uc *closeStreamUsecaseImpl) Handle(in CloseStreamInput) (CloseStreamOutput, error) {
+func (uc *closeStreamUseCaseImpl) Handle(in CloseStreamInput) (CloseStreamOutput, error) {
 	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return CloseStreamOutput{}, err

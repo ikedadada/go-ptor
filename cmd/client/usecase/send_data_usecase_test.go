@@ -73,7 +73,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewSendDataUsecase(tt.repo, tt.fac, service.NewCryptoService())
+			uc := usecase.NewSendDataUseCase(tt.repo, tt.fac, service.NewCryptoService())
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")
@@ -129,7 +129,7 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 	repo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
 	crypto := service.NewCryptoService()
-	uc := usecase.NewSendDataUsecase(repo, recordFactory{tx}, crypto)
+	uc := usecase.NewSendDataUseCase(repo, recordFactory{tx}, crypto)
 	data := []byte("hello")
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: data}); err != nil {
 		t.Fatalf("handle: %v", err)
@@ -174,7 +174,7 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 	repo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
 	crypto := service.NewCryptoService()
-	uc := usecase.NewSendDataUsecase(repo, recordFactory{tx}, crypto)
+	uc := usecase.NewSendDataUseCase(repo, recordFactory{tx}, crypto)
 	payload, _ := vo.EncodeBeginPayload(&vo.BeginPayload{StreamID: st.ID.UInt16(), Target: "example.com:80"})
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: payload, Cmd: vo.CmdBegin}); err != nil {
 		t.Fatalf("handle: %v", err)

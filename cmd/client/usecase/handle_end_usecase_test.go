@@ -42,7 +42,7 @@ func makeCircuitForEnd() (*entity.Circuit, vo.StreamID, error) {
 	return cir, st.ID, nil
 }
 
-func TestHandleEndUsecase(t *testing.T) {
+func TestHandleEndUseCase(t *testing.T) {
 	cir, sid, err := makeCircuitForEnd()
 	if err != nil {
 		t.Fatalf("setup: %v", err)
@@ -51,7 +51,7 @@ func TestHandleEndUsecase(t *testing.T) {
 
 	t.Run("stream", func(t *testing.T) {
 		repo := &mockRepoEnd{cir: cir}
-		uc := usecase.NewHandleEndUsecase(repo)
+		uc := usecase.NewHandleEndUseCase(repo)
 		out, err := uc.Handle(usecase.HandleEndInput{CircuitID: cid, StreamID: sid.UInt16()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -63,7 +63,7 @@ func TestHandleEndUsecase(t *testing.T) {
 
 	t.Run("circuit", func(t *testing.T) {
 		repo := &mockRepoEnd{cir: cir}
-		uc := usecase.NewHandleEndUsecase(repo)
+		uc := usecase.NewHandleEndUseCase(repo)
 		out, err := uc.Handle(usecase.HandleEndInput{CircuitID: cid, StreamID: 0})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -78,7 +78,7 @@ func TestHandleEndUsecase(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		repo := &mockRepoEnd{cir: nil, find: repository.ErrNotFound}
-		uc := usecase.NewHandleEndUsecase(repo)
+		uc := usecase.NewHandleEndUseCase(repo)
 		_, err := uc.Handle(usecase.HandleEndInput{CircuitID: cid, StreamID: sid.UInt16()})
 		if err == nil {
 			t.Errorf("expected error")
@@ -87,7 +87,7 @@ func TestHandleEndUsecase(t *testing.T) {
 
 	t.Run("bad id", func(t *testing.T) {
 		repo := &mockRepoEnd{}
-		uc := usecase.NewHandleEndUsecase(repo)
+		uc := usecase.NewHandleEndUseCase(repo)
 		_, err := uc.Handle(usecase.HandleEndInput{CircuitID: "bad", StreamID: 1})
 		if err == nil {
 			t.Errorf("expected error")

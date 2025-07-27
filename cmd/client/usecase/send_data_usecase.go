@@ -32,8 +32,8 @@ type sendDataUseCaseImpl struct {
 	crypto  service.CryptoService
 }
 
-// NewSendDataUsecase returns a use case for sending data cells.
-func NewSendDataUsecase(cr repository.CircuitRepository, f service.MessagingServiceFactory, c service.CryptoService) SendDataUseCase {
+// NewSendDataUseCase returns a use case for sending data cells.
+func NewSendDataUseCase(cr repository.CircuitRepository, f service.MessagingServiceFactory, c service.CryptoService) SendDataUseCase {
 	return &sendDataUseCaseImpl{cr: cr, factory: f, crypto: c}
 }
 
