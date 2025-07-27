@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
@@ -15,10 +15,11 @@ import (
 )
 
 func TestHandleConnectUseCase_ConnectMiddle(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
+	repo := repository.NewConnStateRepository(time.Second)
 	crypto := service.NewCryptoService()
 	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
+	p := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleConnectUseCase(repo, crypto, cellSender, p)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -36,7 +37,7 @@ func TestHandleConnectUseCase_ConnectMiddle(t *testing.T) {
 	}
 
 	// Create connect payload
-	payload, _ := vo.EncodeConnectPayload(&vo.ConnectPayload{Target: "example.com:80"})
+	payload, _ := p.EncodeConnectPayload(&service.ConnectPayloadDTO{Target: "example.com:80"})
 	enc, _ := crypto.AESSeal(key, nonce, payload)
 	cell := &entity.Cell{Cmd: vo.CmdConnect, Version: vo.ProtocolV1, Payload: enc}
 
@@ -69,10 +70,11 @@ func TestHandleConnectUseCase_ConnectMiddle(t *testing.T) {
 }
 
 func TestHandleConnectUseCase_ConnectExit(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
+	repo := repository.NewConnStateRepository(time.Second)
 	crypto := service.NewCryptoService()
 	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
+	p := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleConnectUseCase(repo, crypto, cellSender, p)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -92,7 +94,7 @@ func TestHandleConnectUseCase_ConnectExit(t *testing.T) {
 	ensureServeDown := func(st *entity.ConnState) {}
 
 	// Create connect payload with target
-	payload, _ := vo.EncodeConnectPayload(&vo.ConnectPayload{Target: ln.Addr().String()})
+	payload, _ := p.EncodeConnectPayload(&service.ConnectPayloadDTO{Target: ln.Addr().String()})
 	enc, _ := crypto.AESSeal(key, nonce, payload)
 	cell := &entity.Cell{Cmd: vo.CmdConnect, Version: vo.ProtocolV1, Payload: enc}
 
@@ -131,10 +133,11 @@ func TestHandleConnectUseCase_ConnectExit(t *testing.T) {
 }
 
 func TestHandleConnectUseCase_ConnectExitWithEnvAddr(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
+	repo := repository.NewConnStateRepository(time.Second)
 	crypto := service.NewCryptoService()
 	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
+	p := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleConnectUseCase(repo, crypto, cellSender, p)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -196,10 +199,11 @@ func TestHandleConnectUseCase_ConnectExitWithEnvAddr(t *testing.T) {
 }
 
 func TestHandleConnectUseCase_ConnectExitDialFail(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
+	repo := repository.NewConnStateRepository(time.Second)
 	crypto := service.NewCryptoService()
 	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
+	p := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleConnectUseCase(repo, crypto, cellSender, p)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -213,7 +217,7 @@ func TestHandleConnectUseCase_ConnectExitDialFail(t *testing.T) {
 	ensureServeDown := func(st *entity.ConnState) {}
 
 	// Create connect payload with invalid target
-	payload, _ := vo.EncodeConnectPayload(&vo.ConnectPayload{Target: "127.0.0.1:1"})
+	payload, _ := p.EncodeConnectPayload(&service.ConnectPayloadDTO{Target: "127.0.0.1:1"})
 	enc, _ := crypto.AESSeal(key, nonce, payload)
 	cell := &entity.Cell{Cmd: vo.CmdConnect, Version: vo.ProtocolV1, Payload: enc}
 

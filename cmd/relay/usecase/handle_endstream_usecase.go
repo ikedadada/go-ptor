@@ -14,46 +14,48 @@ type HandleEndStreamUseCase interface {
 }
 
 type handleEndStreamUseCaseImpl struct {
-	repo   repository.ConnStateRepository
-	sender service.CellSenderService
+	csRepo repository.ConnStateRepository
+	csSvc  service.CellSenderService
+	peSvc  service.PayloadEncodingService
 }
 
 // NewHandleEndStreamUseCase creates a new end stream use case
-func NewHandleEndStreamUseCase(repo repository.ConnStateRepository, sender service.CellSenderService) HandleEndStreamUseCase {
+func NewHandleEndStreamUseCase(csRepo repository.ConnStateRepository, csSvc service.CellSenderService, peSvc service.PayloadEncodingService) HandleEndStreamUseCase {
 	return &handleEndStreamUseCaseImpl{
-		repo:   repo,
-		sender: sender,
+		csRepo: csRepo,
+		csSvc:  csSvc,
+		peSvc:  peSvc,
 	}
 }
 
 func (uc *handleEndStreamUseCaseImpl) EndStream(st *entity.ConnState, cid vo.CircuitID, cell *entity.Cell, ensureServeDown func(*entity.ConnState)) error {
-	var p *vo.DataPayload
+	var p *service.DataPayloadDTO
 	var err error
 	if len(cell.Payload) > 0 {
-		p, err = vo.DecodeDataPayload(cell.Payload)
+		p, err = uc.peSvc.DecodeDataPayload(cell.Payload)
 		if err != nil {
 			return err
 		}
 	} else {
-		p = &vo.DataPayload{}
+		p = &service.DataPayloadDTO{}
 	}
 	if p.StreamID == 0 {
-		uc.repo.DestroyAllStreams(cid)
+		uc.csRepo.DestroyAllStreams(cid)
 		if st.Down() != nil {
 			ensureServeDown(st)
-			_ = uc.sender.ForwardCell(st.Down(), cid, cell)
+			_ = uc.csSvc.ForwardCell(st.Down(), cid, cell)
 		}
-		_ = uc.repo.Delete(cid)
+		_ = uc.csRepo.Delete(cid)
 		return nil
 	}
 	sid, err := vo.StreamIDFrom(p.StreamID)
 	if err != nil {
 		return err
 	}
-	_ = uc.repo.RemoveStream(cid, sid)
+	_ = uc.csRepo.RemoveStream(cid, sid)
 	if st.Down() != nil {
 		ensureServeDown(st)
-		return uc.sender.ForwardCell(st.Down(), cid, cell)
+		return uc.csSvc.ForwardCell(st.Down(), cid, cell)
 	}
 	return nil
 }

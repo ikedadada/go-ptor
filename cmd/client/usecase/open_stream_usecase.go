@@ -25,12 +25,12 @@ type OpenStreamUseCase interface {
 
 // OpenStreamInteractor
 type openStreamUseCaseImpl struct {
-	cr repository.CircuitRepository
+	cRepo repository.CircuitRepository
 }
 
 // NewOpenStreamUseCase returns a use case to open streams on circuits.
-func NewOpenStreamUseCase(cr repository.CircuitRepository) OpenStreamUseCase {
-	return &openStreamUseCaseImpl{cr: cr}
+func NewOpenStreamUseCase(cRepo repository.CircuitRepository) OpenStreamUseCase {
+	return &openStreamUseCaseImpl{cRepo: cRepo}
 }
 
 // Handle: 既存 Circuit を取得 → StreamState 生成 → DTO で返却
@@ -40,7 +40,7 @@ func (uc *openStreamUseCaseImpl) Handle(in OpenStreamInput) (OpenStreamOutput, e
 		return OpenStreamOutput{}, fmt.Errorf("parse circuit id: %w", err)
 	}
 
-	cir, err := uc.cr.Find(cid)
+	cir, err := uc.cRepo.Find(cid)
 	if err != nil {
 		return OpenStreamOutput{}, fmt.Errorf("circuit not found: %w", err)
 	}

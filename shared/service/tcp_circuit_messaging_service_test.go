@@ -53,7 +53,8 @@ func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *tes
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
 	}
-	tx := service.NewTCPCircuitMessagingService(conn)
+	peSvc := service.NewPayloadEncodingService()
+	tx := service.NewTCPCircuitMessagingService(conn, peSvc)
 	cid := vo.NewCircuitID()
 	sid := vo.NewStreamIDAuto()
 	data := []byte("hello")
@@ -85,7 +86,7 @@ func TestTCPCircuitMessagingService_TransmitData_TerminateStream_realConn(t *tes
 		if cell.Cmd != vo.CmdData {
 			t.Errorf("unexpected cmd %d", cell.Cmd)
 		}
-		p, err := vo.DecodeDataPayload(cell.Payload)
+		p, err := peSvc.DecodeDataPayload(cell.Payload)
 		if err != nil {
 			t.Fatalf("payload: %v", err)
 		}
@@ -184,7 +185,8 @@ func TestTCPCircuitMessagingService_TransmitData_tooBig_realConn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
 	}
-	tx := service.NewTCPCircuitMessagingService(conn)
+	peSvc := service.NewPayloadEncodingService()
+	tx := service.NewTCPCircuitMessagingService(conn, peSvc)
 	cid := vo.NewCircuitID()
 	sid := vo.NewStreamIDAuto()
 	big := make([]byte, entity.MaxPayloadSize+1)

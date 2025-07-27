@@ -27,14 +27,15 @@ type SendDataUseCase interface {
 }
 
 type sendDataUseCaseImpl struct {
-	cr      repository.CircuitRepository
+	cRepo   repository.CircuitRepository
 	factory service.MessagingServiceFactory
-	crypto  service.CryptoService
+	cSvc    service.CryptoService
+	peSvc   service.PayloadEncodingService
 }
 
 // NewSendDataUseCase returns a use case for sending data cells.
-func NewSendDataUseCase(cr repository.CircuitRepository, f service.MessagingServiceFactory, c service.CryptoService) SendDataUseCase {
-	return &sendDataUseCaseImpl{cr: cr, factory: f, crypto: c}
+func NewSendDataUseCase(cRepo repository.CircuitRepository, f service.MessagingServiceFactory, cSvc service.CryptoService, peSvc service.PayloadEncodingService) SendDataUseCase {
+	return &sendDataUseCaseImpl{cRepo: cRepo, factory: f, cSvc: cSvc, peSvc: peSvc}
 }
 
 func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) {
@@ -48,7 +49,7 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	}
 
 	// 回路存在確認（データリンクには不要だがバリデーションで利用）
-	cir, err := uc.cr.Find(cid)
+	cir, err := uc.cRepo.Find(cid)
 	if err != nil {
 		return SendDataOutput{}, fmt.Errorf("circuit not found: %w", err)
 	}
@@ -87,7 +88,7 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	}
 
 	log.Printf("multi-seal input cid=%s plainLen=%d", in.CircuitID, len(plain))
-	enc, err := uc.crypto.AESMultiSeal(keys, nonces, plain)
+	enc, err := uc.cSvc.AESMultiSeal(keys, nonces, plain)
 	if err != nil {
 		log.Printf("multi-seal failed cid=%s error=%v", in.CircuitID, err)
 		return SendDataOutput{}, err

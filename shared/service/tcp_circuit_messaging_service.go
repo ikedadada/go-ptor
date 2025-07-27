@@ -25,22 +25,30 @@ type MessagingServiceFactory interface {
 }
 
 // TCPMessagingServiceFactory creates TCPCircuitMessagingService instances.
-type TCPMessagingServiceFactory struct{}
+type TCPMessagingServiceFactory struct {
+	peSvc PayloadEncodingService
+}
+
+// NewTCPMessagingServiceFactory creates a factory with the provided PayloadEncodingService
+func NewTCPMessagingServiceFactory(peSvc PayloadEncodingService) MessagingServiceFactory {
+	return &TCPMessagingServiceFactory{peSvc: peSvc}
+}
 
 // New returns a CircuitMessagingService using the provided connection.
-func (TCPMessagingServiceFactory) New(conn net.Conn) CircuitMessagingService {
-	return NewTCPCircuitMessagingService(conn)
+func (f *TCPMessagingServiceFactory) New(conn net.Conn) CircuitMessagingService {
+	return NewTCPCircuitMessagingService(conn, f.peSvc)
 }
 
 type TCPCircuitMessagingService struct {
-	mu   sync.Mutex
-	conn net.Conn
+	mu    sync.Mutex
+	conn  net.Conn
+	peSvc PayloadEncodingService
 }
 
 // NewTCPCircuitMessagingService wraps an already-connected net.Conn.
 // The caller is responsible for establishing the connection.
-func NewTCPCircuitMessagingService(conn net.Conn) CircuitMessagingService {
-	return &TCPCircuitMessagingService{conn: conn}
+func NewTCPCircuitMessagingService(conn net.Conn, peSvc PayloadEncodingService) CircuitMessagingService {
+	return &TCPCircuitMessagingService{conn: conn, peSvc: peSvc}
 }
 
 func (t *TCPCircuitMessagingService) send(cmd vo.CellCommand, cid vo.CircuitID, payload []byte) error {
@@ -61,7 +69,7 @@ func (t *TCPCircuitMessagingService) TransmitData(cid vo.CircuitID, s vo.StreamI
 	if len(d) > entity.MaxPayloadSize {
 		return fmt.Errorf("data too big")
 	}
-	p, err := vo.EncodeDataPayload(&vo.DataPayload{StreamID: s.UInt16(), Data: d})
+	p, err := t.peSvc.EncodeDataPayload(&DataPayloadDTO{StreamID: s.UInt16(), Data: d})
 	if err != nil {
 		return err
 	}
@@ -83,7 +91,7 @@ func (t *TCPCircuitMessagingService) EstablishConnection(cid vo.CircuitID, d []b
 }
 
 func (t *TCPCircuitMessagingService) TerminateStream(cid vo.CircuitID, s vo.StreamID) error {
-	p, err := vo.EncodeDataPayload(&vo.DataPayload{StreamID: s.UInt16()})
+	p, err := t.peSvc.EncodeDataPayload(&DataPayloadDTO{StreamID: s.UInt16()})
 	if err != nil {
 		return err
 	}

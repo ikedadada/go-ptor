@@ -25,13 +25,13 @@ type CloseStreamUseCase interface {
 }
 
 type closeStreamUseCaseImpl struct {
-	cr      repository.CircuitRepository
+	cRepo   repository.CircuitRepository
 	factory service.MessagingServiceFactory
 }
 
 // NewCloseStreamUseCase creates a use case for closing streams.
-func NewCloseStreamUseCase(cr repository.CircuitRepository, f service.MessagingServiceFactory) CloseStreamUseCase {
-	return &closeStreamUseCaseImpl{cr: cr, factory: f}
+func NewCloseStreamUseCase(cRepo repository.CircuitRepository, f service.MessagingServiceFactory) CloseStreamUseCase {
+	return &closeStreamUseCaseImpl{cRepo: cRepo, factory: f}
 }
 
 func (uc *closeStreamUseCaseImpl) Handle(in CloseStreamInput) (CloseStreamOutput, error) {
@@ -44,7 +44,7 @@ func (uc *closeStreamUseCaseImpl) Handle(in CloseStreamInput) (CloseStreamOutput
 		return CloseStreamOutput{}, err
 	}
 
-	cir, err := uc.cr.Find(cid)
+	cir, err := uc.cRepo.Find(cid)
 	if err != nil {
 		return CloseStreamOutput{}, fmt.Errorf("circuit not found: %w", err)
 	}

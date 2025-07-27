@@ -66,11 +66,12 @@ func TestSendConnectUseCase_Handle(t *testing.T) {
 		t.Fatalf("setup: %v", err)
 	}
 	cid := cir.ID().String()
-	payload, _ := vo.EncodeConnectPayload(&vo.ConnectPayload{Target: "x"})
+	peSvc := service.NewPayloadEncodingService()
+	payload, _ := peSvc.EncodeConnectPayload(&service.ConnectPayloadDTO{Target: "x"})
 
 	tests := []struct {
 		name  string
-		repo  repository.CircuitRepository
+		cRepo repository.CircuitRepository
 		tx    *mockTxConnect
 		input usecase.SendConnectInput
 		err   bool
@@ -84,8 +85,9 @@ func TestSendConnectUseCase_Handle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fac := connectFactory{tt.tx}
-			crypto := service.NewCryptoService()
-			uc := usecase.NewSendConnectUseCase(tt.repo, fac, crypto)
+			cSvc := service.NewCryptoService()
+			peSvc := service.NewPayloadEncodingService()
+			uc := usecase.NewSendConnectUseCase(tt.cRepo, fac, cSvc, peSvc)
 
 			// Store expected nonces before use case execution
 			k := make([][32]byte, len(cir.Hops()))
@@ -108,7 +110,7 @@ func TestSendConnectUseCase_Handle(t *testing.T) {
 			if tt.tx.cid.String() != cid {
 				t.Errorf("cid not passed")
 			}
-			out, err := crypto.AESMultiOpen(k, n, tt.tx.payload)
+			out, err := cSvc.AESMultiOpen(k, n, tt.tx.payload)
 			if err != nil {
 				t.Fatalf("decrypt: %v", err)
 			}

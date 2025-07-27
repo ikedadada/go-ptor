@@ -15,9 +15,9 @@ import (
 
 // RelayHandler handles relay connections and cell processing
 type RelayHandler struct {
-	repo        repository.ConnStateRepository
-	crs         service.CellReaderService
-	cellSender  service.CellSenderService
+	csRepo      repository.ConnStateRepository
+	crSvc       service.CellReaderService
+	csSvc       service.CellSenderService
 	extendUC    usecase.HandleExtendUseCase
 	beginUC     usecase.HandleBeginUseCase
 	dataUC      usecase.HandleDataUseCase
@@ -28,9 +28,9 @@ type RelayHandler struct {
 
 // NewRelayHandler creates a new relay handler
 func NewRelayHandler(
-	repo repository.ConnStateRepository,
-	crs service.CellReaderService,
-	cellSender service.CellSenderService,
+	csRepo repository.ConnStateRepository,
+	crSvc service.CellReaderService,
+	csSvc service.CellSenderService,
 	extendUC usecase.HandleExtendUseCase,
 	beginUC usecase.HandleBeginUseCase,
 	dataUC usecase.HandleDataUseCase,
@@ -39,9 +39,9 @@ func NewRelayHandler(
 	connectUC usecase.HandleConnectUseCase,
 ) *RelayHandler {
 	return &RelayHandler{
-		repo:        repo,
-		crs:         crs,
-		cellSender:  cellSender,
+		csRepo:      csRepo,
+		crSvc:       crSvc,
+		csSvc:       csSvc,
 		extendUC:    extendUC,
 		beginUC:     beginUC,
 		dataUC:      dataUC,
@@ -60,7 +60,7 @@ func (h *RelayHandler) ServeConn(c net.Conn) {
 	}()
 
 	for {
-		cid, cell, err := h.crs.ReadCell(c)
+		cid, cell, err := h.crSvc.ReadCell(c)
 		if err != nil {
 			if err != io.EOF {
 				log.Println("read cell:", err)
@@ -76,7 +76,7 @@ func (h *RelayHandler) ServeConn(c net.Conn) {
 
 // HandleCell routes cells to appropriate handlers
 func (h *RelayHandler) HandleCell(up net.Conn, cid vo.CircuitID, cell *entity.Cell) error {
-	st, err := h.repo.Find(cid)
+	st, err := h.csRepo.Find(cid)
 	switch {
 	case errors.Is(err, repository.ErrNotFound) && cell.Cmd == vo.CmdEnd:
 		// End for an unknown circuit is ignored
@@ -92,7 +92,7 @@ func (h *RelayHandler) HandleCell(up net.Conn, cid vo.CircuitID, cell *entity.Ce
 	case vo.CmdBegin:
 		return h.beginUC.Begin(st, cid, cell, h.ensureServeDown)
 	case vo.CmdBeginAck:
-		return h.cellSender.ForwardCell(st.Up(), cid, cell)
+		return h.csSvc.ForwardCell(st.Up(), cid, cell)
 	case vo.CmdEnd:
 		return h.endStreamUC.EndStream(st, cid, cell, h.ensureServeDown)
 	case vo.CmdDestroy:

@@ -16,25 +16,27 @@ import (
 
 // SOCKS5Controller handles SOCKS5 proxy connections
 type SOCKS5Controller struct {
-	hsRepo      repository.HiddenServiceRepository
-	circuitRepo repository.CircuitRepository
-	cryptoSvc   service.CryptoService
-	crSvc       service.CellReaderService
-	buildUC     usecase.BuildCircuitUseCase
-	connectUC   usecase.SendConnectUseCase
-	openUC      usecase.OpenStreamUseCase
-	closeUC     usecase.CloseStreamUseCase
-	sendUC      usecase.SendDataUseCase
-	endUC       usecase.HandleEndUseCase
-	hops        int
+	hsRepo    repository.HiddenServiceRepository
+	cRepo     repository.CircuitRepository
+	cSvc      service.CryptoService
+	crSvc     service.CellReaderService
+	peSvc     service.PayloadEncodingService
+	buildUC   usecase.BuildCircuitUseCase
+	connectUC usecase.SendConnectUseCase
+	openUC    usecase.OpenStreamUseCase
+	closeUC   usecase.CloseStreamUseCase
+	sendUC    usecase.SendDataUseCase
+	endUC     usecase.HandleEndUseCase
+	hops      int
 }
 
 // NewSOCKS5Controller creates a new SOCKS5Controller
 func NewSOCKS5Controller(
 	hsRepo repository.HiddenServiceRepository,
-	circuitRepo repository.CircuitRepository,
-	cryptoSvc service.CryptoService,
+	cRepo repository.CircuitRepository,
+	cSvc service.CryptoService,
 	crSvc service.CellReaderService,
+	peSvc service.PayloadEncodingService,
 	buildUC usecase.BuildCircuitUseCase,
 	connectUC usecase.SendConnectUseCase,
 	openUC usecase.OpenStreamUseCase,
@@ -44,17 +46,18 @@ func NewSOCKS5Controller(
 	hops int,
 ) *SOCKS5Controller {
 	return &SOCKS5Controller{
-		hsRepo:      hsRepo,
-		circuitRepo: circuitRepo,
-		cryptoSvc:   cryptoSvc,
-		crSvc:       crSvc,
-		buildUC:     buildUC,
-		connectUC:   connectUC,
-		openUC:      openUC,
-		closeUC:     closeUC,
-		sendUC:      sendUC,
-		endUC:       endUC,
-		hops:        hops,
+		hsRepo:    hsRepo,
+		cRepo:     cRepo,
+		cSvc:      cSvc,
+		crSvc:     crSvc,
+		peSvc:     peSvc,
+		buildUC:   buildUC,
+		connectUC: connectUC,
+		openUC:    openUC,
+		closeUC:   closeUC,
+		sendUC:    sendUC,
+		endUC:     endUC,
+		hops:      hops,
 	}
 }
 
@@ -212,7 +215,7 @@ func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitID,
 
 // sendBeginCommand sends the BEGIN command to establish the stream
 func (c *SOCKS5Controller) sendBeginCommand(circuitID string, sid int, addr string) error {
-	payload, err := vo.EncodeBeginPayload(&vo.BeginPayload{StreamID: uint16(sid), Target: addr})
+	payload, err := c.peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{StreamID: uint16(sid), Target: addr})
 	if err != nil {
 		return fmt.Errorf("encode begin: %w", err)
 	}
@@ -273,7 +276,7 @@ func (c *SOCKS5Controller) resolveAddress(host string, port int) (string, string
 
 // recvLoop handles incoming data from the circuit
 func (c *SOCKS5Controller) recvLoop(cid vo.CircuitID, sm service.StreamManagerService) {
-	cir, err := c.circuitRepo.Find(cid)
+	cir, err := c.cRepo.Find(cid)
 	if err != nil {
 		log.Println("find circuit:", err)
 		return
@@ -311,7 +314,7 @@ func (c *SOCKS5Controller) recvLoop(cid vo.CircuitID, sm service.StreamManagerSe
 
 // handleDataCell processes incoming data cells and decrypts onion layers
 func (c *SOCKS5Controller) handleDataCell(cell *entity.Cell, cir *entity.Circuit, sm service.StreamManagerService) {
-	dp, err := vo.DecodeDataPayload(cell.Payload)
+	dp, err := c.peSvc.DecodeDataPayload(cell.Payload)
 	if err != nil {
 		return
 	}
@@ -340,7 +343,7 @@ func (c *SOCKS5Controller) decryptOnionLayers(data []byte, cir *entity.Circuit) 
 		nonce := cir.HopUpstreamDataNonce(hop)
 
 		log.Printf("response decrypt hop=%d nonce=%x key=%x", hop, nonce, key)
-		decrypted, err := c.cryptoSvc.AESOpen(key, nonce, data)
+		decrypted, err := c.cSvc.AESOpen(key, nonce, data)
 		if err != nil {
 			return nil, fmt.Errorf("response decrypt failed hop=%d: %w", hop, err)
 		}
@@ -355,7 +358,7 @@ func (c *SOCKS5Controller) decryptOnionLayers(data []byte, cir *entity.Circuit) 
 func (c *SOCKS5Controller) handleEndCell(cell *entity.Cell, sm service.StreamManagerService) bool {
 	sid := uint16(0)
 	if len(cell.Payload) > 0 {
-		if p, err := vo.DecodeDataPayload(cell.Payload); err == nil {
+		if p, err := c.peSvc.DecodeDataPayload(cell.Payload); err == nil {
 			sid = p.StreamID
 		}
 	}

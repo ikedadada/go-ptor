@@ -61,7 +61,7 @@ func TestOpenStreamInteractor_Handle(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		repo       repository.CircuitRepository
+		cRepo      repository.CircuitRepository
 		input      usecase.OpenStreamInput
 		expectsErr bool
 	}{
@@ -72,7 +72,7 @@ func TestOpenStreamInteractor_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewOpenStreamUseCase(tt.repo)
+			uc := usecase.NewOpenStreamUseCase(tt.cRepo)
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
@@ -15,10 +15,11 @@ import (
 )
 
 func TestHandleDataUseCase_DataForwardMiddle(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -27,7 +28,7 @@ func TestHandleDataUseCase_DataForwardMiddle(t *testing.T) {
 	down1, down2 := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, down1)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Mock ensureServeDown function
 	serveDownCalled := false
@@ -37,8 +38,8 @@ func TestHandleDataUseCase_DataForwardMiddle(t *testing.T) {
 
 	// Create data with one layer of encryption
 	plain := []byte("hello")
-	enc, _ := crypto.AESSeal(key, nonce, plain)
-	payload, _ := vo.EncodeDataPayload(&vo.DataPayload{StreamID: 1, Data: enc})
+	enc, _ := cSvc.AESSeal(key, nonce, plain)
+	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: 1, Data: enc})
 	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
 
 	errCh := make(chan error, 1)
@@ -57,7 +58,7 @@ func TestHandleDataUseCase_DataForwardMiddle(t *testing.T) {
 		t.Fatalf("cmd %d", fwd.Cmd)
 	}
 
-	dp, err := vo.DecodeDataPayload(fwd.Payload)
+	dp, err := peSvc.DecodeDataPayload(fwd.Payload)
 	if err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
@@ -78,10 +79,11 @@ func TestHandleDataUseCase_DataForwardMiddle(t *testing.T) {
 }
 
 func TestHandleDataUseCase_DataExit(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -89,20 +91,20 @@ func TestHandleDataUseCase_DataExit(t *testing.T) {
 	up1, _ := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, nil)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Add stream connection
 	sid, _ := vo.StreamIDFrom(1)
 	local1, local2 := net.Pipe()
-	repo.AddStream(cid, sid, local1)
+	csRepo.AddStream(cid, sid, local1)
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
 	// Create encrypted data
 	plain := []byte("hello")
-	enc, _ := crypto.AESSeal(key, nonce, plain)
-	payload, _ := vo.EncodeDataPayload(&vo.DataPayload{StreamID: sid.UInt16(), Data: enc})
+	enc, _ := cSvc.AESSeal(key, nonce, plain)
+	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid.UInt16(), Data: enc})
 	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
 
 	errCh := make(chan error, 1)
@@ -127,10 +129,11 @@ func TestHandleDataUseCase_DataExit(t *testing.T) {
 }
 
 func TestHandleDataUseCase_DataHidden(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -140,15 +143,15 @@ func TestHandleDataUseCase_DataHidden(t *testing.T) {
 
 	st := entity.NewConnState(key, nonce, up1, down1)
 	st.SetHidden(true)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
 	// Create encrypted data
 	data := []byte("hello")
-	enc, _ := crypto.AESSeal(key, nonce, data)
-	payload, _ := vo.EncodeDataPayload(&vo.DataPayload{StreamID: 1, Data: enc})
+	enc, _ := cSvc.AESSeal(key, nonce, data)
+	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: 1, Data: enc})
 	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
 
 	errCh := make(chan error, 1)
@@ -173,10 +176,11 @@ func TestHandleDataUseCase_DataHidden(t *testing.T) {
 }
 
 func TestHandleDataUseCase_DataUpstream(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -185,14 +189,14 @@ func TestHandleDataUseCase_DataUpstream(t *testing.T) {
 	down1, _ := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, down1)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
 	// Create data that fails decryption (simulating upstream data)
 	invalidData := []byte("invalid encrypted data")
-	payload, _ := vo.EncodeDataPayload(&vo.DataPayload{StreamID: 1, Data: invalidData})
+	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: 1, Data: invalidData})
 	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
 
 	errCh := make(chan error, 1)

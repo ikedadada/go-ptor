@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"ikedadada/go-ptor/cmd/relay/handler"
-	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
@@ -36,24 +36,25 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	repo := repoimpl.NewConnStateRepository(*ttl)
-	cryptoSvc := service.NewCryptoService()
-	reader := service.NewCellReaderService()
-	cellSender := service.NewCellSenderService()
+	csRepo := repository.NewConnStateRepository(*ttl)
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
 
 	// Create individual usecases
-	extendUC := usecase.NewHandleExtendUseCase(priv, repo, cryptoSvc, cellSender)
-	beginUC := usecase.NewHandleBeginUseCase(repo, cryptoSvc, cellSender)
-	dataUC := usecase.NewHandleDataUseCase(repo, cryptoSvc, cellSender)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewHandleConnectUseCase(repo, cryptoSvc, cellSender)
+	extendUC := usecase.NewHandleExtendUseCase(priv, csRepo, cSvc, csSvc, peSvc)
+	beginUC := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
+	dataUC := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
+	destroyUC := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
+	connectUC := usecase.NewHandleConnectUseCase(csRepo, cSvc, csSvc, peSvc)
 
 	// Create handler with all usecases
 	relayHandler := handler.NewRelayHandler(
-		repo,
-		reader,
-		cellSender,
+		csRepo,
+		crSvc,
+		csSvc,
 		extendUC,
 		beginUC,
 		dataUC,

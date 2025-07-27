@@ -14,23 +14,23 @@ type HandleDestroyUseCase interface {
 }
 
 type handleDestroyUseCaseImpl struct {
-	repo   repository.ConnStateRepository
-	sender service.CellSenderService
+	csRepo repository.ConnStateRepository
+	csSvc  service.CellSenderService
 }
 
 // NewHandleDestroyUseCase creates a new destroy use case
-func NewHandleDestroyUseCase(repo repository.ConnStateRepository, sender service.CellSenderService) HandleDestroyUseCase {
+func NewHandleDestroyUseCase(csRepo repository.ConnStateRepository, csSvc service.CellSenderService) HandleDestroyUseCase {
 	return &handleDestroyUseCaseImpl{
-		repo:   repo,
-		sender: sender,
+		csRepo: csRepo,
+		csSvc:  csSvc,
 	}
 }
 
 func (uc *handleDestroyUseCaseImpl) Destroy(st *entity.ConnState, cid vo.CircuitID) error {
 	if st.Down() != nil {
 		c := &entity.Cell{Cmd: vo.CmdDestroy, Version: vo.ProtocolV1}
-		_ = uc.sender.ForwardCell(st.Down(), cid, c)
+		_ = uc.csSvc.ForwardCell(st.Down(), cid, c)
 	}
-	_ = uc.repo.Delete(cid)
+	_ = uc.csRepo.Delete(cid)
 	return nil
 }

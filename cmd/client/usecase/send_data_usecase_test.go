@@ -58,7 +58,7 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		repo       repository.CircuitRepository
+		cRepo      repository.CircuitRepository
 		fac        service.MessagingServiceFactory
 		input      usecase.SendDataInput
 		expectsErr bool
@@ -73,7 +73,9 @@ func TestSendDataInteractor_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewSendDataUseCase(tt.repo, tt.fac, service.NewCryptoService())
+			cSvc := service.NewCryptoService()
+			peSvc := service.NewPayloadEncodingService()
+			uc := usecase.NewSendDataUseCase(tt.cRepo, tt.fac, cSvc, peSvc)
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")
@@ -126,10 +128,11 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 	}
 	st, _ := cir.OpenStream()
 
-	repo := &mockCircuitRepoSend{circuit: cir}
+	cRepo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
-	crypto := service.NewCryptoService()
-	uc := usecase.NewSendDataUseCase(repo, recordFactory{tx}, crypto)
+	cSvc := service.NewCryptoService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewSendDataUseCase(cRepo, recordFactory{tx}, cSvc, peSvc)
 	data := []byte("hello")
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: data}); err != nil {
 		t.Fatalf("handle: %v", err)
@@ -141,7 +144,7 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 		k2[i] = keys[i]
 		n2[i] = nonces[i]
 	}
-	out, err := crypto.AESMultiOpen(k2, n2, tx.data)
+	out, err := cSvc.AESMultiOpen(k2, n2, tx.data)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
 	}
@@ -171,11 +174,12 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 	}
 	st, _ := cir.OpenStream()
 
-	repo := &mockCircuitRepoSend{circuit: cir}
+	cRepo := &mockCircuitRepoSend{circuit: cir}
 	tx := &recordTx{}
-	crypto := service.NewCryptoService()
-	uc := usecase.NewSendDataUseCase(repo, recordFactory{tx}, crypto)
-	payload, _ := vo.EncodeBeginPayload(&vo.BeginPayload{StreamID: st.ID.UInt16(), Target: "example.com:80"})
+	cSvc := service.NewCryptoService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewSendDataUseCase(cRepo, recordFactory{tx}, cSvc, peSvc)
+	payload, _ := peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{StreamID: st.ID.UInt16(), Target: "example.com:80"})
 	if _, err := uc.Handle(usecase.SendDataInput{CircuitID: cir.ID().String(), StreamID: st.ID.UInt16(), Data: payload, Cmd: vo.CmdBegin}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -186,7 +190,7 @@ func TestSendData_BeginRoundTrip(t *testing.T) {
 		k2[i] = keys[i]
 		n2[i] = nonces[i]
 	}
-	out, err := crypto.AESMultiOpen(k2, n2, tx.data)
+	out, err := cSvc.AESMultiOpen(k2, n2, tx.data)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
 	}

@@ -50,8 +50,8 @@ func TestHandleEndUseCase(t *testing.T) {
 	cid := cir.ID().String()
 
 	t.Run("stream", func(t *testing.T) {
-		repo := &mockRepoEnd{cir: cir}
-		uc := usecase.NewHandleEndUseCase(repo)
+		cRepo := &mockRepoEnd{cir: cir}
+		uc := usecase.NewHandleEndUseCase(cRepo)
 		out, err := uc.Handle(usecase.HandleEndInput{CircuitID: cid, StreamID: sid.UInt16()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
