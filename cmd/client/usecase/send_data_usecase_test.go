@@ -152,13 +152,19 @@ func TestSendData_OnionRoundTrip(t *testing.T) {
 		t.Fatalf("decode cell: %v", err)
 	}
 
+	// First decode the DataPayloadDTO from the cell payload
+	dto, err := peSvc.DecodeDataPayload(cell.Payload)
+	if err != nil {
+		t.Fatalf("decode DataPayloadDTO: %v", err)
+	}
+
 	k2 := make([][32]byte, hops)
 	n2 := make([][12]byte, hops)
 	for i := 0; i < hops; i++ {
 		k2[i] = keys[i]
 		n2[i] = nonces[i]
 	}
-	out, err := cSvc.AESMultiOpen(k2, n2, cell.Payload)
+	out, err := cSvc.AESMultiOpen(k2, n2, dto.Data)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
 	}

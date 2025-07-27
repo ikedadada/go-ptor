@@ -337,20 +337,17 @@ func (c *SOCKS5Controller) handleDataCell(cell *entity.Cell, cir *entity.Circuit
 // decryptOnionLayers decrypts multi-layer onion encryption for response data
 func (c *SOCKS5Controller) decryptOnionLayers(data []byte, cir *entity.Circuit) ([]byte, error) {
 	hopCount := len(cir.Hops())
-	log.Printf("response decrypt multi-layer hops=%d dataLen=%d", hopCount, len(data))
 
 	// Decrypt each layer in reverse circuit order (first hop to exit hop)
 	for hop := 0; hop < hopCount; hop++ {
 		key := cir.HopKey(hop)
 		nonce := cir.HopUpstreamDataNonce(hop)
 
-		log.Printf("response decrypt hop=%d nonce=%x key=%x", hop, nonce, key)
 		decrypted, err := c.cSvc.AESOpen(key, nonce, data)
 		if err != nil {
 			return nil, fmt.Errorf("response decrypt failed hop=%d: %w", hop, err)
 		}
 		data = decrypted
-		log.Printf("response decrypt success hop=%d len=%d", hop, len(data))
 	}
 
 	return data, nil

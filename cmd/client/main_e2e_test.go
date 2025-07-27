@@ -162,59 +162,32 @@ func TestClientMain_E2E(t *testing.T) {
 
 	// Give client time to initialize
 	time.Sleep(2 * time.Second)
-	t.Log("Client output after 2s initialization:", buf.String())
 
 	c, err := waitDial(socks, 5*time.Second)
 	if err != nil {
-		t.Log("Client output before SOCKS dial failure:", buf.String())
 		t.Fatalf("dial socks: %v", err)
 	}
 	defer c.Close()
 
 	w := bufio.NewWriter(c)
 	r := bufio.NewReader(c)
-	t.Log("Sending SOCKS5 auth request")
 	w.Write([]byte{5, 1, 0})
 	w.Flush()
 	authResp := make([]byte, 2)
 	io.ReadFull(r, authResp)
-	t.Log("SOCKS5 auth response:", authResp)
-
-	// Wait for client to log the connection
-	time.Sleep(100 * time.Millisecond)
-	t.Log("Client output after auth:", buf.String())
 
 	ip := targetAddr.IP.To4()
 	req := []byte{5, 1, 0, 1}
 	req = append(req, ip...)
 	req = append(req, byte(targetAddr.Port>>8), byte(targetAddr.Port))
-	t.Log("Sending SOCKS5 CONNECT request")
 	w.Write(req)
 	w.Flush()
 
-	// Wait for server to log CONNECT processing
-	time.Sleep(200 * time.Millisecond)
-	t.Log("Client output after CONNECT:", buf.String())
-
 	connectResp := make([]byte, 10)
 	io.ReadFull(r, connectResp)
-	t.Log("SOCKS5 CONNECT response:", connectResp)
 
-	t.Log("Sending HTTP request")
 	fmt.Fprintf(w, "GET / HTTP/1.0\r\nHost: %s\r\n\r\n", targetAddr.IP.String())
 	w.Flush()
-
-	// Wait to see if data gets transmitted and check relay log
-	time.Sleep(500 * time.Millisecond)
-	t.Log("Client output after HTTP request:", buf.String())
-	t.Log("Relay output after DATA transmission:", rout.String())
-
-	// Timeout reading response early to see what's happening
-	go func() {
-		time.Sleep(2 * time.Second)
-		t.Log("Final relay output:", rout.String())
-		t.Fatalf("Response reading timed out - relay may not be responding")
-	}()
 
 	resp, err := http.ReadResponse(r, nil)
 	if err != nil {
@@ -356,7 +329,6 @@ func TestClientMain_HiddenService(t *testing.T) {
 	}()
 
 	if _, err := waitDial(socks, 5*time.Second); err != nil {
-		t.Log("Client output before SOCKS dial failure:", buf2.String())
 		t.Fatalf("dial socks: %v", err)
 	}
 

@@ -96,7 +96,22 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	}
 	log.Printf("multi-seal success cid=%s encLen=%d", in.CircuitID, len(enc))
 
-	cell, err := entity.NewCell(cmd, enc)
+	var payload []byte
+	switch cmd {
+	case vo.CmdData:
+		// DATA commands need gob-encoded DataPayloadDTO
+		payload, err = uc.peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid.UInt16(), Data: enc})
+		if err != nil {
+			return SendDataOutput{}, err
+		}
+	case vo.CmdBegin:
+		// BEGIN commands use raw encrypted data directly
+		payload = enc
+	default:
+		return SendDataOutput{}, fmt.Errorf("unsupported cmd: %d", cmd)
+	}
+
+	cell, err := entity.NewCell(cmd, payload)
 	if err != nil {
 		return SendDataOutput{}, err
 	}
