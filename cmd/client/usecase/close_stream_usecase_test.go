@@ -79,7 +79,7 @@ func TestCloseStreamInteractor_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewCloseStreamUsecase(tt.repo, tt.fac)
+			uc := usecase.NewCloseStreamUseCase(tt.repo, tt.fac)
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")
@@ -93,7 +93,7 @@ func TestCloseStreamInteractor_Handle(t *testing.T) {
 	t.Run("control end on last stream", func(t *testing.T) {
 		tx := &mockTransmitterClose{}
 		repo := &mockCircuitRepoClose{circuit: circuit}
-		uc := usecase.NewCloseStreamUsecase(repo, closeFactory{tx})
+		uc := usecase.NewCloseStreamUseCase(repo, closeFactory{tx})
 		if _, err := uc.Handle(usecase.CloseStreamInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16()}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

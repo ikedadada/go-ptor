@@ -25,7 +25,7 @@ type SendConnectUseCase interface {
 	Handle(in SendConnectInput) (SendConnectOutput, error)
 }
 
-type sendConnectUsecaseImpl struct {
+type sendConnectUseCaseImpl struct {
 	repo    repository.CircuitRepository
 	factory service.MessagingServiceFactory
 	crypto  service.CryptoService
@@ -33,10 +33,10 @@ type sendConnectUsecaseImpl struct {
 
 // NewSendConnectUseCase creates a use case for CONNECT cells.
 func NewSendConnectUseCase(r repository.CircuitRepository, f service.MessagingServiceFactory, c service.CryptoService) SendConnectUseCase {
-	return &sendConnectUsecaseImpl{repo: r, factory: f, crypto: c}
+	return &sendConnectUseCaseImpl{repo: r, factory: f, crypto: c}
 }
 
-func (uc *sendConnectUsecaseImpl) Handle(in SendConnectInput) (SendConnectOutput, error) {
+func (uc *sendConnectUseCaseImpl) Handle(in SendConnectInput) (SendConnectOutput, error) {
 	cid, err := vo.CircuitIDFrom(in.CircuitID)
 	if err != nil {
 		return SendConnectOutput{}, fmt.Errorf("parse circuit id: %w", err)

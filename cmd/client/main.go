@@ -46,10 +46,10 @@ func main() {
 
 	factory := service.TCPMessagingServiceFactory{}
 	openUC := usecase.NewOpenStreamUseCase(circuitRepository)
-	closeUC := usecase.NewCloseStreamUsecase(circuitRepository, factory)
-	sendUC := usecase.NewSendDataUsecase(circuitRepository, factory, cryptoSvc)
+	closeUC := usecase.NewCloseStreamUseCase(circuitRepository, factory)
+	sendUC := usecase.NewSendDataUseCase(circuitRepository, factory, cryptoSvc)
 	connectUC := usecase.NewSendConnectUseCase(circuitRepository, factory, cryptoSvc)
-	endUC := usecase.NewHandleEndUsecase(circuitRepository)
+	endUC := usecase.NewHandleEndUseCase(circuitRepository)
 
 	// Create SOCKS5 controller
 	socks5Controller := handler.NewSOCKS5Controller(
