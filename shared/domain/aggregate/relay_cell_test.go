@@ -1,7 +1,6 @@
 package aggregate
 
 import (
-	"fmt"
 	"testing"
 
 	"ikedadada/go-ptor/shared/domain/entity"
@@ -281,26 +280,29 @@ func TestRelayCell_DifferentCommands(t *testing.T) {
 	circuitID := vo.NewCircuitID()
 	streamID, _ := vo.StreamIDFrom(1)
 
-	commands := []vo.CellCommand{
-		vo.CmdData,
-		vo.CmdBegin,
-		vo.CmdEnd,
-		vo.CmdConnect,
-		vo.CmdExtend,
-		vo.CmdDestroy,
-		vo.CmdCreated,
-		vo.CmdBeginAck,
+	tests := []struct {
+		name string
+		cmd  vo.CellCommand
+	}{
+		{"DATA command", vo.CmdData},
+		{"BEGIN command", vo.CmdBegin},
+		{"END command", vo.CmdEnd},
+		{"CONNECT command", vo.CmdConnect},
+		{"EXTEND command", vo.CmdExtend},
+		{"DESTROY command", vo.CmdDestroy},
+		{"CREATED command", vo.CmdCreated},
+		{"BEGIN_ACK command", vo.CmdBeginAck},
 	}
 
-	for _, cmd := range commands {
-		t.Run(fmt.Sprintf("Command_%d", cmd), func(t *testing.T) {
-			relayCell, err := NewRelayCell(cmd, circuitID, streamID, []byte("test"))
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			relayCell, err := NewRelayCell(test.cmd, circuitID, streamID, []byte("test"))
 			if err != nil {
-				t.Fatalf("NewRelayCell failed for command %d: %v", cmd, err)
+				t.Fatalf("NewRelayCell failed for command %d: %v", test.cmd, err)
 			}
 
-			if relayCell.Command() != cmd {
-				t.Errorf("Command mismatch. Expected: %d, Got: %d", cmd, relayCell.Command())
+			if relayCell.Command() != test.cmd {
+				t.Errorf("Command mismatch. Expected: %d, Got: %d", test.cmd, relayCell.Command())
 			}
 		})
 	}
