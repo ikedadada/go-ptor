@@ -24,12 +24,12 @@ type HandleEndUseCase interface {
 }
 
 type handleEndUseCaseImpl struct {
-	repo repository.CircuitRepository
+	cRepo repository.CircuitRepository
 }
 
 // NewHandleEndUseCase creates a use case for handling END cells.
-func NewHandleEndUseCase(r repository.CircuitRepository) HandleEndUseCase {
-	return &handleEndUseCaseImpl{repo: r}
+func NewHandleEndUseCase(cRepo repository.CircuitRepository) HandleEndUseCase {
+	return &handleEndUseCaseImpl{cRepo: cRepo}
 }
 
 func (uc *handleEndUseCaseImpl) Handle(in HandleEndInput) (HandleEndOutput, error) {
@@ -38,7 +38,7 @@ func (uc *handleEndUseCaseImpl) Handle(in HandleEndInput) (HandleEndOutput, erro
 		return HandleEndOutput{}, fmt.Errorf("parse circuit id: %w", err)
 	}
 
-	cir, err := uc.repo.Find(cid)
+	cir, err := uc.cRepo.Find(cid)
 	if err != nil {
 		return HandleEndOutput{}, fmt.Errorf("circuit not found: %w", err)
 	}
@@ -48,7 +48,7 @@ func (uc *handleEndUseCaseImpl) Handle(in HandleEndInput) (HandleEndOutput, erro
 		for _, sid := range cir.ActiveStreams() {
 			cir.CloseStream(sid)
 		}
-		_ = uc.repo.Delete(cid)
+		_ = uc.cRepo.Delete(cid)
 		return HandleEndOutput{Closed: true}, nil
 	}
 

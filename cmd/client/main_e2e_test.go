@@ -160,6 +160,9 @@ func TestClientMain_E2E(t *testing.T) {
 		t.Log(buf.String())
 	}()
 
+	// Give client time to initialize
+	time.Sleep(2 * time.Second)
+
 	c, err := waitDial(socks, 5*time.Second)
 	if err != nil {
 		t.Fatalf("dial socks: %v", err)
@@ -170,7 +173,8 @@ func TestClientMain_E2E(t *testing.T) {
 	r := bufio.NewReader(c)
 	w.Write([]byte{5, 1, 0})
 	w.Flush()
-	io.ReadFull(r, make([]byte, 2))
+	authResp := make([]byte, 2)
+	io.ReadFull(r, authResp)
 
 	ip := targetAddr.IP.To4()
 	req := []byte{5, 1, 0, 1}
@@ -178,10 +182,13 @@ func TestClientMain_E2E(t *testing.T) {
 	req = append(req, byte(targetAddr.Port>>8), byte(targetAddr.Port))
 	w.Write(req)
 	w.Flush()
-	io.ReadFull(r, make([]byte, 10))
+
+	connectResp := make([]byte, 10)
+	io.ReadFull(r, connectResp)
 
 	fmt.Fprintf(w, "GET / HTTP/1.0\r\nHost: %s\r\n\r\n", targetAddr.IP.String())
 	w.Flush()
+
 	resp, err := http.ReadResponse(r, nil)
 	if err != nil {
 		t.Fatalf("read response: %v", err)
@@ -309,12 +316,16 @@ func TestClientMain_HiddenService(t *testing.T) {
 	exe := buildBin(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, exe, "-hops", "2", "-socks", socks, "-dir", dirSrv.URL)
+	var buf2 bytes.Buffer
+	cmd.Stdout = &buf2
+	cmd.Stderr = &buf2
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start client: %v", err)
 	}
 	defer func() {
 		cancel()
 		cmd.Wait()
+		t.Log("Client output:", buf2.String())
 	}()
 
 	if _, err := waitDial(socks, 5*time.Second); err != nil {

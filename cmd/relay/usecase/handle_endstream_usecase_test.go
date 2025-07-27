@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
@@ -14,9 +14,10 @@ import (
 )
 
 func TestHandleEndStreamUseCase_EndStreamSpecific(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -24,18 +25,18 @@ func TestHandleEndStreamUseCase_EndStreamSpecific(t *testing.T) {
 	up1, _ := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, nil)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Add a stream
 	sid, _ := vo.StreamIDFrom(1)
 	local1, local2 := net.Pipe()
-	repo.AddStream(cid, sid, local1)
+	csRepo.AddStream(cid, sid, local1)
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
 	// End specific stream
-	payload, _ := vo.EncodeDataPayload(&vo.DataPayload{StreamID: sid.UInt16()})
+	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid.UInt16()})
 	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: payload}
 
 	if err := uc.EndStream(st, cid, cell, ensureServeDown); err != nil {
@@ -43,7 +44,7 @@ func TestHandleEndStreamUseCase_EndStreamSpecific(t *testing.T) {
 	}
 
 	// Stream should be removed
-	if _, err := repo.GetStream(cid, sid); err == nil {
+	if _, err := csRepo.GetStream(cid, sid); err == nil {
 		t.Errorf("stream not removed")
 	}
 
@@ -57,9 +58,10 @@ func TestHandleEndStreamUseCase_EndStreamSpecific(t *testing.T) {
 }
 
 func TestHandleEndStreamUseCase_EndAllStreams(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -67,15 +69,15 @@ func TestHandleEndStreamUseCase_EndAllStreams(t *testing.T) {
 	up1, _ := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, nil)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Add multiple streams
 	sid1, _ := vo.StreamIDFrom(1)
 	sid2, _ := vo.StreamIDFrom(2)
 	local1, _ := net.Pipe()
 	local3, _ := net.Pipe()
-	repo.AddStream(cid, sid1, local1)
-	repo.AddStream(cid, sid2, local3)
+	csRepo.AddStream(cid, sid1, local1)
+	csRepo.AddStream(cid, sid2, local3)
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
@@ -88,23 +90,24 @@ func TestHandleEndStreamUseCase_EndAllStreams(t *testing.T) {
 	}
 
 	// Circuit should be deleted
-	if _, err := repo.Find(cid); err == nil {
+	if _, err := csRepo.Find(cid); err == nil {
 		t.Errorf("circuit not deleted")
 	}
 
 	// All streams should be removed
-	if _, err := repo.GetStream(cid, sid1); err == nil {
+	if _, err := csRepo.GetStream(cid, sid1); err == nil {
 		t.Errorf("stream 1 not removed")
 	}
-	if _, err := repo.GetStream(cid, sid2); err == nil {
+	if _, err := csRepo.GetStream(cid, sid2); err == nil {
 		t.Errorf("stream 2 not removed")
 	}
 }
 
 func TestHandleEndStreamUseCase_EndStreamWithForward(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -113,7 +116,7 @@ func TestHandleEndStreamUseCase_EndStreamWithForward(t *testing.T) {
 	down1, down2 := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, down1)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Mock ensureServeDown function
 	serveDownCalled := false
@@ -123,7 +126,7 @@ func TestHandleEndStreamUseCase_EndStreamWithForward(t *testing.T) {
 
 	// End specific stream with downstream connection
 	sid, _ := vo.StreamIDFrom(1)
-	payload, _ := vo.EncodeDataPayload(&vo.DataPayload{StreamID: sid.UInt16()})
+	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid.UInt16()})
 	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: payload}
 
 	errCh := make(chan error, 1)

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
@@ -15,10 +15,11 @@ import (
 )
 
 func TestHandleBeginUseCase_BeginForward(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -27,7 +28,7 @@ func TestHandleBeginUseCase_BeginForward(t *testing.T) {
 	down1, down2 := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, down1)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Mock ensureServeDown function
 	serveDownCalled := false
@@ -35,8 +36,8 @@ func TestHandleBeginUseCase_BeginForward(t *testing.T) {
 		serveDownCalled = true
 	}
 
-	plain, _ := vo.EncodeBeginPayload(&vo.BeginPayload{StreamID: 1, Target: "example.com:80"})
-	enc, _ := crypto.AESSeal(key, nonce, plain)
+	plain, _ := peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{StreamID: 1, Target: "example.com:80"})
+	enc, _ := cSvc.AESSeal(key, nonce, plain)
 	cell := &entity.Cell{Cmd: vo.CmdBegin, Version: vo.ProtocolV1, Payload: enc}
 
 	errCh := make(chan error, 1)
@@ -71,10 +72,11 @@ func TestHandleBeginUseCase_BeginForward(t *testing.T) {
 }
 
 func TestHandleBeginUseCase_BeginExit(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -82,7 +84,7 @@ func TestHandleBeginUseCase_BeginExit(t *testing.T) {
 	up1, up2 := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, nil)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer ln.Close()
@@ -92,8 +94,8 @@ func TestHandleBeginUseCase_BeginExit(t *testing.T) {
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
-	plain, _ := vo.EncodeBeginPayload(&vo.BeginPayload{StreamID: 1, Target: ln.Addr().String()})
-	enc, _ := crypto.AESSeal(key, nonce, plain)
+	plain, _ := peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{StreamID: 1, Target: ln.Addr().String()})
+	enc, _ := cSvc.AESSeal(key, nonce, plain)
 	cell := &entity.Cell{Cmd: vo.CmdBegin, Version: vo.ProtocolV1, Payload: enc}
 
 	go uc.Begin(st, cid, cell, ensureServeDown)
@@ -116,19 +118,20 @@ func TestHandleBeginUseCase_BeginExit(t *testing.T) {
 
 	// Should store stream in repository
 	sid, _ := vo.StreamIDFrom(1)
-	if _, err := repo.GetStream(cid, sid); err != nil {
+	if _, err := csRepo.GetStream(cid, sid); err != nil {
 		t.Fatalf("stream not stored: %v", err)
 	}
 
 	st.Up().Close()
-	repo.DestroyAllStreams(cid)
+	csRepo.DestroyAllStreams(cid)
 }
 
 func TestHandleBeginUseCase_BeginHidden(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -138,13 +141,13 @@ func TestHandleBeginUseCase_BeginHidden(t *testing.T) {
 
 	st := entity.NewConnState(key, nonce, up1, down1)
 	st.SetHidden(true)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
-	plain, _ := vo.EncodeBeginPayload(&vo.BeginPayload{StreamID: 1, Target: "svc"})
-	enc, _ := crypto.AESSeal(key, nonce, plain)
+	plain, _ := peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{StreamID: 1, Target: "svc"})
+	enc, _ := cSvc.AESSeal(key, nonce, plain)
 	cell := &entity.Cell{Cmd: vo.CmdBegin, Version: vo.ProtocolV1, Payload: enc}
 
 	go uc.Begin(st, cid, cell, ensureServeDown)

@@ -2,10 +2,12 @@ package usecase
 
 import (
 	"fmt"
+	"log"
+
+	"ikedadada/go-ptor/shared/domain/entity"
 	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
-	"log"
 )
 
 // SendDataInput represents application data to forward on a circuit.
@@ -27,14 +29,14 @@ type SendDataUseCase interface {
 }
 
 type sendDataUseCaseImpl struct {
-	cr      repository.CircuitRepository
-	factory service.MessagingServiceFactory
-	crypto  service.CryptoService
+	cRepo repository.CircuitRepository
+	cSvc  service.CryptoService
+	peSvc service.PayloadEncodingService
 }
 
 // NewSendDataUseCase returns a use case for sending data cells.
-func NewSendDataUseCase(cr repository.CircuitRepository, f service.MessagingServiceFactory, c service.CryptoService) SendDataUseCase {
-	return &sendDataUseCaseImpl{cr: cr, factory: f, crypto: c}
+func NewSendDataUseCase(cRepo repository.CircuitRepository, cSvc service.CryptoService, peSvc service.PayloadEncodingService) SendDataUseCase {
+	return &sendDataUseCaseImpl{cRepo: cRepo, cSvc: cSvc, peSvc: peSvc}
 }
 
 func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) {
@@ -48,7 +50,7 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	}
 
 	// 回路存在確認（データリンクには不要だがバリデーションで利用）
-	cir, err := uc.cr.Find(cid)
+	cir, err := uc.cRepo.Find(cid)
 	if err != nil {
 		return SendDataOutput{}, fmt.Errorf("circuit not found: %w", err)
 	}
@@ -87,24 +89,34 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	}
 
 	log.Printf("multi-seal input cid=%s plainLen=%d", in.CircuitID, len(plain))
-	enc, err := uc.crypto.AESMultiSeal(keys, nonces, plain)
+	enc, err := uc.cSvc.AESMultiSeal(keys, nonces, plain)
 	if err != nil {
 		log.Printf("multi-seal failed cid=%s error=%v", in.CircuitID, err)
 		return SendDataOutput{}, err
 	}
 	log.Printf("multi-seal success cid=%s encLen=%d", in.CircuitID, len(enc))
-	tx := uc.factory.New(cir.Conn(0))
+
+	var payload []byte
 	switch cmd {
 	case vo.CmdData:
-		if err := tx.TransmitData(cid, sid, enc); err != nil {
+		// DATA commands need gob-encoded DataPayloadDTO
+		payload, err = uc.peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid.UInt16(), Data: enc})
+		if err != nil {
 			return SendDataOutput{}, err
 		}
 	case vo.CmdBegin:
-		if err := tx.InitiateStream(cid, sid, enc); err != nil {
-			return SendDataOutput{}, err
-		}
+		// BEGIN commands use raw encrypted data directly
+		payload = enc
 	default:
-		return SendDataOutput{}, fmt.Errorf("unsupported cmd")
+		return SendDataOutput{}, fmt.Errorf("unsupported cmd: %d", cmd)
+	}
+
+	cell, err := entity.NewCell(cmd, payload)
+	if err != nil {
+		return SendDataOutput{}, err
+	}
+	if err := cell.SendToConnection(cir.Conn(0), cid); err != nil {
+		return SendDataOutput{}, err
 	}
 	return SendDataOutput{BytesSent: len(in.Data)}, nil
 }

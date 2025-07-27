@@ -71,7 +71,8 @@ func (m *mockDialer) WaitForCreatedResponse(net.Conn) ([]byte, error) {
 	kp, _ := ecdh.X25519().GenerateKey(rand.Reader)
 	var pub [32]byte
 	copy(pub[:], kp.PublicKey().Bytes())
-	b, _ := vo.EncodeCreatedPayload(&vo.CreatedPayload{RelayPub: pub})
+	payloadEncoder := service.NewPayloadEncodingService()
+	b, _ := payloadEncoder.EncodeCreatedPayload(&service.CreatedPayloadDTO{RelayPub: pub})
 	return b, nil
 }
 func (m *mockDialer) TeardownCircuit(net.Conn, vo.CircuitID) error {
@@ -126,11 +127,12 @@ func TestBuildCircuitUseCase_Handle_Table(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			relayRepo := &mockRelayRepo{online: tt.online, findByIDRelay: tt.findByIDRelay, err: tt.relayErr}
-			circuitRepo := &mockCircuitRepo{err: tt.saveErr}
-			dialer := &mockDialer{}
-			crypto := service.NewCryptoService()
-			uc := usecase.NewBuildCircuitUseCase(relayRepo, circuitRepo, dialer, crypto)
+			rr := &mockRelayRepo{online: tt.online, findByIDRelay: tt.findByIDRelay, err: tt.relayErr}
+			cr := &mockCircuitRepo{err: tt.saveErr}
+			cbSvc := &mockDialer{}
+			cSvc := service.NewCryptoService()
+			peSvc := service.NewPayloadEncodingService()
+			uc := usecase.NewBuildCircuitUseCase(rr, cr, cbSvc, cSvc, peSvc)
 
 			out, err := uc.Handle(usecase.BuildCircuitInput{Hops: tt.hops, ExitRelayID: "550e8400-e29b-41d4-a716-446655440000"})
 			if tt.expectsErr && err == nil {

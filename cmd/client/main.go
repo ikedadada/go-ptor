@@ -26,37 +26,38 @@ func main() {
 	httpClient := http.NewHTTPClient()
 
 	// Initialize repositories
-	relayRepository, err := infraRepo.NewRelayRepository(httpClient, *dirURL)
+	rRepo, err := infraRepo.NewRelayRepository(httpClient, *dirURL)
 	if err != nil {
 		log.Fatal("initialize relay repository:", err)
 	}
 
-	hiddenServiceRepository, err := infraRepo.NewHiddenServiceRepository(httpClient, *dirURL)
+	hsRepo, err := infraRepo.NewHiddenServiceRepository(httpClient, *dirURL)
 	if err != nil {
 		log.Fatal("initialize hidden service repository:", err)
 	}
 
-	circuitRepository := infraRepo.NewCircuitRepository()
+	cRepo := infraRepo.NewCircuitRepository()
 
 	// Initialize services and use cases
-	dialer := service.NewTCPCircuitBuildService()
-	cryptoSvc := service.NewCryptoService()
+	cbSvc := service.NewTCPCircuitBuildService()
+	cSvc := service.NewCryptoService()
 	crSvc := service.NewCellReaderService()
-	buildUC := usecase.NewBuildCircuitUseCase(relayRepository, circuitRepository, dialer, cryptoSvc)
+	peSvc := service.NewPayloadEncodingService()
+	buildUC := usecase.NewBuildCircuitUseCase(rRepo, cRepo, cbSvc, cSvc, peSvc)
 
-	factory := service.TCPMessagingServiceFactory{}
-	openUC := usecase.NewOpenStreamUseCase(circuitRepository)
-	closeUC := usecase.NewCloseStreamUseCase(circuitRepository, factory)
-	sendUC := usecase.NewSendDataUseCase(circuitRepository, factory, cryptoSvc)
-	connectUC := usecase.NewSendConnectUseCase(circuitRepository, factory, cryptoSvc)
-	endUC := usecase.NewHandleEndUseCase(circuitRepository)
+	openUC := usecase.NewOpenStreamUseCase(cRepo)
+	closeUC := usecase.NewCloseStreamUseCase(cRepo, peSvc)
+	sendUC := usecase.NewSendDataUseCase(cRepo, cSvc, peSvc)
+	connectUC := usecase.NewSendConnectUseCase(cRepo, cSvc, peSvc)
+	endUC := usecase.NewHandleEndUseCase(cRepo)
 
 	// Create SOCKS5 controller
 	socks5Controller := handler.NewSOCKS5Controller(
-		hiddenServiceRepository,
-		circuitRepository,
-		cryptoSvc,
+		hsRepo,
+		cRepo,
+		cSvc,
 		crSvc,
+		peSvc,
 		buildUC,
 		connectUC,
 		openUC,

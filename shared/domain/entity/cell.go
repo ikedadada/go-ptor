@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
+	"net"
 )
 
 const (
@@ -21,6 +22,33 @@ type Cell struct {
 	Cmd     vo.CellCommand     // Command type (CmdExtend, CmdData, etc.)
 	Version vo.ProtocolVersion // Protocol version
 	Payload []byte             // Cell payload data
+}
+
+// NewCell creates a new Cell with the specified command and payload.
+// The version defaults to ProtocolV1.
+func NewCell(cmd vo.CellCommand, payload []byte) (*Cell, error) {
+	if len(payload) > MaxPayloadSize {
+		return nil, fmt.Errorf("payload too big: %d > %d", len(payload), MaxPayloadSize)
+	}
+	return &Cell{
+		Cmd:     cmd,
+		Version: vo.ProtocolV1,
+		Payload: payload,
+	}, nil
+}
+
+// SendToConnection encodes the cell and sends it over the connection with circuit ID prefix.
+func (c *Cell) SendToConnection(conn net.Conn, cid vo.CircuitID) error {
+	if conn == nil {
+		return fmt.Errorf("connection is nil for circuit %s - circuit may not be properly established", cid)
+	}
+	buf, err := Encode(*c)
+	if err != nil {
+		return err
+	}
+	packet := append(cid.Bytes(), buf...)
+	_, err = conn.Write(packet)
+	return err
 }
 
 // Encode serializes the cell into a fixed 512-byte slice with random padding.

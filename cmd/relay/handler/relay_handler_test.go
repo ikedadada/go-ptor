@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"ikedadada/go-ptor/cmd/relay/handler"
-	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
@@ -19,18 +19,19 @@ import (
 func TestRelayHandler_HandleCellExtend(t *testing.T) {
 	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	priv := vo.NewRSAPrivKey(rawKey)
-	repo := repoimpl.NewConnStateRepository(time.Second)
+	repo := repository.NewConnStateRepository(time.Second)
 	crypto := service.NewCryptoService()
 	reader := service.NewCellReaderService()
 
 	// Create cell sender and usecases
 	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewHandleExtendUseCase(priv, repo, crypto, cellSender)
-	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
+	payloadEncoder := service.NewPayloadEncodingService()
+	extendUC := usecase.NewHandleExtendUseCase(priv, repo, crypto, cellSender, payloadEncoder)
+	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender, payloadEncoder)
+	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender, payloadEncoder)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender, payloadEncoder)
 	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
+	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender, payloadEncoder)
 
 	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 
@@ -38,7 +39,7 @@ func TestRelayHandler_HandleCellExtend(t *testing.T) {
 	_, pub, _ := crypto.X25519Generate()
 	var pubArr [32]byte
 	copy(pubArr[:], pub)
-	payload, _ := vo.EncodeExtendPayload(&vo.ExtendPayload{ClientPub: pubArr})
+	payload, _ := payloadEncoder.EncodeExtendPayload(&service.ExtendPayloadDTO{ClientPub: pubArr})
 	cid := vo.NewCircuitID()
 	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
 
@@ -77,20 +78,21 @@ func TestRelayHandler_HandleCellExtend(t *testing.T) {
 }
 
 func TestRelayHandler_HandleCellBeginAck(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	reader := service.NewCellReaderService()
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
 
 	// Create dummy usecases (not used for this test)
-	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewHandleExtendUseCase(nil, repo, crypto, cellSender)
-	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
+	extendUC := usecase.NewHandleExtendUseCase(nil, csRepo, cSvc, csSvc, peSvc)
+	beginUC := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
+	dataUC := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
+	destroyUC := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
+	connectUC := usecase.NewHandleConnectUseCase(csRepo, cSvc, csSvc, peSvc)
 
-	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+	h := handler.NewRelayHandler(csRepo, crSvc, csSvc, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 
 	// Create state
 	key, _ := vo.NewAESKey()
@@ -99,7 +101,7 @@ func TestRelayHandler_HandleCellBeginAck(t *testing.T) {
 	up1, up2 := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, nil)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Create begin ack cell
 	cell := &entity.Cell{Cmd: vo.CmdBeginAck, Version: vo.ProtocolV1}
@@ -128,20 +130,21 @@ func TestRelayHandler_HandleCellBeginAck(t *testing.T) {
 }
 
 func TestRelayHandler_HandleCellDestroy(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	reader := service.NewCellReaderService()
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
 
-	// Create dummy usecases
-	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewHandleExtendUseCase(nil, repo, crypto, cellSender)
-	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
+	// Create dummy usecases (not used for this test)
+	extendUC := usecase.NewHandleExtendUseCase(nil, csRepo, cSvc, csSvc, peSvc)
+	beginUC := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
+	dataUC := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
+	destroyUC := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
+	connectUC := usecase.NewHandleConnectUseCase(csRepo, cSvc, csSvc, peSvc)
 
-	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+	h := handler.NewRelayHandler(csRepo, crSvc, csSvc, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 
 	// Create state
 	key, _ := vo.NewAESKey()
@@ -151,7 +154,7 @@ func TestRelayHandler_HandleCellDestroy(t *testing.T) {
 	down1, down2 := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, down1)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	// Create destroy cell
 	cell := &entity.Cell{Cmd: vo.CmdDestroy, Version: vo.ProtocolV1}
@@ -177,7 +180,7 @@ func TestRelayHandler_HandleCellDestroy(t *testing.T) {
 	}
 
 	// Circuit should be deleted
-	if _, err := repo.Find(cid); err == nil {
+	if _, err := csRepo.Find(cid); err == nil {
 		t.Errorf("circuit not deleted")
 	}
 
@@ -186,20 +189,21 @@ func TestRelayHandler_HandleCellDestroy(t *testing.T) {
 }
 
 func TestRelayHandler_HandleCellEndUnknown(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	reader := service.NewCellReaderService()
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
 
-	// Create dummy usecases
-	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewHandleExtendUseCase(nil, repo, crypto, cellSender)
-	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
+	// Create dummy usecases (not used for this test)
+	extendUC := usecase.NewHandleExtendUseCase(nil, csRepo, cSvc, csSvc, peSvc)
+	beginUC := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
+	dataUC := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
+	destroyUC := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
+	connectUC := usecase.NewHandleConnectUseCase(csRepo, cSvc, csSvc, peSvc)
 
-	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+	h := handler.NewRelayHandler(csRepo, crSvc, csSvc, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 
 	// Create end cell for unknown circuit
 	cid := vo.NewCircuitID()
@@ -214,20 +218,21 @@ func TestRelayHandler_HandleCellEndUnknown(t *testing.T) {
 func TestRelayHandler_ServeConn(t *testing.T) {
 	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	priv := vo.NewRSAPrivKey(rawKey)
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	reader := service.NewCellReaderService()
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	crSvc := service.NewCellReaderService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
 
-	// Create cell sender and usecases
-	cellSender := service.NewCellSenderService()
-	extendUC := usecase.NewHandleExtendUseCase(priv, repo, crypto, cellSender)
-	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender)
-	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender)
-	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender)
+	// Create dummy usecases (not used for this test)
+	extendUC := usecase.NewHandleExtendUseCase(priv, csRepo, cSvc, csSvc, peSvc)
+	beginUC := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
+	dataUC := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
+	endStreamUC := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
+	destroyUC := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
+	connectUC := usecase.NewHandleConnectUseCase(csRepo, cSvc, csSvc, peSvc)
 
-	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+	h := handler.NewRelayHandler(csRepo, crSvc, csSvc, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
 
 	// Create pipe connection
 	conn1, conn2 := net.Pipe()
@@ -242,10 +247,10 @@ func TestRelayHandler_ServeConn(t *testing.T) {
 	}()
 
 	// Send extend cell
-	_, pub, _ := crypto.X25519Generate()
+	_, pub, _ := cSvc.X25519Generate()
 	var pubArr [32]byte
 	copy(pubArr[:], pub)
-	payload, _ := vo.EncodeExtendPayload(&vo.ExtendPayload{ClientPub: pubArr})
+	payload, _ := peSvc.EncodeExtendPayload(&service.ExtendPayloadDTO{ClientPub: pubArr})
 	cid := vo.NewCircuitID()
 	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
 	cellData, _ := entity.Encode(*cell)

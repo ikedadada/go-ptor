@@ -19,17 +19,19 @@ type HandleConnectUseCase interface {
 }
 
 type handleConnectUseCaseImpl struct {
-	repo   repository.ConnStateRepository
-	crypto service.CryptoService
-	sender service.CellSenderService
+	csRepo repository.ConnStateRepository
+	cSvc   service.CryptoService
+	csSvc  service.CellSenderService
+	peSvc  service.PayloadEncodingService
 }
 
 // NewHandleConnectUseCase creates a new connect use case
-func NewHandleConnectUseCase(repo repository.ConnStateRepository, crypto service.CryptoService, sender service.CellSenderService) HandleConnectUseCase {
+func NewHandleConnectUseCase(csRepo repository.ConnStateRepository, cSvc service.CryptoService, csSvc service.CellSenderService, peSvc service.PayloadEncodingService) HandleConnectUseCase {
 	return &handleConnectUseCaseImpl{
-		repo:   repo,
-		crypto: crypto,
-		sender: sender,
+		csRepo: csRepo,
+		cSvc:   cSvc,
+		csSvc:  csSvc,
+		peSvc:  peSvc,
 	}
 }
 
@@ -39,18 +41,18 @@ func (uc *handleConnectUseCaseImpl) Connect(st *entity.ConnState, cid vo.Circuit
 		ensureServeDown(st)
 		nonce := st.BeginNonce()
 		log.Printf("connect decrypt cid=%s nonce=%x", cid.String(), nonce)
-		dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
+		dec, err := uc.cSvc.AESOpen(st.Key(), nonce, cell.Payload)
 		if err != nil {
 			return fmt.Errorf("AESOpen connect cid=%s: %w", cid.String(), err)
 		}
 		c := &entity.Cell{Cmd: vo.CmdConnect, Version: vo.ProtocolV1, Payload: dec}
-		return uc.sender.ForwardCell(st.Down(), cid, c)
+		return uc.csSvc.ForwardCell(st.Down(), cid, c)
 	}
 
 	// exit relay: decode final payload and connect to the hidden service
 	nonce := st.BeginNonce()
 	log.Printf("connect exit decrypt cid=%s nonce=%x", cid.String(), nonce)
-	dec, err := uc.crypto.AESOpen(st.Key(), nonce, cell.Payload)
+	dec, err := uc.cSvc.AESOpen(st.Key(), nonce, cell.Payload)
 	if err != nil {
 		return fmt.Errorf("AESOpen connect cid=%s: %w", cid.String(), err)
 	}
@@ -62,7 +64,7 @@ func (uc *handleConnectUseCaseImpl) Connect(st *entity.ConnState, cid vo.Circuit
 		addr = "hidden:5000"
 	}
 	if len(dec) > 0 {
-		p, err := vo.DecodeConnectPayload(dec)
+		p, err := uc.peSvc.DecodeConnectPayload(dec)
 		if err != nil {
 			return err
 		}
@@ -82,11 +84,11 @@ func (uc *handleConnectUseCaseImpl) Connect(st *entity.ConnState, cid vo.Circuit
 	beginCounter, dataCounter := st.GetCounters()
 	newSt := entity.NewConnStateWithCounters(st.Key(), st.Nonce(), st.Up(), down, beginCounter, dataCounter)
 	newSt.SetHidden(true)
-	if err := uc.repo.Add(cid, newSt); err != nil {
+	if err := uc.csRepo.Add(cid, newSt); err != nil {
 		down.Close()
 		return err
 	}
-	if err := uc.sender.SendAck(newSt.Up(), cid); err != nil {
+	if err := uc.csSvc.SendAck(newSt.Up(), cid); err != nil {
 		return err
 	}
 	return nil

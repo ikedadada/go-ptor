@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
@@ -14,9 +14,9 @@ import (
 )
 
 func TestHandleDestroyUseCase_Destroy(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleDestroyUseCase(repo, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	csSvc := service.NewCellSenderService()
+	uc := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -24,14 +24,14 @@ func TestHandleDestroyUseCase_Destroy(t *testing.T) {
 	up1, _ := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, nil)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	if err := uc.Destroy(st, cid); err != nil {
 		t.Fatalf("destroy error: %v", err)
 	}
 
 	// Circuit should be deleted
-	if _, err := repo.Find(cid); err == nil {
+	if _, err := csRepo.Find(cid); err == nil {
 		t.Errorf("circuit not deleted")
 	}
 
@@ -39,9 +39,9 @@ func TestHandleDestroyUseCase_Destroy(t *testing.T) {
 }
 
 func TestHandleDestroyUseCase_DestroyWithDownstream(t *testing.T) {
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleDestroyUseCase(repo, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	csSvc := service.NewCellSenderService()
+	uc := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -50,7 +50,7 @@ func TestHandleDestroyUseCase_DestroyWithDownstream(t *testing.T) {
 	down1, down2 := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, down1)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- uc.Destroy(st, cid) }()
@@ -73,7 +73,7 @@ func TestHandleDestroyUseCase_DestroyWithDownstream(t *testing.T) {
 	}
 
 	// Circuit should be deleted
-	if _, err := repo.Find(cid); err == nil {
+	if _, err := csRepo.Find(cid); err == nil {
 		t.Errorf("circuit not deleted")
 	}
 

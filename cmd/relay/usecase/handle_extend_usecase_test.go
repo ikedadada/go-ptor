@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	repoimpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
@@ -19,19 +19,20 @@ import (
 func TestHandleExtendUseCase_Extend(t *testing.T) {
 	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	priv := vo.NewRSAPrivKey(rawKey)
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleExtendUseCase(priv, repo, crypto, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleExtendUseCase(priv, csRepo, cSvc, csSvc, peSvc)
 
 	// prepare extend cell
-	_, pub, _ := crypto.X25519Generate()
+	_, pub, _ := cSvc.X25519Generate()
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer ln.Close()
 	go func() { ln.Accept() }()
 	var pubArr [32]byte
 	copy(pubArr[:], pub)
-	payload, _ := vo.EncodeExtendPayload(&vo.ExtendPayload{NextHop: ln.Addr().String(), ClientPub: pubArr})
+	payload, _ := peSvc.EncodeExtendPayload(&service.ExtendPayloadDTO{NextHop: ln.Addr().String(), ClientPub: pubArr})
 	cid := vo.NewCircuitID()
 	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
 
@@ -68,7 +69,7 @@ func TestHandleExtendUseCase_Extend(t *testing.T) {
 		case <-timeout:
 			t.Fatal("timeout waiting for entry creation")
 		case <-ticker.C:
-			st, err = repo.Find(cid)
+			st, err = csRepo.Find(cid)
 			if err == nil {
 				goto found // Entry created successfully
 			}
@@ -88,10 +89,11 @@ found:
 func TestHandleExtendUseCase_ForwardExtend(t *testing.T) {
 	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	priv := vo.NewRSAPrivKey(rawKey)
-	repo := repoimpl.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	cellSender := service.NewCellSenderService()
-	uc := usecase.NewHandleExtendUseCase(priv, repo, crypto, cellSender)
+	csRepo := repository.NewConnStateRepository(time.Second)
+	cSvc := service.NewCryptoService()
+	csSvc := service.NewCellSenderService()
+	peSvc := service.NewPayloadEncodingService()
+	uc := usecase.NewHandleExtendUseCase(priv, csRepo, cSvc, csSvc, peSvc)
 
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
@@ -100,12 +102,12 @@ func TestHandleExtendUseCase_ForwardExtend(t *testing.T) {
 	down1, down2 := net.Pipe()
 
 	st := entity.NewConnState(key, nonce, up1, down1)
-	repo.Add(cid, st)
+	csRepo.Add(cid, st)
 
-	_, pub, _ := crypto.X25519Generate()
+	_, pub, _ := cSvc.X25519Generate()
 	var pubArr [32]byte
 	copy(pubArr[:], pub)
-	payload, _ := vo.EncodeExtendPayload(&vo.ExtendPayload{ClientPub: pubArr})
+	payload, _ := peSvc.EncodeExtendPayload(&service.ExtendPayloadDTO{ClientPub: pubArr})
 	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
 
 	errCh := make(chan error, 1)
@@ -121,7 +123,7 @@ func TestHandleExtendUseCase_ForwardExtend(t *testing.T) {
 	}
 
 	// Send back created response
-	created, _ := vo.EncodeCreatedPayload(&vo.CreatedPayload{RelayPub: pubArr})
+	created, _ := peSvc.EncodeCreatedPayload(&service.CreatedPayloadDTO{RelayPub: pubArr})
 	var hdr [20]byte
 	copy(hdr[:16], cid.Bytes())
 	binary.BigEndian.PutUint16(hdr[18:20], uint16(len(created)))

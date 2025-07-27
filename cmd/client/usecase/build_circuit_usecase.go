@@ -41,15 +41,16 @@ type BuildCircuitUseCase interface {
 // ---------- 実装 ----------
 
 type buildCircuitUseCaseImpl struct {
-	rr     repository.RelayRepository
-	cr     repository.CircuitRepository
-	dialer service.CircuitBuildService
-	crypto service.CryptoService
+	rRepo repository.RelayRepository
+	cRepo repository.CircuitRepository
+	cbSvc service.CircuitBuildService
+	cSvc  service.CryptoService
+	peSvc service.PayloadEncodingService
 }
 
 // NewBuildCircuitUseCase creates a use case for building circuits.
-func NewBuildCircuitUseCase(rr repository.RelayRepository, cr repository.CircuitRepository, d service.CircuitBuildService, c service.CryptoService) BuildCircuitUseCase {
-	return &buildCircuitUseCaseImpl{rr: rr, cr: cr, dialer: d, crypto: c}
+func NewBuildCircuitUseCase(rRepo repository.RelayRepository, cRepo repository.CircuitRepository, cbSvc service.CircuitBuildService, cSvc service.CryptoService, peSvc service.PayloadEncodingService) BuildCircuitUseCase {
+	return &buildCircuitUseCaseImpl{rRepo: rRepo, cRepo: cRepo, cbSvc: cbSvc, cSvc: cSvc, peSvc: peSvc}
 }
 
 func (uc *buildCircuitUseCaseImpl) Handle(in BuildCircuitInput) (BuildCircuitOutput, error) {
@@ -92,7 +93,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Cir
 		hops = 3
 	}
 	// 1. オンラインリスト取得
-	relays, err := uc.rr.AllOnline()
+	relays, err := uc.rRepo.AllOnline()
 	if err != nil {
 		return nil, fmt.Errorf("list relays: %w", err)
 	}
@@ -102,7 +103,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Cir
 
 	var exitRelay *entity.Relay
 	if exit != (vo.RelayID{}) {
-		r, err := uc.rr.FindByID(exit)
+		r, err := uc.rRepo.FindByID(exit)
 		if err != nil {
 			return nil, fmt.Errorf("exit relay not found: %w", err)
 		}
@@ -167,7 +168,7 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Cir
 	}
 	dch := make(chan dialRes, 1)
 	go func() {
-		c, err := uc.dialer.ConnectToRelay(selected[0].Endpoint().String())
+		c, err := uc.cbSvc.ConnectToRelay(selected[0].Endpoint().String())
 		dch <- dialRes{c: c, err: err}
 	}()
 	var conn net.Conn
@@ -186,58 +187,58 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Cir
 		if i+1 < hops {
 			next = selected[i+1].Endpoint().String()
 		}
-		cliPriv, cliPub, err := uc.crypto.X25519Generate()
+		cliPriv, cliPub, err := uc.cSvc.X25519Generate()
 		if err != nil {
-			_ = uc.dialer.TeardownCircuit(conn, cid)
+			_ = uc.cbSvc.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
 		var pubArr [32]byte
 		copy(pubArr[:], cliPub)
-		payload, err := vo.EncodeExtendPayload(&vo.ExtendPayload{
+		payload, err := uc.peSvc.EncodeExtendPayload(&service.ExtendPayloadDTO{
 			NextHop:   next,
 			ClientPub: pubArr,
 		})
 		if err != nil {
-			_ = uc.dialer.TeardownCircuit(conn, cid)
+			_ = uc.cbSvc.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
 		streamID, _ := vo.StreamIDFrom(0)
 		cell, err := aggregate.NewRelayCell(vo.CmdExtend, cid, streamID, payload)
 		if err != nil {
-			_ = uc.dialer.TeardownCircuit(conn, cid)
+			_ = uc.cbSvc.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
 		_ = conn.SetDeadline(time.Now().Add(ioTimeout))
-		if err := uc.dialer.SendExtendCell(conn, cell); err != nil {
-			_ = uc.dialer.TeardownCircuit(conn, cid)
+		if err := uc.cbSvc.SendExtendCell(conn, cell); err != nil {
+			_ = uc.cbSvc.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
-		resp, err := uc.dialer.WaitForCreatedResponse(conn)
+		resp, err := uc.cbSvc.WaitForCreatedResponse(conn)
 		if err != nil {
-			_ = uc.dialer.TeardownCircuit(conn, cid)
+			_ = uc.cbSvc.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
 		_ = conn.SetDeadline(time.Time{})
-		created, err := vo.DecodeCreatedPayload(resp)
+		created, err := uc.peSvc.DecodeCreatedPayload(resp)
 		if err != nil {
-			_ = uc.dialer.TeardownCircuit(conn, cid)
+			_ = uc.cbSvc.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
-		secret, err := uc.crypto.X25519Shared(cliPriv, created.RelayPub[:])
+		secret, err := uc.cSvc.X25519Shared(cliPriv, created.RelayPub[:])
 		if err != nil {
-			_ = uc.dialer.TeardownCircuit(conn, cid)
+			_ = uc.cbSvc.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
-		key, nonce, err := uc.crypto.DeriveKeyNonce(secret)
+		key, nonce, err := uc.cSvc.DeriveKeyNonce(secret)
 		if err != nil {
-			_ = uc.dialer.TeardownCircuit(conn, cid)
+			_ = uc.cbSvc.TeardownCircuit(conn, cid)
 			conn.Close()
 			return nil, err
 		}
@@ -247,15 +248,15 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Cir
 
 	circuit, err := entity.NewCircuit(cid, relayIDs, keys, nonces, priv)
 	if err != nil {
-		_ = uc.dialer.TeardownCircuit(conn, cid)
+		_ = uc.cbSvc.TeardownCircuit(conn, cid)
 		conn.Close()
 		return nil, err
 	}
 	circuit.SetConn(0, conn)
 
 	// 5. 保存
-	if err := uc.cr.Save(circuit); err != nil {
-		_ = uc.dialer.TeardownCircuit(conn, cid)
+	if err := uc.cRepo.Save(circuit); err != nil {
+		_ = uc.cbSvc.TeardownCircuit(conn, cid)
 		conn.Close()
 		return nil, fmt.Errorf("save circuit: %w", err)
 	}

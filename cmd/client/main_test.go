@@ -48,7 +48,7 @@ func TestResolveAddress_CaseInsensitive(t *testing.T) {
 
 	// Create a minimal SOCKS5Controller for testing
 	controller := handler.NewSOCKS5Controller(
-		hsRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0,
+		hsRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0,
 	)
 
 	addr, exit, err := controller.ResolveAddress("LOWER.PTOR", 80)

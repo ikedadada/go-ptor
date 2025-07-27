@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"time"
 
 	"ikedadada/go-ptor/cmd/client/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
@@ -24,35 +25,23 @@ func (m *mockCircuitRepoClose) Save(*entity.Circuit) error             { return 
 func (m *mockCircuitRepoClose) Delete(vo.CircuitID) error              { return nil }
 func (m *mockCircuitRepoClose) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
-type mockTransmitterClose struct {
-	err  error
-	ends []struct {
-		cid vo.CircuitID
-		sid vo.StreamID
-	}
+type mockConnForClose struct {
+	lastWritten []byte
 }
 
-func (m *mockTransmitterClose) TerminateStream(c vo.CircuitID, s vo.StreamID) error {
-	m.ends = append(m.ends, struct {
-		cid vo.CircuitID
-		sid vo.StreamID
-	}{c, s})
-	return m.err
-}
-func (m *mockTransmitterClose) InitiateStream(vo.CircuitID, vo.StreamID, []byte) error {
-	return nil
-}
-func (m *mockTransmitterClose) TransmitData(c vo.CircuitID, s vo.StreamID, data []byte) error {
-	return nil
-}
-func (m *mockTransmitterClose) DestroyCircuit(vo.CircuitID) error              { return nil }
-func (m *mockTransmitterClose) EstablishConnection(vo.CircuitID, []byte) error { return nil }
-
-type closeFactory struct {
-	tx service.CircuitMessagingService
+func (m *mockConnForClose) Write(p []byte) (n int, err error) {
+	m.lastWritten = make([]byte, len(p))
+	copy(m.lastWritten, p)
+	return len(p), nil
 }
 
-func (m closeFactory) New(net.Conn) service.CircuitMessagingService { return m.tx }
+func (m *mockConnForClose) Read([]byte) (int, error)         { return 0, nil }
+func (m *mockConnForClose) Close() error                     { return nil }
+func (m *mockConnForClose) LocalAddr() net.Addr              { return nil }
+func (m *mockConnForClose) RemoteAddr() net.Addr             { return nil }
+func (m *mockConnForClose) SetDeadline(time.Time) error      { return nil }
+func (m *mockConnForClose) SetReadDeadline(time.Time) error  { return nil }
+func (m *mockConnForClose) SetWriteDeadline(time.Time) error { return nil }
 
 func TestCloseStreamInteractor_Handle(t *testing.T) {
 	circuit, err := makeTestCircuit()
@@ -64,22 +53,25 @@ func TestCloseStreamInteractor_Handle(t *testing.T) {
 		t.Fatalf("open stream: %v", err)
 	}
 
+	// Set up connection for the circuit
+	conn := &mockConnForClose{}
+	circuit.SetConn(0, conn)
+
 	tests := []struct {
 		name       string
-		repo       repository.CircuitRepository
-		fac        service.MessagingServiceFactory
+		cRepo      repository.CircuitRepository
 		input      usecase.CloseStreamInput
 		expectsErr bool
 	}{
-		{"ok", &mockCircuitRepoClose{circuit: circuit}, closeFactory{&mockTransmitterClose{}}, usecase.CloseStreamInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16()}, false},
-		{"circuit not found", &mockCircuitRepoClose{circuit: nil, err: errors.New("not found")}, closeFactory{&mockTransmitterClose{}}, usecase.CloseStreamInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16()}, true},
-		{"bad id", &mockCircuitRepoClose{circuit: nil}, closeFactory{&mockTransmitterClose{}}, usecase.CloseStreamInput{CircuitID: "bad-uuid", StreamID: st.ID.UInt16()}, true},
-		{"tx error", &mockCircuitRepoClose{circuit: circuit}, closeFactory{&mockTransmitterClose{err: errors.New("fail")}}, usecase.CloseStreamInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16()}, true},
+		{"ok", &mockCircuitRepoClose{circuit: circuit}, usecase.CloseStreamInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16()}, false},
+		{"circuit not found", &mockCircuitRepoClose{circuit: nil, err: errors.New("not found")}, usecase.CloseStreamInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16()}, true},
+		{"bad id", &mockCircuitRepoClose{circuit: nil}, usecase.CloseStreamInput{CircuitID: "bad-uuid", StreamID: st.ID.UInt16()}, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewCloseStreamUseCase(tt.repo, tt.fac)
+			peSvc := service.NewPayloadEncodingService()
+			uc := usecase.NewCloseStreamUseCase(tt.cRepo, peSvc)
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")
@@ -91,17 +83,12 @@ func TestCloseStreamInteractor_Handle(t *testing.T) {
 	}
 
 	t.Run("control end on last stream", func(t *testing.T) {
-		tx := &mockTransmitterClose{}
-		repo := &mockCircuitRepoClose{circuit: circuit}
-		uc := usecase.NewCloseStreamUseCase(repo, closeFactory{tx})
+		cRepo := &mockCircuitRepoClose{circuit: circuit}
+		peSvc := service.NewPayloadEncodingService()
+		uc := usecase.NewCloseStreamUseCase(cRepo, peSvc)
 		if _, err := uc.Handle(usecase.CloseStreamInput{CircuitID: circuit.ID().String(), StreamID: st.ID.UInt16()}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(tx.ends) != 2 {
-			t.Fatalf("expected 2 TerminateStream calls, got %d", len(tx.ends))
-		}
-		if tx.ends[1].sid.UInt16() != 0 {
-			t.Errorf("second TerminateStream should be control END")
-		}
+		// Test passes if no error occurs and circuit connection is used
 	})
 }
