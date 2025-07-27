@@ -119,7 +119,8 @@ func TestConnState_BeginNonce(t *testing.T) {
 
 	// But should be based on the same base nonce
 	// Check that first few bytes are the same (XOR happens in last 8 bytes)
-	for i := 0; i < 4; i++ {
+	const basePrefixCheckLength = 4 // Number of bytes to check from the beginning of the nonce
+	for i := 0; i < basePrefixCheckLength; i++ {
 		if nonce1[i] != baseNonce[i] {
 			t.Errorf("Nonce1 byte %d doesn't match base nonce: got %x, want %x", i, nonce1[i], baseNonce[i])
 		}

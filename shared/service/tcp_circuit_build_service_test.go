@@ -123,7 +123,9 @@ func TestTCPCircuitBuildService_WaitForCreatedResponse_InvalidHeader(t *testing.
 	var hdr [20]byte
 	hdr[16] = byte(vo.CmdData) // Wrong command
 	hdr[17] = byte(vo.ProtocolV1)
-	binary.BigEndian.PutUint16(hdr[18:20], 4)
+
+	const testPayloadLength = 4
+	binary.BigEndian.PutUint16(hdr[18:20], testPayloadLength)
 
 	conn.readBuffer.Write(hdr[:])
 	conn.readBuffer.Write([]byte("test"))
@@ -179,18 +181,22 @@ func TestTCPCircuitBuildService_TeardownCircuit(t *testing.T) {
 	// Verify written data
 	written := conn.writeBuffer.Bytes()
 
-	if len(written) != 20 {
-		t.Errorf("Expected 20 bytes, got %d", len(written))
+	const expectedTeardownMessageLength = 20
+	if len(written) != expectedTeardownMessageLength {
+		t.Errorf("Expected %d bytes, got %d", expectedTeardownMessageLength, len(written))
 	}
 
 	// Check circuit ID (first 16 bytes)
-	if !bytes.Equal(written[:16], cid.Bytes()) {
-		t.Errorf("Circuit ID mismatch: got %x, want %x", written[:16], cid.Bytes())
+	const circuitIDLength = 16
+	if !bytes.Equal(written[:circuitIDLength], cid.Bytes()) {
+		t.Errorf("Circuit ID mismatch: got %x, want %x", written[:circuitIDLength], cid.Bytes())
 	}
 
 	// Check teardown marker (byte 18 should be 0xFE)
-	if written[18] != 0xFE {
-		t.Errorf("Teardown marker mismatch: got %x, want 0xFE", written[18])
+	const teardownMarkerOffset = 18
+	const teardownMarkerValue = 0xFE
+	if written[teardownMarkerOffset] != teardownMarkerValue {
+		t.Errorf("Teardown marker mismatch: got %x, want %x", written[teardownMarkerOffset], teardownMarkerValue)
 	}
 }
 

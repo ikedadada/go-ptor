@@ -108,9 +108,16 @@ func TestParsePublicKeyFromPEM_UnsupportedKeyType(t *testing.T) {
 	// Create a minimal ASN.1 structure that parses but isn't RSA or Ed25519
 	// This is a minimal valid ASN.1 sequence that x509.ParsePKIXPublicKey will accept
 	// but will return an unsupported key type
+	const (
+		// ASN.1 SEQUENCE tag
+		asn1SequenceTag = 0x30
+		// Empty sequence length
+		emptySequenceLength = 0x00
+	)
+
 	pemData := pem.EncodeToMemory(&pem.Block{
 		Type:  "PUBLIC KEY",
-		Bytes: []byte{0x30, 0x00}, // Empty ASN.1 sequence
+		Bytes: []byte{asn1SequenceTag, emptySequenceLength}, // Empty ASN.1 sequence
 	})
 
 	_, err := ParsePublicKeyFromPEM(pemData)
