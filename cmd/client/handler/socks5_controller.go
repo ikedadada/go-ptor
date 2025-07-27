@@ -72,11 +72,13 @@ func (c *SOCKS5Controller) HandleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	// Phase 1: Handle SOCKS5 protocol negotiation
+	log.Println("Starting SOCKS5 protocol handling")
 	req, err := c.handleSOCKS5Protocol(conn)
 	if err != nil {
 		log.Println("SOCKS5 protocol error:", err)
 		return
 	}
+	log.Printf("SOCKS5 protocol completed, target: %s:%d", req.Host, req.Port)
 
 	// Phase 2: Resolve target address and build circuit
 	addr, exitID, err := c.resolveAddress(req.Host, req.Port)
