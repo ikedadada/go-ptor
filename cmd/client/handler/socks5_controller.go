@@ -5,58 +5,49 @@ import (
 	"io"
 	"log"
 	"net"
-	"strings"
 
 	"ikedadada/go-ptor/cmd/client/usecase"
-	"ikedadada/go-ptor/shared/domain/entity"
-	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
 )
 
 // SOCKS5Controller handles SOCKS5 proxy connections
 type SOCKS5Controller struct {
-	hsRepo    repository.HiddenServiceRepository
-	cRepo     repository.CircuitRepository
-	cSvc      service.CryptoService
-	crSvc     service.CellReaderService
-	peSvc     service.PayloadEncodingService
 	buildUC   usecase.BuildCircuitUseCase
 	connectUC usecase.SendConnectUseCase
 	openUC    usecase.OpenStreamUseCase
 	closeUC   usecase.CloseStreamUseCase
 	sendUC    usecase.SendDataUseCase
 	endUC     usecase.HandleEndUseCase
+	resolveUC usecase.ResolveTargetAddressUseCase
+	receiveUC usecase.ReceiveAndDecryptDataUseCase
+	peSvc     service.PayloadEncodingService
 	hops      int
 }
 
 // NewSOCKS5Controller creates a new SOCKS5Controller
 func NewSOCKS5Controller(
-	hsRepo repository.HiddenServiceRepository,
-	cRepo repository.CircuitRepository,
-	cSvc service.CryptoService,
-	crSvc service.CellReaderService,
-	peSvc service.PayloadEncodingService,
 	buildUC usecase.BuildCircuitUseCase,
 	connectUC usecase.SendConnectUseCase,
 	openUC usecase.OpenStreamUseCase,
 	closeUC usecase.CloseStreamUseCase,
 	sendUC usecase.SendDataUseCase,
 	endUC usecase.HandleEndUseCase,
+	resolveUC usecase.ResolveTargetAddressUseCase,
+	receiveUC usecase.ReceiveAndDecryptDataUseCase,
+	peSvc service.PayloadEncodingService,
 	hops int,
 ) *SOCKS5Controller {
 	return &SOCKS5Controller{
-		hsRepo:    hsRepo,
-		cRepo:     cRepo,
-		cSvc:      cSvc,
-		crSvc:     crSvc,
-		peSvc:     peSvc,
 		buildUC:   buildUC,
 		connectUC: connectUC,
 		openUC:    openUC,
 		closeUC:   closeUC,
 		sendUC:    sendUC,
 		endUC:     endUC,
+		resolveUC: resolveUC,
+		receiveUC: receiveUC,
+		peSvc:     peSvc,
 		hops:      hops,
 	}
 }
@@ -81,12 +72,17 @@ func (c *SOCKS5Controller) HandleConnection(conn net.Conn) {
 	log.Printf("SOCKS5 protocol completed, target: %s:%d", req.Host, req.Port)
 
 	// Phase 2: Resolve target address and build circuit
-	addr, exitID, err := c.resolveAddress(req.Host, req.Port)
+	resolveOut, err := c.resolveUC.Handle(usecase.ResolveTargetAddressInput{
+		Host: req.Host,
+		Port: req.Port,
+	})
 	if err != nil {
 		log.Println("resolve address:", err)
 		conn.Write(vo.SOCKS5HostUnreachResp)
 		return
 	}
+	addr := resolveOut.DialAddress
+	exitID := resolveOut.ExitRelayID
 
 	circuitID, err := c.buildCircuit(exitID)
 	if err != nil {
@@ -179,9 +175,8 @@ func (c *SOCKS5Controller) buildCircuit(exitID string) (string, error) {
 // setupStreamAndRelay sets up stream management and handles data relay
 func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitID, addr string) error {
 	// Setup stream manager and receive loop
-	cid, _ := vo.CircuitIDFrom(circuitID)
 	sm := service.NewStreamManagerService()
-	go c.recvLoop(cid, sm)
+	go c.recvLoop(circuitID, sm)
 
 	// Connect to hidden service if needed
 	if exitID != "" {
@@ -254,121 +249,57 @@ func (c *SOCKS5Controller) dataRelayLoop(conn net.Conn, circuitID string, sid in
 // If host ends with .ptor, it looks up the hidden service in the repository
 // and returns the endpoint of the designated exit relay.
 func (c *SOCKS5Controller) ResolveAddress(host string, port int) (string, string, error) {
-	return c.resolveAddress(host, port)
-}
-
-// resolveAddress returns the dial address for the given host and port.
-// If host ends with .ptor, it looks up the hidden service in the repository
-// and returns the endpoint of the designated exit relay.
-func (c *SOCKS5Controller) resolveAddress(host string, port int) (string, string, error) {
-	hostLower := strings.ToLower(host)
-	exit := ""
-	if strings.HasSuffix(hostLower, ".ptor") {
-		hs, err := c.hsRepo.FindByAddressString(hostLower)
-		if err != nil {
-			return "", "", fmt.Errorf("hidden service not found: %s", host)
-		}
-		exit = hs.RelayID().String()
+	resolveOut, err := c.resolveUC.Handle(usecase.ResolveTargetAddressInput{
+		Host: host,
+		Port: port,
+	})
+	if err != nil {
+		return "", "", err
 	}
-	if ip := net.ParseIP(hostLower); ip != nil && ip.To4() == nil {
-		return fmt.Sprintf("[%s]:%d", hostLower, port), exit, nil
-	}
-	return fmt.Sprintf("%s:%d", hostLower, port), exit, nil
+	return resolveOut.DialAddress, resolveOut.ExitRelayID, nil
 }
 
 // recvLoop handles incoming data from the circuit
-func (c *SOCKS5Controller) recvLoop(cid vo.CircuitID, sm service.StreamManagerService) {
-	cir, err := c.cRepo.Find(cid)
-	if err != nil {
-		log.Println("find circuit:", err)
-		return
-	}
-
-	conn := cir.Conn(0)
-	if conn == nil {
-		log.Println("no connection for circuit")
-		return
-	}
-
+func (c *SOCKS5Controller) recvLoop(circuitID string, sm service.StreamManagerService) {
 	for {
-		_, cell, err := c.crSvc.ReadCell(conn)
+		recvOut, err := c.receiveUC.Handle(usecase.ReceiveAndDecryptDataInput{
+			CircuitID: circuitID,
+		})
 		if err != nil {
-			if err != io.EOF {
-				log.Println("read cell:", err)
-			}
+			log.Println("receive data:", err)
 			sm.CloseAll()
 			return
 		}
 
-		switch cell.Cmd {
-		case vo.CmdData:
-			c.handleDataCell(cell, cir, sm)
-		case vo.CmdEnd:
-			if c.handleEndCell(cell, sm) {
-				return
-			}
-		case vo.CmdDestroy:
+		if recvOut.IsEOF {
+			log.Println("connection closed")
 			sm.CloseAll()
 			return
 		}
-	}
-}
 
-// handleDataCell processes incoming data cells and decrypts onion layers
-func (c *SOCKS5Controller) handleDataCell(cell *entity.Cell, cir *entity.Circuit, sm service.StreamManagerService) {
-	dp, err := c.peSvc.DecodeDataPayload(cell.Payload)
-	if err != nil {
-		return
-	}
-
-	// Decrypt multi-layer onion encryption
-	data, err := c.decryptOnionLayers(dp.Data, cir)
-	if err != nil {
-		log.Printf("onion decryption failed: %v", err)
-		return
-	}
-
-	// Forward decrypted data to the appropriate stream
-	if conn, ok := sm.Get(dp.StreamID); ok {
-		conn.Write(data)
-	}
-}
-
-// decryptOnionLayers decrypts multi-layer onion encryption for response data
-func (c *SOCKS5Controller) decryptOnionLayers(data []byte, cir *entity.Circuit) ([]byte, error) {
-	hopCount := len(cir.Hops())
-
-	// Decrypt each layer in reverse circuit order (first hop to exit hop)
-	for hop := 0; hop < hopCount; hop++ {
-		key := cir.HopKey(hop)
-		nonce := cir.HopUpstreamDataNonce(hop)
-
-		decrypted, err := c.cSvc.AESOpen(key, nonce, data)
-		if err != nil {
-			return nil, fmt.Errorf("response decrypt failed hop=%d: %w", hop, err)
+		if recvOut.ShouldClose {
+			log.Println("circuit destroyed or all streams closed")
+			sm.CloseAll()
+			return
 		}
-		data = decrypted
-	}
 
-	return data, nil
-}
-
-// handleEndCell processes stream end commands
-func (c *SOCKS5Controller) handleEndCell(cell *entity.Cell, sm service.StreamManagerService) bool {
-	sid := uint16(0)
-	if len(cell.Payload) > 0 {
-		if p, err := c.peSvc.DecodeDataPayload(cell.Payload); err == nil {
-			sid = p.StreamID
+		if recvOut.CellData != nil {
+			switch recvOut.CellData.Command {
+			case vo.CmdData:
+				// Forward decrypted data to the appropriate stream
+				if conn, ok := sm.Get(recvOut.CellData.StreamID); ok {
+					conn.Write(recvOut.CellData.Data)
+				}
+			case vo.CmdEnd:
+				if recvOut.CellData.StreamID == 0 {
+					// End all streams
+					sm.CloseAll()
+					return
+				} else {
+					// End specific stream
+					sm.Remove(recvOut.CellData.StreamID)
+				}
+			}
 		}
 	}
-
-	if sid == 0 {
-		// End all streams
-		sm.CloseAll()
-		return true
-	}
-
-	// End specific stream
-	sm.Remove(sid)
-	return false
 }

@@ -51,19 +51,21 @@ func main() {
 	connectUC := usecase.NewSendConnectUseCase(cRepo, cSvc, peSvc)
 	endUC := usecase.NewHandleEndUseCase(cRepo)
 
+	// Initialize new use cases
+	resolveUC := usecase.NewResolveTargetAddressUseCase(hsRepo)
+	receiveUC := usecase.NewReceiveAndDecryptDataUseCase(cRepo, cSvc, crSvc, peSvc)
+
 	// Create SOCKS5 controller
 	socks5Controller := handler.NewSOCKS5Controller(
-		hsRepo,
-		cRepo,
-		cSvc,
-		crSvc,
-		peSvc,
 		buildUC,
 		connectUC,
 		openUC,
 		closeUC,
 		sendUC,
 		endUC,
+		resolveUC,
+		receiveUC,
+		peSvc,
 		*hops,
 	)
 

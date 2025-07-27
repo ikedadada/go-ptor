@@ -6,6 +6,7 @@ import (
 
 	"ikedadada/go-ptor/cmd/client/handler"
 	"ikedadada/go-ptor/cmd/client/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/client/usecase"
 )
 
 // Mock HTTPClient for testing
@@ -46,9 +47,12 @@ func TestResolveAddress_CaseInsensitive(t *testing.T) {
 		t.Fatalf("NewHiddenServiceRepository: %v", err)
 	}
 
-	// Create a minimal SOCKS5Controller for testing
+	// Create a minimal SOCKS5Controller for testing (using new signature)
+	// We only need the resolve functionality, so we pass nils for other dependencies
 	controller := handler.NewSOCKS5Controller(
-		hsRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0,
+		nil, nil, nil, nil, nil, nil, // build, connect, open, close, send, end UseCases
+		usecase.NewResolveTargetAddressUseCase(hsRepo), // resolve UseCase
+		nil, nil, 0, // receive UseCase, payload service, hops
 	)
 
 	addr, exit, err := controller.ResolveAddress("LOWER.PTOR", 80)
