@@ -7,43 +7,43 @@ import (
 	"time"
 )
 
-// mockConn implements net.Conn for testing
-type mockConn struct {
+// streamManagerTestConn implements net.Conn for testing stream management operations
+type streamManagerTestConn struct {
 	id     uint16
 	closed bool
 	mu     sync.Mutex
 }
 
-func newMockConn(id uint16) *mockConn {
-	return &mockConn{id: id}
+func newStreamManagerTestConn(id uint16) *streamManagerTestConn {
+	return &streamManagerTestConn{id: id}
 }
 
-func (m *mockConn) Read(b []byte) (n int, err error) {
+func (m *streamManagerTestConn) Read(b []byte) (n int, err error) {
 	return 0, nil
 }
 
-func (m *mockConn) Write(b []byte) (n int, err error) {
+func (m *streamManagerTestConn) Write(b []byte) (n int, err error) {
 	return len(b), nil
 }
 
-func (m *mockConn) Close() error {
+func (m *streamManagerTestConn) Close() error {
 	m.mu.Lock()
 	m.closed = true
 	m.mu.Unlock()
 	return nil
 }
 
-func (m *mockConn) IsClosed() bool {
+func (m *streamManagerTestConn) IsClosed() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.closed
 }
 
-func (m *mockConn) LocalAddr() net.Addr                { return nil }
-func (m *mockConn) RemoteAddr() net.Addr               { return nil }
-func (m *mockConn) SetDeadline(t time.Time) error      { return nil }
-func (m *mockConn) SetReadDeadline(t time.Time) error  { return nil }
-func (m *mockConn) SetWriteDeadline(t time.Time) error { return nil }
+func (m *streamManagerTestConn) LocalAddr() net.Addr                { return nil }
+func (m *streamManagerTestConn) RemoteAddr() net.Addr               { return nil }
+func (m *streamManagerTestConn) SetDeadline(t time.Time) error      { return nil }
+func (m *streamManagerTestConn) SetReadDeadline(t time.Time) error  { return nil }
+func (m *streamManagerTestConn) SetWriteDeadline(t time.Time) error { return nil }
 
 func TestNewStreamManagerService(t *testing.T) {
 	sm := NewStreamManagerService()
@@ -54,7 +54,7 @@ func TestNewStreamManagerService(t *testing.T) {
 
 func TestStreamManagerService_Add_Get(t *testing.T) {
 	sm := NewStreamManagerService()
-	conn := newMockConn(1)
+	conn := newStreamManagerTestConn(1)
 
 	// Add connection
 	sm.Add(1, conn)
@@ -86,7 +86,7 @@ func TestStreamManagerService_Get_NonExistent(t *testing.T) {
 
 func TestStreamManagerService_Remove(t *testing.T) {
 	sm := NewStreamManagerService()
-	conn := newMockConn(1)
+	conn := newStreamManagerTestConn(1)
 
 	// Add connection
 	sm.Add(1, conn)
@@ -123,9 +123,9 @@ func TestStreamManagerService_CloseAll(t *testing.T) {
 	sm := NewStreamManagerService()
 
 	// Add multiple connections
-	conn1 := newMockConn(1)
-	conn2 := newMockConn(2)
-	conn3 := newMockConn(3)
+	conn1 := newStreamManagerTestConn(1)
+	conn2 := newStreamManagerTestConn(2)
+	conn3 := newStreamManagerTestConn(3)
 
 	sm.Add(1, conn1)
 	sm.Add(2, conn2)
@@ -172,8 +172,8 @@ func TestStreamManagerService_CloseAll_Empty(t *testing.T) {
 func TestStreamManagerService_Add_Overwrite(t *testing.T) {
 	sm := NewStreamManagerService()
 
-	conn1 := newMockConn(1)
-	conn2 := newMockConn(2)
+	conn1 := newStreamManagerTestConn(1)
+	conn2 := newStreamManagerTestConn(2)
 
 	// Add first connection
 	sm.Add(1, conn1)
@@ -208,7 +208,7 @@ func TestStreamManagerService_ConcurrentAccess(t *testing.T) {
 
 			for j := 0; j < numOperations; j++ {
 				streamID := uint16(workerID*numOperations + j)
-				conn := newMockConn(streamID)
+				conn := newStreamManagerTestConn(streamID)
 
 				// Add connection
 				sm.Add(streamID, conn)
@@ -244,9 +244,9 @@ func TestStreamManagerService_ConcurrentCloseAll(t *testing.T) {
 	numConnections := 100
 
 	// Add many connections
-	var connections []*mockConn
+	var connections []*streamManagerTestConn
 	for i := 0; i < numConnections; i++ {
-		conn := newMockConn(uint16(i))
+		conn := newStreamManagerTestConn(uint16(i))
 		connections = append(connections, conn)
 		sm.Add(uint16(i), conn)
 	}
@@ -284,14 +284,14 @@ func TestStreamManagerService_AddAfterCloseAll(t *testing.T) {
 	sm := NewStreamManagerService()
 
 	// Add a connection
-	conn1 := newMockConn(1)
+	conn1 := newStreamManagerTestConn(1)
 	sm.Add(1, conn1)
 
 	// Close all
 	sm.CloseAll()
 
 	// Add new connection with same ID
-	conn2 := newMockConn(2)
+	conn2 := newStreamManagerTestConn(2)
 	sm.Add(1, conn2)
 
 	// Should get the new connection
@@ -315,7 +315,7 @@ func TestStreamManagerService_MaxStreamID(t *testing.T) {
 
 	// Test with maximum uint16 value
 	maxID := uint16(65535)
-	conn := newMockConn(maxID)
+	conn := newStreamManagerTestConn(maxID)
 
 	sm.Add(maxID, conn)
 
@@ -340,7 +340,7 @@ func TestStreamManagerService_ZeroStreamID(t *testing.T) {
 	sm := NewStreamManagerService()
 
 	// Test with zero stream ID
-	conn := newMockConn(0)
+	conn := newStreamManagerTestConn(0)
 
 	sm.Add(0, conn)
 
