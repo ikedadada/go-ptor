@@ -47,14 +47,23 @@ func (uc *resolveTargetAddressUseCaseImpl) Handle(in ResolveTargetAddressInput) 
 		exitRelayID = hs.RelayID().String()
 	}
 
-	// Format dial address based on IP type
+	// Format dial address based on IP type and hidden service status
 	var dialAddress string
-	if ip := net.ParseIP(hostLower); ip != nil && ip.To4() == nil {
-		// IPv6 address needs brackets
-		dialAddress = fmt.Sprintf("[%s]:%d", hostLower, in.Port)
-	} else {
-		// IPv4 address or hostname
+	if strings.HasSuffix(hostLower, ".ptor") {
+		// Hidden service addresses should be lowercase for consistency
 		dialAddress = fmt.Sprintf("%s:%d", hostLower, in.Port)
+	} else if ip := net.ParseIP(in.Host); ip != nil {
+		// Valid IP address - check if it's IPv6
+		if ip.To16() != nil && ip.To4() == nil {
+			// IPv6 address needs brackets
+			dialAddress = fmt.Sprintf("[%s]:%d", in.Host, in.Port)
+		} else {
+			// IPv4 address
+			dialAddress = fmt.Sprintf("%s:%d", in.Host, in.Port)
+		}
+	} else {
+		// Regular hostname - preserve original case
+		dialAddress = fmt.Sprintf("%s:%d", in.Host, in.Port)
 	}
 
 	return ResolveTargetAddressOutput{
