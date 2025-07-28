@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ikedadada/go-ptor/cmd/client/handler"
 	"ikedadada/go-ptor/cmd/client/infrastructure/repository"
+	"ikedadada/go-ptor/cmd/client/usecase"
 )
 
 // Mock HTTPClient for testing
@@ -46,19 +46,20 @@ func TestResolveAddress_CaseInsensitive(t *testing.T) {
 		t.Fatalf("NewHiddenServiceRepository: %v", err)
 	}
 
-	// Create a minimal SOCKS5Controller for testing
-	controller := handler.NewSOCKS5Controller(
-		hsRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0,
-	)
+	// Test the resolve functionality directly through the UseCase
+	resolveUC := usecase.NewResolveTargetAddressUseCase(hsRepo)
 
-	addr, exit, err := controller.ResolveAddress("LOWER.PTOR", 80)
+	result, err := resolveUC.Handle(usecase.ResolveTargetAddressInput{
+		Host: "LOWER.PTOR",
+		Port: 80,
+	})
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if exit != "550e8400-e29b-41d4-a716-446655440000" {
-		t.Fatalf("unexpected exit: %s", exit)
+	if result.ExitRelayID != "550e8400-e29b-41d4-a716-446655440000" {
+		t.Fatalf("unexpected exit: %s", result.ExitRelayID)
 	}
-	if addr != "lower.ptor:80" {
-		t.Fatalf("unexpected addr: %s", addr)
+	if result.DialAddress != "lower.ptor:80" {
+		t.Fatalf("unexpected addr: %s", result.DialAddress)
 	}
 }

@@ -5,66 +5,57 @@ import (
 	"io"
 	"log"
 	"net"
-	"strings"
 
 	"ikedadada/go-ptor/cmd/client/usecase"
-	"ikedadada/go-ptor/shared/domain/entity"
-	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
 )
 
 // SOCKS5Controller handles SOCKS5 proxy connections
 type SOCKS5Controller struct {
-	hsRepo    repository.HiddenServiceRepository
-	cRepo     repository.CircuitRepository
-	cSvc      service.CryptoService
-	crSvc     service.CellReaderService
-	peSvc     service.PayloadEncodingService
-	buildUC   usecase.BuildCircuitUseCase
-	connectUC usecase.SendConnectUseCase
-	openUC    usecase.OpenStreamUseCase
-	closeUC   usecase.CloseStreamUseCase
-	sendUC    usecase.SendDataUseCase
-	endUC     usecase.HandleEndUseCase
-	hops      int
+	buildUC       usecase.BuildCircuitUseCase
+	connectUC     usecase.SendConnectUseCase
+	openUC        usecase.OpenStreamUseCase
+	closeUC       usecase.CloseStreamUseCase
+	sendUC        usecase.SendDataUseCase
+	endUC         usecase.HandleEndUseCase
+	resolveUC     usecase.ResolveTargetAddressUseCase
+	receiveCellUC usecase.ReceiveCellUseCase
+	decryptCellUC usecase.DecryptCellDataUseCase
+	peSvc         service.PayloadEncodingService
+	smSvc         service.StreamManagerService
+	hops          int
 }
 
 // NewSOCKS5Controller creates a new SOCKS5Controller
 func NewSOCKS5Controller(
-	hsRepo repository.HiddenServiceRepository,
-	cRepo repository.CircuitRepository,
-	cSvc service.CryptoService,
-	crSvc service.CellReaderService,
-	peSvc service.PayloadEncodingService,
 	buildUC usecase.BuildCircuitUseCase,
 	connectUC usecase.SendConnectUseCase,
 	openUC usecase.OpenStreamUseCase,
 	closeUC usecase.CloseStreamUseCase,
 	sendUC usecase.SendDataUseCase,
 	endUC usecase.HandleEndUseCase,
+	resolveUC usecase.ResolveTargetAddressUseCase,
+	receiveCellUC usecase.ReceiveCellUseCase,
+	decryptCellUC usecase.DecryptCellDataUseCase,
+	peSvc service.PayloadEncodingService,
+	smSvc service.StreamManagerService,
 	hops int,
 ) *SOCKS5Controller {
 	return &SOCKS5Controller{
-		hsRepo:    hsRepo,
-		cRepo:     cRepo,
-		cSvc:      cSvc,
-		crSvc:     crSvc,
-		peSvc:     peSvc,
-		buildUC:   buildUC,
-		connectUC: connectUC,
-		openUC:    openUC,
-		closeUC:   closeUC,
-		sendUC:    sendUC,
-		endUC:     endUC,
-		hops:      hops,
+		buildUC:       buildUC,
+		connectUC:     connectUC,
+		openUC:        openUC,
+		closeUC:       closeUC,
+		sendUC:        sendUC,
+		endUC:         endUC,
+		resolveUC:     resolveUC,
+		receiveCellUC: receiveCellUC,
+		decryptCellUC: decryptCellUC,
+		peSvc:         peSvc,
+		smSvc:         smSvc,
+		hops:          hops,
 	}
-}
-
-// SOCKS5Request represents a parsed SOCKS5 connection request
-type SOCKS5Request struct {
-	Host string
-	Port int
 }
 
 // HandleConnection handles a SOCKS5 connection
@@ -73,302 +64,241 @@ func (c *SOCKS5Controller) HandleConnection(conn net.Conn) {
 
 	// Phase 1: Handle SOCKS5 protocol negotiation
 	log.Println("Starting SOCKS5 protocol handling")
-	req, err := c.handleSOCKS5Protocol(conn)
-	if err != nil {
-		log.Println("SOCKS5 protocol error:", err)
-		return
-	}
-	log.Printf("SOCKS5 protocol completed, target: %s:%d", req.Host, req.Port)
-
-	// Phase 2: Resolve target address and build circuit
-	addr, exitID, err := c.resolveAddress(req.Host, req.Port)
-	if err != nil {
-		log.Println("resolve address:", err)
-		conn.Write(vo.SOCKS5HostUnreachResp)
-		return
-	}
-
-	circuitID, err := c.buildCircuit(exitID)
-	if err != nil {
-		log.Println("build circuit:", err)
-		conn.Write(vo.SOCKS5ErrorResp)
-		return
-	}
-
-	// Phase 3: Setup stream management and start data relay
-	if err := c.setupStreamAndRelay(conn, circuitID, exitID, addr); err != nil {
-		log.Println("setup stream and relay:", err)
-		return
-	}
-}
-
-// handleSOCKS5Protocol handles the SOCKS5 protocol handshake and request parsing
-func (c *SOCKS5Controller) handleSOCKS5Protocol(conn net.Conn) (*SOCKS5Request, error) {
 	var buf [262]byte
 
 	// Step 1: Read authentication methods
 	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
-		return nil, fmt.Errorf("read SOCKS version: %w", err)
+		log.Printf("read SOCKS version: %v", err)
+		return
 	}
 	n := int(buf[1])
 	if _, err := io.ReadFull(conn, buf[:n]); err != nil {
-		return nil, fmt.Errorf("read SOCKS methods: %w", err)
+		log.Printf("read SOCKS methods: %v", err)
+		return
 	}
 	conn.Write(vo.SOCKS5HandshakeResp)
 
 	// Step 2: Read connection request
 	if _, err := io.ReadFull(conn, buf[:4]); err != nil {
-		return nil, fmt.Errorf("read SOCKS request: %w", err)
+		log.Printf("read SOCKS request: %v", err)
+		return
 	}
 	if buf[1] != vo.SOCKS5CmdConnect {
-		return nil, fmt.Errorf("unsupported SOCKS command: %d", buf[1])
+		log.Printf("unsupported SOCKS command: %d", buf[1])
+		return
 	}
 
 	// Step 3: Parse target address
-	host, err := c.parseTargetAddress(conn, buf[3])
-	if err != nil {
-		return nil, fmt.Errorf("parse target address: %w", err)
+	var host string
+	switch buf[3] {
+	case vo.SOCKS5AddrIPv4:
+		if _, err := io.ReadFull(conn, buf[:4]); err != nil {
+			log.Printf("read IPv4 address: %v", err)
+			return
+		}
+		host = net.IP(buf[:4]).String()
+	case vo.SOCKS5AddrDomain:
+		if _, err := io.ReadFull(conn, buf[:1]); err != nil {
+			log.Printf("read hostname length: %v", err)
+			return
+		}
+		l := int(buf[0])
+		if _, err := io.ReadFull(conn, buf[:l]); err != nil {
+			log.Printf("read hostname: %v", err)
+			return
+		}
+		host = string(buf[:l])
+	default:
+		log.Printf("unsupported address type: %d", buf[3])
+		return
 	}
 
 	// Step 4: Read target port
 	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
-		return nil, fmt.Errorf("read port: %w", err)
+		log.Printf("read port: %v", err)
+		return
 	}
 	port := int(buf[0])<<8 | int(buf[1])
 
-	return &SOCKS5Request{Host: host, Port: port}, nil
-}
+	log.Printf("SOCKS5 protocol completed, target: %s:%d", host, port)
 
-// parseTargetAddress parses the target address from SOCKS5 request
-func (c *SOCKS5Controller) parseTargetAddress(conn net.Conn, addrType byte) (string, error) {
-	var buf [262]byte
-
-	switch addrType {
-	case vo.SOCKS5AddrIPv4:
-		if _, err := io.ReadFull(conn, buf[:4]); err != nil {
-			return "", fmt.Errorf("read IPv4 address: %w", err)
-		}
-		return net.IP(buf[:4]).String(), nil
-
-	case vo.SOCKS5AddrDomain:
-		if _, err := io.ReadFull(conn, buf[:1]); err != nil {
-			return "", fmt.Errorf("read hostname length: %w", err)
-		}
-		l := int(buf[0])
-		if _, err := io.ReadFull(conn, buf[:l]); err != nil {
-			return "", fmt.Errorf("read hostname: %w", err)
-		}
-		return string(buf[:l]), nil
-
-	default:
-		return "", fmt.Errorf("unsupported address type: %d", addrType)
-	}
-}
-
-// buildCircuit builds a circuit for the connection
-func (c *SOCKS5Controller) buildCircuit(exitID string) (string, error) {
-	log.Printf("building circuit hops=%d exitID=%s", c.hops, exitID)
-	buildOut, err := c.buildUC.Handle(usecase.BuildCircuitInput{Hops: c.hops, ExitRelayID: exitID})
+	// Phase 2: Resolve target address and build circuit
+	resolveOut, err := c.resolveUC.Handle(usecase.ResolveTargetAddressInput{
+		Host: host,
+		Port: port,
+	})
 	if err != nil {
-		return "", fmt.Errorf("build circuit: %w", err)
+		log.Println("resolve address:", err)
+		conn.Write(vo.SOCKS5HostUnreachResp)
+		return
 	}
-	log.Printf("circuit built successfully cid=%s", buildOut.CircuitID)
-	return buildOut.CircuitID, nil
+	addr := resolveOut.DialAddress
+	exitRelayID := resolveOut.ExitRelayID
+
+	log.Printf("building circuit hops=%d exitRelayID=%s", c.hops, exitRelayID)
+	buildOut, err := c.buildUC.Handle(usecase.BuildCircuitInput{Hops: c.hops, ExitRelayID: exitRelayID})
+	if err != nil {
+		log.Printf("build circuit: %v", err)
+		conn.Write(vo.SOCKS5ErrorResp)
+		return
+	}
+	circuitID := buildOut.CircuitID
+	log.Printf("circuit built successfully cid=%s", circuitID)
+
+	// Phase 3: Setup stream management and start data relay
+	if err := c.setupStreamAndRelay(conn, circuitID, exitRelayID, addr); err != nil {
+		log.Println("setup stream and relay:", err)
+		return
+	}
 }
 
 // setupStreamAndRelay sets up stream management and handles data relay
-func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitID, addr string) error {
-	// Setup stream manager and receive loop
-	cid, _ := vo.CircuitIDFrom(circuitID)
-	sm := service.NewStreamManagerService()
-	go c.recvLoop(cid, sm)
+func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitRelayID, addr string) error {
+	// === 1. Initialize stream manager and start receiving loop ===
+	go c.recvLoop(circuitID)
 
-	// Connect to hidden service if needed
-	if exitID != "" {
+	// === 2. Connect to hidden service if needed ===
+	if exitRelayID != "" {
+		log.Printf("connecting to hidden service cid=%s", circuitID)
 		if _, err := c.connectUC.Handle(usecase.SendConnectInput{CircuitID: circuitID}); err != nil {
-			log.Println("connect hidden:", err)
+			log.Printf("failed to connect to hidden service cid=%s: %v", circuitID, err)
+			return fmt.Errorf("connect to hidden service: %w", err)
 		}
+		log.Printf("hidden service connection established cid=%s", circuitID)
 	}
 
-	// Open stream
+	// === 3. Open stream and register with manager ===
 	stOut, err := c.openUC.Handle(usecase.OpenStreamInput{CircuitID: circuitID})
 	if err != nil {
 		return fmt.Errorf("open stream: %w", err)
 	}
-	sid := stOut.StreamID
-	sm.Add(uint16(sid), conn)
-	defer sm.Remove(uint16(sid))
+	streamID := stOut.StreamID
+	c.smSvc.Add(uint16(streamID), conn)
+	defer c.smSvc.Remove(uint16(streamID))
+	log.Printf("stream opened and registered cid=%s sid=%d", circuitID, streamID)
 
-	// Send BEGIN command
-	if err := c.sendBeginCommand(circuitID, int(sid), addr); err != nil {
+	// === 4. Send BEGIN command to establish stream connection ===
+	payload, err := c.peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{
+		StreamID: uint16(streamID),
+		Target:   addr,
+	})
+	if err != nil {
+		return fmt.Errorf("encode begin payload: %w", err)
+	}
+
+	log.Printf("establishing stream connection cid=%s sid=%d target=%s", circuitID, streamID, addr)
+	_, err = c.sendUC.Handle(usecase.SendDataInput{
+		CircuitID: circuitID,
+		StreamID:  uint16(streamID),
+		Data:      payload,
+		Cmd:       vo.CmdBegin,
+	})
+	if err != nil {
 		return fmt.Errorf("send begin command: %w", err)
 	}
+	log.Printf("stream connection established cid=%s sid=%d", circuitID, streamID)
+
+	// === 5. Notify client of successful connection ===
 	conn.Write(vo.SOCKS5SuccessResp)
 
-	// Start data relay loop
-	c.dataRelayLoop(conn, circuitID, int(sid))
-
-	// Cleanup
-	if _, err := c.closeUC.Handle(usecase.CloseStreamInput{CircuitID: circuitID, StreamID: sid}); err != nil {
-		log.Println("close stream:", err)
-	}
-	return nil
-}
-
-// sendBeginCommand sends the BEGIN command to establish the stream
-func (c *SOCKS5Controller) sendBeginCommand(circuitID string, sid int, addr string) error {
-	payload, err := c.peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{StreamID: uint16(sid), Target: addr})
-	if err != nil {
-		return fmt.Errorf("encode begin: %w", err)
-	}
-	log.Printf("sending BEGIN command cid=%s sid=%d target=%s", circuitID, sid, addr)
-	if _, err := c.sendUC.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: uint16(sid), Data: payload, Cmd: vo.CmdBegin}); err != nil {
-		return fmt.Errorf("send begin: %w", err)
-	}
-	log.Printf("BEGIN command sent successfully cid=%s sid=%d", circuitID, sid)
-	return nil
-}
-
-// dataRelayLoop handles the data relay between client and circuit
-func (c *SOCKS5Controller) dataRelayLoop(conn net.Conn, circuitID string, sid int) {
+	// === 6. Handle data relay loop ===
 	buf := make([]byte, 4096)
 	for {
 		n, err := conn.Read(buf)
+
+		// Send any received data to the circuit
 		if n > 0 {
-			log.Printf("sending DATA command cid=%s sid=%d bytes=%d", circuitID, sid, n)
-			if _, err2 := c.sendUC.Handle(usecase.SendDataInput{CircuitID: circuitID, StreamID: uint16(sid), Data: buf[:n]}); err2 != nil {
-				log.Println("send data:", err2)
+			log.Printf("relaying data cid=%s sid=%d bytes=%d", circuitID, streamID, n)
+			_, sendErr := c.sendUC.Handle(usecase.SendDataInput{
+				CircuitID: circuitID,
+				StreamID:  uint16(streamID),
+				Data:      buf[:n],
+			})
+			if sendErr != nil {
+				log.Printf("failed to send data: %v", sendErr)
 				break
 			}
 		}
+
+		// Handle connection errors
 		if err != nil {
 			if err == io.EOF {
-				_, _ = c.endUC.Handle(usecase.HandleEndInput{CircuitID: circuitID, StreamID: uint16(sid)})
+				log.Printf("client connection closed cid=%s sid=%d", circuitID, streamID)
+				_, _ = c.endUC.Handle(usecase.HandleEndInput{
+					CircuitID: circuitID,
+					StreamID:  uint16(streamID),
+				})
+			} else {
+				log.Printf("client connection error cid=%s sid=%d: %v", circuitID, streamID, err)
 			}
 			break
 		}
 	}
-}
 
-// ResolveAddress returns the dial address for the given host and port.
-// If host ends with .ptor, it looks up the hidden service in the repository
-// and returns the endpoint of the designated exit relay.
-func (c *SOCKS5Controller) ResolveAddress(host string, port int) (string, string, error) {
-	return c.resolveAddress(host, port)
-}
+	// === 7. Cleanup stream resources ===
+	if _, err := c.closeUC.Handle(usecase.CloseStreamInput{
+		CircuitID: circuitID,
+		StreamID:  streamID,
+	}); err != nil {
+		log.Printf("failed to close stream cid=%s sid=%d: %v", circuitID, streamID, err)
+	}
 
-// resolveAddress returns the dial address for the given host and port.
-// If host ends with .ptor, it looks up the hidden service in the repository
-// and returns the endpoint of the designated exit relay.
-func (c *SOCKS5Controller) resolveAddress(host string, port int) (string, string, error) {
-	hostLower := strings.ToLower(host)
-	exit := ""
-	if strings.HasSuffix(hostLower, ".ptor") {
-		hs, err := c.hsRepo.FindByAddressString(hostLower)
-		if err != nil {
-			return "", "", fmt.Errorf("hidden service not found: %s", host)
-		}
-		exit = hs.RelayID().String()
-	}
-	if ip := net.ParseIP(hostLower); ip != nil && ip.To4() == nil {
-		return fmt.Sprintf("[%s]:%d", hostLower, port), exit, nil
-	}
-	return fmt.Sprintf("%s:%d", hostLower, port), exit, nil
+	return nil
 }
 
 // recvLoop handles incoming data from the circuit
-func (c *SOCKS5Controller) recvLoop(cid vo.CircuitID, sm service.StreamManagerService) {
-	cir, err := c.cRepo.Find(cid)
-	if err != nil {
-		log.Println("find circuit:", err)
-		return
-	}
-
-	conn := cir.Conn(0)
-	if conn == nil {
-		log.Println("no connection for circuit")
-		return
-	}
-
+func (c *SOCKS5Controller) recvLoop(circuitID string) {
 	for {
-		_, cell, err := c.crSvc.ReadCell(conn)
+		// Step 1: Receive cell from circuit
+		receiveOut, err := c.receiveCellUC.Handle(usecase.ReceiveCellInput{
+			CircuitID: circuitID,
+		})
 		if err != nil {
-			if err != io.EOF {
-				log.Println("read cell:", err)
-			}
-			sm.CloseAll()
+			log.Println("receive cell:", err)
+			c.smSvc.CloseAll()
 			return
 		}
 
-		switch cell.Cmd {
-		case vo.CmdData:
-			c.handleDataCell(cell, cir, sm)
-		case vo.CmdEnd:
-			if c.handleEndCell(cell, sm) {
-				return
-			}
-		case vo.CmdDestroy:
-			sm.CloseAll()
+		if receiveOut.IsEOF {
+			log.Println("connection closed")
+			c.smSvc.CloseAll()
 			return
 		}
-	}
-}
 
-// handleDataCell processes incoming data cells and decrypts onion layers
-func (c *SOCKS5Controller) handleDataCell(cell *entity.Cell, cir *entity.Circuit, sm service.StreamManagerService) {
-	dp, err := c.peSvc.DecodeDataPayload(cell.Payload)
-	if err != nil {
-		return
-	}
-
-	// Decrypt multi-layer onion encryption
-	data, err := c.decryptOnionLayers(dp.Data, cir)
-	if err != nil {
-		log.Printf("onion decryption failed: %v", err)
-		return
-	}
-
-	// Forward decrypted data to the appropriate stream
-	if conn, ok := sm.Get(dp.StreamID); ok {
-		conn.Write(data)
-	}
-}
-
-// decryptOnionLayers decrypts multi-layer onion encryption for response data
-func (c *SOCKS5Controller) decryptOnionLayers(data []byte, cir *entity.Circuit) ([]byte, error) {
-	hopCount := len(cir.Hops())
-
-	// Decrypt each layer in reverse circuit order (first hop to exit hop)
-	for hop := 0; hop < hopCount; hop++ {
-		key := cir.HopKey(hop)
-		nonce := cir.HopUpstreamDataNonce(hop)
-
-		decrypted, err := c.cSvc.AESOpen(key, nonce, data)
+		// Step 2: Decrypt and process cell data
+		decryptOut, err := c.decryptCellUC.Handle(usecase.DecryptCellDataInput{
+			Cell:    receiveOut.Cell,
+			Circuit: receiveOut.Circuit,
+		})
 		if err != nil {
-			return nil, fmt.Errorf("response decrypt failed hop=%d: %w", hop, err)
+			log.Println("decrypt cell:", err)
+			c.smSvc.CloseAll()
+			return
 		}
-		data = decrypted
-	}
 
-	return data, nil
-}
+		if decryptOut.ShouldClose {
+			log.Println("circuit destroyed or all streams closed")
+			c.smSvc.CloseAll()
+			return
+		}
 
-// handleEndCell processes stream end commands
-func (c *SOCKS5Controller) handleEndCell(cell *entity.Cell, sm service.StreamManagerService) bool {
-	sid := uint16(0)
-	if len(cell.Payload) > 0 {
-		if p, err := c.peSvc.DecodeDataPayload(cell.Payload); err == nil {
-			sid = p.StreamID
+		if decryptOut.CellData != nil {
+			switch decryptOut.CellData.Command {
+			case vo.CmdData:
+				// Forward decrypted data to the appropriate stream
+				if conn, ok := c.smSvc.Get(decryptOut.CellData.StreamID); ok {
+					conn.Write(decryptOut.CellData.Data)
+				}
+			case vo.CmdEnd:
+				if decryptOut.CellData.StreamID == 0 {
+					// End all streams
+					c.smSvc.CloseAll()
+					return
+				} else {
+					// End specific stream
+					c.smSvc.Remove(decryptOut.CellData.StreamID)
+				}
+			}
 		}
 	}
-
-	if sid == 0 {
-		// End all streams
-		sm.CloseAll()
-		return true
-	}
-
-	// End specific stream
-	sm.Remove(sid)
-	return false
 }
