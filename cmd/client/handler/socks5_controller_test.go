@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 type mockConnection struct {
 	readData  []byte
 	writeData bytes.Buffer
+	mu        sync.Mutex
 	closed    bool
 }
 
@@ -33,6 +35,8 @@ func (m *mockConnection) Write(b []byte) (int, error) {
 }
 
 func (m *mockConnection) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.closed = true
 	return nil
 }
@@ -225,10 +229,13 @@ func (m *mockPayloadEncodingService) DecodeDataPayload(data []byte) (*service.Da
 }
 
 type mockStreamManagerService struct {
+	mu      sync.Mutex
 	streams map[uint16]net.Conn
 }
 
 func (m *mockStreamManagerService) Add(id uint16, conn net.Conn) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.streams == nil {
 		m.streams = make(map[uint16]net.Conn)
 	}
@@ -236,17 +243,23 @@ func (m *mockStreamManagerService) Add(id uint16, conn net.Conn) {
 }
 
 func (m *mockStreamManagerService) Get(id uint16) (net.Conn, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	conn, ok := m.streams[id]
 	return conn, ok
 }
 
 func (m *mockStreamManagerService) Remove(id uint16) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.streams != nil {
 		delete(m.streams, id)
 	}
 }
 
 func (m *mockStreamManagerService) CloseAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.streams != nil {
 		for _, conn := range m.streams {
 			conn.Close()
@@ -275,7 +288,11 @@ func TestSOCKS5Controller_HandleConnection_InvalidSOCKS5Request(t *testing.T) {
 	controller.HandleConnection(conn)
 
 	// Assertions
-	if !conn.closed {
+	conn.mu.Lock()
+	closed := conn.closed
+	conn.mu.Unlock()
+
+	if !closed {
 		t.Error("Expected connection to be closed after invalid SOCKS5 request")
 	}
 }
@@ -324,7 +341,11 @@ func TestSOCKS5Controller_HandleConnection_SOCKS5ProtocolParsing(t *testing.T) {
 	controller.HandleConnection(conn)
 
 	// Assertions
-	if !conn.closed {
+	conn.mu.Lock()
+	closed := conn.closed
+	conn.mu.Unlock()
+
+	if !closed {
 		t.Error("Expected connection to be closed after handling")
 	}
 
@@ -380,7 +401,11 @@ func TestSOCKS5Controller_HandleConnection_IPv4Address(t *testing.T) {
 	controller.HandleConnection(conn)
 
 	// Assertions
-	if !conn.closed {
+	conn.mu.Lock()
+	closed := conn.closed
+	conn.mu.Unlock()
+
+	if !closed {
 		t.Error("Expected connection to be closed after handling")
 	}
 }
@@ -425,10 +450,24 @@ func TestSOCKS5Controller_HandleConnection_HiddenService(t *testing.T) {
 	)
 
 	// Test
-	controller.HandleConnection(conn)
+	done := make(chan struct{})
+	go func() {
+		controller.HandleConnection(conn)
+		close(done)
+	}()
+
+	// Wait for completion
+	<-done
+
+	// Small delay to ensure all goroutines finish
+	time.Sleep(10 * time.Millisecond)
 
 	// Assertions
-	if !conn.closed {
+	conn.mu.Lock()
+	closed := conn.closed
+	conn.mu.Unlock()
+
+	if !closed {
 		t.Error("Expected connection to be closed after handling")
 	}
 }
@@ -459,7 +498,11 @@ func TestSOCKS5Controller_HandleConnection_UnsupportedAddressType(t *testing.T) 
 	controller.HandleConnection(conn)
 
 	// Assertions
-	if !conn.closed {
+	conn.mu.Lock()
+	closed := conn.closed
+	conn.mu.Unlock()
+
+	if !closed {
 		t.Error("Expected connection to be closed after unsupported address type")
 	}
 }
@@ -492,7 +535,11 @@ func TestSOCKS5Controller_HandleConnection_UnsupportedCommand(t *testing.T) {
 	controller.HandleConnection(conn)
 
 	// Assertions
-	if !conn.closed {
+	conn.mu.Lock()
+	closed := conn.closed
+	conn.mu.Unlock()
+
+	if !closed {
 		t.Error("Expected connection to be closed after unsupported command")
 	}
 }
