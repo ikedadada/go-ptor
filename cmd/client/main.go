@@ -53,7 +53,11 @@ func main() {
 
 	// Initialize new use cases
 	resolveUC := usecase.NewResolveTargetAddressUseCase(hsRepo)
-	receiveUC := usecase.NewReceiveAndDecryptDataUseCase(cRepo, cSvc, crSvc, peSvc)
+	receiveCellUC := usecase.NewReceiveCellUseCase(cRepo, crSvc)
+	decryptCellUC := usecase.NewDecryptCellDataUseCase(cSvc, peSvc)
+
+	// Create stream manager service
+	smSvc := service.NewStreamManagerService()
 
 	// Create SOCKS5 controller
 	socks5Controller := handler.NewSOCKS5Controller(
@@ -64,8 +68,10 @@ func main() {
 		sendUC,
 		endUC,
 		resolveUC,
-		receiveUC,
+		receiveCellUC,
+		decryptCellUC,
 		peSvc,
+		smSvc,
 		*hops,
 	)
 
