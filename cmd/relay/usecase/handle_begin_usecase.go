@@ -49,11 +49,7 @@ func (uc *handleBeginUseCaseImpl) Begin(st *entity.ConnState, cid vo.CircuitID, 
 		if err != nil {
 			return err
 		}
-		sid, err := vo.StreamIDFrom(p.StreamID)
-		if err != nil {
-			return err
-		}
-		go uc.forwardUpstream(st, cid, sid, st.Down())
+		go uc.forwardUpstream(st, cid, p.StreamID, st.Down())
 		return uc.csSvc.SendAck(st.Up(), cid)
 	}
 
@@ -67,10 +63,6 @@ func (uc *handleBeginUseCaseImpl) Begin(st *entity.ConnState, cid vo.CircuitID, 
 	if err != nil {
 		return err
 	}
-	sid, err := vo.StreamIDFrom(p.StreamID)
-	if err != nil {
-		return err
-	}
 	down, err := net.Dial("tcp", p.Target)
 	if err != nil {
 		c := &entity.Cell{Cmd: vo.CmdDestroy, Version: vo.ProtocolV1}
@@ -78,7 +70,7 @@ func (uc *handleBeginUseCaseImpl) Begin(st *entity.ConnState, cid vo.CircuitID, 
 		log.Printf("dial begin target cid=%s addr=%s err=%v", cid.String(), p.Target, err)
 		return err
 	}
-	if err := uc.csRepo.AddStream(cid, sid, down); err != nil {
+	if err := uc.csRepo.AddStream(cid, p.StreamID, down); err != nil {
 		down.Close()
 		return err
 	}
@@ -86,7 +78,7 @@ func (uc *handleBeginUseCaseImpl) Begin(st *entity.ConnState, cid vo.CircuitID, 
 	if err := uc.csSvc.ForwardCell(st.Up(), cid, ack); err != nil {
 		return err
 	}
-	go uc.forwardUpstream(st, cid, sid, down)
+	go uc.forwardUpstream(st, cid, p.StreamID, down)
 	return nil
 }
 
@@ -101,7 +93,7 @@ func (uc *handleBeginUseCaseImpl) forwardUpstream(st *entity.ConnState, cid vo.C
 			log.Printf("upstream encrypt cid=%s nonce=%x", cid.String(), nonce)
 			enc, err2 := uc.cSvc.AESSeal(st.Key(), nonce, buf[:n])
 			if err2 == nil {
-				payload, err3 := uc.peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid.UInt16(), Data: enc})
+				payload, err3 := uc.peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid, Data: enc})
 				if err3 == nil {
 					c := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
 					_ = uc.csSvc.ForwardCell(st.Up(), cid, c)
@@ -114,7 +106,7 @@ func (uc *handleBeginUseCaseImpl) forwardUpstream(st *entity.ConnState, cid vo.C
 			}
 			endPayload := []byte{}
 			if sid != 0 {
-				endPayload, _ = uc.peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid.UInt16()})
+				endPayload, _ = uc.peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid})
 			}
 			_ = uc.csSvc.ForwardCell(st.Up(), cid, &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: endPayload})
 			return

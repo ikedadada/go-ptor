@@ -1,56 +1,21 @@
-package repository
+package repository_test
 
 import (
 	"net"
 	"testing"
 	"time"
 
+	repoImpl "ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/shared/domain/entity"
 	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
+
+	. "github.com/ovechkin-dm/mockio/v2/mock"
 )
-
-// relayConnStateTestConn implements net.Conn for testing
-type relayConnStateTestConn struct {
-	closed bool
-}
-
-func (c *relayConnStateTestConn) Read(b []byte) (n int, err error) {
-	return 0, nil
-}
-
-func (c *relayConnStateTestConn) Write(b []byte) (n int, err error) {
-	return len(b), nil
-}
-
-func (c *relayConnStateTestConn) Close() error {
-	c.closed = true
-	return nil
-}
-
-func (c *relayConnStateTestConn) LocalAddr() net.Addr {
-	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8080}
-}
-
-func (c *relayConnStateTestConn) RemoteAddr() net.Addr {
-	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 9090}
-}
-
-func (c *relayConnStateTestConn) SetDeadline(t time.Time) error {
-	return nil
-}
-
-func (c *relayConnStateTestConn) SetReadDeadline(t time.Time) error {
-	return nil
-}
-
-func (c *relayConnStateTestConn) SetWriteDeadline(t time.Time) error {
-	return nil
-}
 
 func TestNewConnStateRepository(t *testing.T) {
 	ttl := time.Minute
-	repo := NewConnStateRepository(ttl)
+	repo := repoImpl.NewConnStateRepository(ttl)
 
 	if repo == nil {
 		t.Error("NewConnStateRepository should return a non-nil repository")
@@ -61,7 +26,7 @@ func TestNewConnStateRepository(t *testing.T) {
 }
 
 func TestConnStateRepository_Add(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 
 	// Create a test connection state
@@ -87,7 +52,7 @@ func TestConnStateRepository_Add(t *testing.T) {
 }
 
 func TestConnStateRepository_Find_NotFound(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 
 	_, err := repo.Find(circuitID)
@@ -97,7 +62,7 @@ func TestConnStateRepository_Find_NotFound(t *testing.T) {
 }
 
 func TestConnStateRepository_Delete(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 
 	// Create and add a test connection state
@@ -126,7 +91,7 @@ func TestConnStateRepository_Delete(t *testing.T) {
 }
 
 func TestConnStateRepository_Delete_WithStreams(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 	streamID := vo.NewStreamIDAuto()
 
@@ -143,7 +108,13 @@ func TestConnStateRepository_Delete_WithStreams(t *testing.T) {
 	}
 
 	// Add a stream
-	testConn := &relayConnStateTestConn{}
+	ctrl := NewMockController(t)
+	connClosed := false
+	testConn := Mock[net.Conn](ctrl)
+	When(testConn.Close()).ThenReturn(func() error {
+		connClosed = true
+		return nil
+	}())
 	err = repo.AddStream(circuitID, streamID, testConn)
 	if err != nil {
 		t.Fatalf("AddStream failed: %v", err)
@@ -156,7 +127,7 @@ func TestConnStateRepository_Delete_WithStreams(t *testing.T) {
 	}
 
 	// Verify stream connection was closed
-	if !testConn.closed {
+	if !connClosed {
 		t.Error("Stream connection should have been closed when circuit was deleted")
 	}
 
@@ -168,10 +139,11 @@ func TestConnStateRepository_Delete_WithStreams(t *testing.T) {
 }
 
 func TestConnStateRepository_AddStream(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 	streamID := vo.NewStreamIDAuto()
-	testConn := &relayConnStateTestConn{}
+	ctrl := NewMockController(t)
+	testConn := Mock[net.Conn](ctrl)
 
 	err := repo.AddStream(circuitID, streamID, testConn)
 	if err != nil {
@@ -189,9 +161,11 @@ func TestConnStateRepository_AddStream(t *testing.T) {
 }
 
 func TestConnStateRepository_GetStream_NotFound(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 	streamID := vo.NewStreamIDAuto()
+	ctrl := NewMockController(t)
+	testConn := Mock[net.Conn](ctrl)
 
 	// Test non-existent circuit
 	_, err := repo.GetStream(circuitID, streamID)
@@ -201,7 +175,7 @@ func TestConnStateRepository_GetStream_NotFound(t *testing.T) {
 
 	// Add a circuit but not the stream
 	otherStreamID := vo.NewStreamIDAuto()
-	err = repo.AddStream(circuitID, otherStreamID, &relayConnStateTestConn{})
+	err = repo.AddStream(circuitID, otherStreamID, testConn)
 	if err != nil {
 		t.Fatalf("AddStream failed: %v", err)
 	}
@@ -214,10 +188,16 @@ func TestConnStateRepository_GetStream_NotFound(t *testing.T) {
 }
 
 func TestConnStateRepository_RemoveStream(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 	streamID := vo.NewStreamIDAuto()
-	testConn := &relayConnStateTestConn{}
+	ctrl := NewMockController(t)
+	connClosed := false
+	testConn := Mock[net.Conn](ctrl)
+	When(testConn.Close()).ThenReturn(func() error {
+		connClosed = true
+		return nil
+	}())
 
 	// Add a stream
 	err := repo.AddStream(circuitID, streamID, testConn)
@@ -232,7 +212,7 @@ func TestConnStateRepository_RemoveStream(t *testing.T) {
 	}
 
 	// Verify connection was closed
-	if !testConn.closed {
+	if !connClosed {
 		t.Error("Stream connection should have been closed when removed")
 	}
 
@@ -244,7 +224,7 @@ func TestConnStateRepository_RemoveStream(t *testing.T) {
 }
 
 func TestConnStateRepository_RemoveStream_NonExistent(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 	streamID := vo.NewStreamIDAuto()
 
@@ -256,10 +236,11 @@ func TestConnStateRepository_RemoveStream_NonExistent(t *testing.T) {
 }
 
 func TestConnStateRepository_RemoveStream_CleansUpEmptyCircuit(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 	streamID := vo.NewStreamIDAuto()
-	testConn := &relayConnStateTestConn{}
+	ctrl := NewMockController(t)
+	testConn := Mock[net.Conn](ctrl)
 
 	// Add a single stream
 	err := repo.AddStream(circuitID, streamID, testConn)
@@ -281,20 +262,33 @@ func TestConnStateRepository_RemoveStream_CleansUpEmptyCircuit(t *testing.T) {
 }
 
 func TestConnStateRepository_DestroyAllStreams(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
+	ctrl := NewMockController(t)
 
-	// Add multiple streams
-	testConns := []*relayConnStateTestConn{
-		{},
-		{},
-		{},
+	var testConnStates []struct {
+		conn   net.Conn
+		closed bool
+	}
+	for i := 0; i < 3; i++ {
+		testConnState := struct {
+			conn   net.Conn
+			closed bool
+		}{
+			conn:   Mock[net.Conn](ctrl),
+			closed: false,
+		}
+		When(testConnState.conn.Close()).ThenReturn(func() error {
+			testConnState.closed = true
+			return nil
+		}())
+		testConnStates = append(testConnStates, testConnState)
 	}
 
-	streamIDs := make([]vo.StreamID, len(testConns))
-	for i, conn := range testConns {
+	streamIDs := make([]vo.StreamID, len(testConnStates))
+	for i, testConnState := range testConnStates {
 		streamIDs[i] = vo.NewStreamIDAuto()
-		err := repo.AddStream(circuitID, streamIDs[i], conn)
+		err := repo.AddStream(circuitID, streamIDs[i], testConnState.conn)
 		if err != nil {
 			t.Fatalf("AddStream %d failed: %v", i, err)
 		}
@@ -304,14 +298,14 @@ func TestConnStateRepository_DestroyAllStreams(t *testing.T) {
 	repo.DestroyAllStreams(circuitID)
 
 	// Verify all connections were closed
-	for i, conn := range testConns {
-		if !conn.closed {
+	for i, testConnState := range testConnStates {
+		if !testConnState.closed {
 			t.Errorf("Stream %d connection should have been closed", i)
 		}
 	}
 
 	// Verify no streams can be found
-	for i := range testConns {
+	for i := range testConnStates {
 		_, err := repo.GetStream(circuitID, streamIDs[i])
 		if err != repository.ErrNotFound {
 			t.Errorf("Expected ErrNotFound for stream %d after DestroyAllStreams, got: %v", i, err)
@@ -320,7 +314,7 @@ func TestConnStateRepository_DestroyAllStreams(t *testing.T) {
 }
 
 func TestConnStateRepository_DestroyAllStreams_NonExistent(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 
 	// Destroying streams for non-existent circuit should not panic
@@ -328,16 +322,18 @@ func TestConnStateRepository_DestroyAllStreams_NonExistent(t *testing.T) {
 }
 
 func TestConnStateRepository_MultipleStreamsPerCircuit(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
+
+	ctrl := NewMockController(t)
 
 	// Add multiple streams
 	numStreams := 5
-	testConns := make([]*relayConnStateTestConn, numStreams)
+	testConns := make([]net.Conn, numStreams)
 
 	streamIDs := make([]vo.StreamID, numStreams)
 	for i := 0; i < numStreams; i++ {
-		testConns[i] = &relayConnStateTestConn{}
+		testConns[i] = Mock[net.Conn](ctrl)
 		streamIDs[i] = vo.NewStreamIDAuto()
 		err := repo.AddStream(circuitID, streamIDs[i], testConns[i])
 		if err != nil {
@@ -384,7 +380,7 @@ func TestConnStateRepository_MultipleStreamsPerCircuit(t *testing.T) {
 func TestConnStateRepository_GarbageCollection(t *testing.T) {
 	// Use a TTL that's longer than minimum GC interval (1 second)
 	ttl := 2 * time.Second
-	repo := NewConnStateRepository(ttl)
+	repo := repoImpl.NewConnStateRepository(ttl)
 	circuitID := vo.NewCircuitID()
 
 	// Create and add a test connection state
@@ -416,7 +412,7 @@ func TestConnStateRepository_GarbageCollection(t *testing.T) {
 }
 
 func TestConnStateRepository_TouchUpdatesLastUsed(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 
 	// Create and add a test connection state
@@ -447,8 +443,9 @@ func TestConnStateRepository_TouchUpdatesLastUsed(t *testing.T) {
 }
 
 func TestConnStateRepository_ConcurrentAccess(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
+	ctrl := NewMockController(t)
 
 	// Create and add a test connection state
 	key := vo.AESKey{}
@@ -477,7 +474,7 @@ func TestConnStateRepository_ConcurrentAccess(t *testing.T) {
 	go func() {
 		for i := 0; i < 100; i++ {
 			streamID := vo.NewStreamIDAuto()
-			conn := &relayConnStateTestConn{}
+			conn := Mock[net.Conn](ctrl)
 			repo.AddStream(circuitID, streamID, conn)
 			repo.GetStream(circuitID, streamID)
 			repo.RemoveStream(circuitID, streamID)
@@ -497,7 +494,7 @@ func TestConnStateRepository_ConcurrentAccess(t *testing.T) {
 }
 
 func TestConnStateRepository_NilConnHandling(t *testing.T) {
-	repo := NewConnStateRepository(time.Minute)
+	repo := repoImpl.NewConnStateRepository(time.Minute)
 	circuitID := vo.NewCircuitID()
 	streamID := vo.NewStreamIDAuto()
 

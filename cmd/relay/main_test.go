@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ovechkin-dm/mockio/v2/matchers"
-	. "github.com/ovechkin-dm/mockio/v2/mock"
 	"ikedadada/go-ptor/shared/domain/aggregate"
 	"ikedadada/go-ptor/shared/domain/entity"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
+
+	"github.com/ovechkin-dm/mockio/v2/matchers"
+	. "github.com/ovechkin-dm/mockio/v2/mock"
 )
 
 func TestDefaultTTLFromEnv(t *testing.T) {
@@ -62,7 +63,7 @@ func TestSendCellWritesFixedPacket(t *testing.T) {
 	d := service.NewTCPCircuitBuildService()
 	cid := vo.NewCircuitID()
 	payload := []byte("hello")
-	streamID, _ := vo.StreamIDFrom(0)
+	streamID := vo.NewStreamIDControl()
 	cell, err := aggregate.NewRelayCell(vo.CmdExtend, cid, streamID, payload)
 	if err != nil {
 		t.Fatalf("NewRelayCell error: %v", err)

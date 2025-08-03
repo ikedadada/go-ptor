@@ -15,111 +15,120 @@ import (
 )
 
 func TestHandleDestroyUseCase_Destroy(t *testing.T) {
-	ctrl := NewMockController(t)
-
-	mockRepo := Mock[repository.ConnStateRepository](ctrl)
-	mockSender := Mock[service.CellSenderService](ctrl)
-
-	uc := usecase.NewHandleDestroyUseCase(mockRepo, mockSender)
-
-	// Setup test data
-	key, _ := vo.NewAESKey()
-	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-
-	// Create mock connection (exit node - no down connection)
-	up1, _ := net.Pipe()
-	st := entity.NewConnState(key, nonce, up1, nil)
-
-	// Configure mocks for exit node scenario (st.Down() == nil)
-	WhenSingle(mockRepo.Delete(cid)).ThenReturn(nil)
-
-	// Execute
-	err := uc.Destroy(st, cid)
-
-	// Verify
-	if err != nil {
-		t.Fatalf("Destroy failed: %v", err)
+	type destroyTestMocks struct {
+		repo   repository.ConnStateRepository
+		sender service.CellSenderService
 	}
 
-	// Verify mock interactions
-	Verify(mockRepo, Times(1)).Delete(Any[vo.CircuitID]())
-	// Verify ForwardCell is not called for exit nodes
-	Verify(mockSender, Times(0)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
-
-	st.Up().Close()
-}
-
-func TestHandleDestroyUseCase_DestroyWithDownstream(t *testing.T) {
-	ctrl := NewMockController(t)
-
-	mockRepo := Mock[repository.ConnStateRepository](ctrl)
-	mockSender := Mock[service.CellSenderService](ctrl)
-
-	uc := usecase.NewHandleDestroyUseCase(mockRepo, mockSender)
-
-	// Setup test data
-	key, _ := vo.NewAESKey()
-	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-
-	// Create mock connections (middle relay - has down connection)
-	up1, _ := net.Pipe()
-	down1, _ := net.Pipe()
-	st := entity.NewConnState(key, nonce, up1, down1)
-
-	// Configure mocks for middle relay scenario (st.Down() != nil)
-	WhenSingle(mockSender.ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())).ThenReturn(nil)
-	WhenSingle(mockRepo.Delete(cid)).ThenReturn(nil)
-
-	// Execute
-	err := uc.Destroy(st, cid)
-
-	// Verify
-	if err != nil {
-		t.Fatalf("Destroy failed: %v", err)
+	type destroyConnStateSetup struct {
+		hasDown bool
 	}
 
-	// Verify mock interactions
-	Verify(mockSender, Times(1)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
-	Verify(mockRepo, Times(1)).Delete(Any[vo.CircuitID]())
-
-	st.Up().Close()
-	st.Down().Close()
-}
-
-// Test repository delete failure
-func TestHandleDestroyUseCase_RepositoryDeleteFailure(t *testing.T) {
-	ctrl := NewMockController(t)
-
-	mockRepo := Mock[repository.ConnStateRepository](ctrl)
-	mockSender := Mock[service.CellSenderService](ctrl)
-
-	uc := usecase.NewHandleDestroyUseCase(mockRepo, mockSender)
-
-	// Setup test data
-	key, _ := vo.NewAESKey()
-	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-
-	// Create mock connection (exit node)
-	up1, _ := net.Pipe()
-	st := entity.NewConnState(key, nonce, up1, nil)
-
-	// Configure mocks - the destroy usecase ignores delete errors and always returns nil
-	WhenSingle(mockRepo.Delete(cid)).ThenReturn(errors.New("delete failed"))
-
-	// Execute
-	err := uc.Destroy(st, cid)
-
-	// Verify - destroy always returns nil, even if delete fails
-	if err != nil {
-		t.Fatalf("Destroy should not fail even if delete fails: %v", err)
+	type destroyExpectedCalls struct {
+		delete      int
+		forwardCell int
+	}
+	tests := []struct {
+		name          string
+		setupConn     func() (*entity.ConnState, destroyConnStateSetup)
+		setupMocks    func(mocks destroyTestMocks, cid vo.CircuitID, setup destroyConnStateSetup)
+		expectError   bool
+		expectedCalls destroyExpectedCalls
+	}{
+		{
+			name: "Exit node scenario",
+			setupConn: func() (*entity.ConnState, destroyConnStateSetup) {
+				key, _ := vo.NewAESKey()
+				nonce, _ := vo.NewNonce()
+				up1, _ := net.Pipe()
+				st := entity.NewConnState(key, nonce, up1, nil)
+				return st, destroyConnStateSetup{hasDown: false}
+			},
+			setupMocks: func(mocks destroyTestMocks, cid vo.CircuitID, setup destroyConnStateSetup) {
+				WhenSingle(mocks.repo.Delete(cid)).ThenReturn(nil)
+			},
+			expectError:   false,
+			expectedCalls: destroyExpectedCalls{delete: 1, forwardCell: 0},
+		},
+		{
+			name: "Middle relay scenario",
+			setupConn: func() (*entity.ConnState, destroyConnStateSetup) {
+				key, _ := vo.NewAESKey()
+				nonce, _ := vo.NewNonce()
+				up1, _ := net.Pipe()
+				down1, _ := net.Pipe()
+				st := entity.NewConnState(key, nonce, up1, down1)
+				return st, destroyConnStateSetup{hasDown: true}
+			},
+			setupMocks: func(mocks destroyTestMocks, cid vo.CircuitID, setup destroyConnStateSetup) {
+				WhenSingle(mocks.sender.ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())).ThenReturn(nil)
+				WhenSingle(mocks.repo.Delete(cid)).ThenReturn(nil)
+			},
+			expectError:   false,
+			expectedCalls: destroyExpectedCalls{delete: 1, forwardCell: 1},
+		},
+		{
+			name: "Repository delete failure",
+			setupConn: func() (*entity.ConnState, destroyConnStateSetup) {
+				key, _ := vo.NewAESKey()
+				nonce, _ := vo.NewNonce()
+				up1, _ := net.Pipe()
+				st := entity.NewConnState(key, nonce, up1, nil)
+				return st, destroyConnStateSetup{hasDown: false}
+			},
+			setupMocks: func(mocks destroyTestMocks, cid vo.CircuitID, setup destroyConnStateSetup) {
+				// Destroy usecase ignores delete errors and always returns nil
+				WhenSingle(mocks.repo.Delete(cid)).ThenReturn(errors.New("delete failed"))
+			},
+			expectError:   false,
+			expectedCalls: destroyExpectedCalls{delete: 1, forwardCell: 0},
+		},
 	}
 
-	// Verify mock interactions
-	Verify(mockRepo, Times(1)).Delete(Any[vo.CircuitID]())
-	Verify(mockSender, Times(0)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := NewMockController(t)
 
-	st.Up().Close()
+			// Create mocks
+			mocks := destroyTestMocks{
+				repo:   Mock[repository.ConnStateRepository](ctrl),
+				sender: Mock[service.CellSenderService](ctrl),
+			}
+
+			// Setup connection state
+			st, connSetup := tt.setupConn()
+			defer func() {
+				if st.Up() != nil {
+					st.Up().Close()
+				}
+				if st.Down() != nil {
+					st.Down().Close()
+				}
+			}()
+
+			cid := vo.NewCircuitID()
+
+			// Setup mock behaviors
+			tt.setupMocks(mocks, cid, connSetup)
+
+			// Create usecase and execute
+			uc := usecase.NewHandleDestroyUseCase(mocks.repo, mocks.sender)
+			err := uc.Destroy(st, cid)
+
+			// Verify error expectations
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+			}
+
+			// Verify mock interactions using parameterized call counts
+			Verify(mocks.repo, Times(tt.expectedCalls.delete)).Delete(Any[vo.CircuitID]())
+			Verify(mocks.sender, Times(tt.expectedCalls.forwardCell)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
+		})
+	}
 }
