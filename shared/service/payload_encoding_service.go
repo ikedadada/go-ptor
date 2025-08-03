@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"encoding/gob"
+	vo "ikedadada/go-ptor/shared/domain/value_object"
 )
 
 // PayloadEncodingService handles encoding and decoding of cell payloads
@@ -32,7 +33,7 @@ type CreatedPayloadDTO struct {
 
 // BeginPayloadDTO specifies the target address for a new stream.
 type BeginPayloadDTO struct {
-	StreamID uint16
+	StreamID vo.StreamID
 	Target   string
 }
 
@@ -43,7 +44,7 @@ type ConnectPayloadDTO struct {
 
 // DataPayloadDTO represents application data flowing through a circuit.
 type DataPayloadDTO struct {
-	StreamID uint16
+	StreamID vo.StreamID
 	Data     []byte
 }
 
