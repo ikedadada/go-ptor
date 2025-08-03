@@ -8,279 +8,82 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ovechkin-dm/mockio/v2/matchers"
+	. "github.com/ovechkin-dm/mockio/v2/mock"
 	"ikedadada/go-ptor/cmd/client/usecase"
-	"ikedadada/go-ptor/shared/domain/entity"
 	"ikedadada/go-ptor/shared/service"
 )
 
-// Mock connection for testing
-type mockConnection struct {
+// Helper struct to track connection state for tests
+type connState struct {
 	readData  []byte
 	writeData bytes.Buffer
 	mu        sync.Mutex
 	closed    bool
 }
 
-func (m *mockConnection) Read(b []byte) (int, error) {
-	if len(m.readData) == 0 {
-		return 0, io.EOF
-	}
-	n := copy(b, m.readData)
-	m.readData = m.readData[n:]
-	return n, nil
-}
+// Helper function to create connection mock with stateful behavior
+func createMockConnection(ctrl *matchers.MockController, readData []byte) (net.Conn, *connState) {
+	mockConn := Mock[net.Conn](ctrl)
+	state := &connState{readData: make([]byte, len(readData))}
+	copy(state.readData, readData) // Make a copy to avoid modifying original
 
-func (m *mockConnection) Write(b []byte) (int, error) {
-	return m.writeData.Write(b)
-}
-
-func (m *mockConnection) Close() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.closed = true
-	return nil
-}
-
-func (m *mockConnection) LocalAddr() net.Addr {
-	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1080}
-}
-
-func (m *mockConnection) RemoteAddr() net.Addr {
-	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}
-}
-
-func (m *mockConnection) SetDeadline(t time.Time) error {
-	return nil
-}
-
-func (m *mockConnection) SetReadDeadline(t time.Time) error {
-	return nil
-}
-
-func (m *mockConnection) SetWriteDeadline(t time.Time) error {
-	return nil
-}
-
-// Mock UseCase implementations
-type mockBuildCircuitUseCase struct {
-	circuitID string
-	err       error
-}
-
-func (m *mockBuildCircuitUseCase) Handle(in usecase.BuildCircuitInput) (usecase.BuildCircuitOutput, error) {
-	if m.err != nil {
-		return usecase.BuildCircuitOutput{}, m.err
-	}
-	return usecase.BuildCircuitOutput{CircuitID: m.circuitID}, nil
-}
-
-type mockResolveTargetAddressUseCase struct {
-	dialAddress string
-	exitRelayID string
-	err         error
-}
-
-func (m *mockResolveTargetAddressUseCase) Handle(in usecase.ResolveTargetAddressInput) (usecase.ResolveTargetAddressOutput, error) {
-	if m.err != nil {
-		return usecase.ResolveTargetAddressOutput{}, m.err
-	}
-	return usecase.ResolveTargetAddressOutput{
-		DialAddress: m.dialAddress,
-		ExitRelayID: m.exitRelayID,
-	}, nil
-}
-
-type mockSendConnectUseCase struct {
-	err error
-}
-
-func (m *mockSendConnectUseCase) Handle(in usecase.SendConnectInput) (usecase.SendConnectOutput, error) {
-	if m.err != nil {
-		return usecase.SendConnectOutput{}, m.err
-	}
-	return usecase.SendConnectOutput{Sent: true}, nil
-}
-
-type mockOpenStreamUseCase struct {
-	streamID int
-	err      error
-}
-
-func (m *mockOpenStreamUseCase) Handle(in usecase.OpenStreamInput) (usecase.OpenStreamOutput, error) {
-	if m.err != nil {
-		return usecase.OpenStreamOutput{}, m.err
-	}
-	return usecase.OpenStreamOutput{StreamID: uint16(m.streamID)}, nil
-}
-
-type mockSendDataUseCase struct {
-	err error
-}
-
-func (m *mockSendDataUseCase) Handle(in usecase.SendDataInput) (usecase.SendDataOutput, error) {
-	if m.err != nil {
-		return usecase.SendDataOutput{}, m.err
-	}
-	return usecase.SendDataOutput{}, nil
-}
-
-type mockCloseStreamUseCase struct {
-	err error
-}
-
-func (m *mockCloseStreamUseCase) Handle(in usecase.CloseStreamInput) (usecase.CloseStreamOutput, error) {
-	if m.err != nil {
-		return usecase.CloseStreamOutput{}, m.err
-	}
-	return usecase.CloseStreamOutput{}, nil
-}
-
-type mockHandleEndUseCase struct {
-	err error
-}
-
-func (m *mockHandleEndUseCase) Handle(in usecase.HandleEndInput) (usecase.HandleEndOutput, error) {
-	if m.err != nil {
-		return usecase.HandleEndOutput{}, m.err
-	}
-	return usecase.HandleEndOutput{}, nil
-}
-
-type mockReceiveCellUseCase struct {
-	cell    *entity.Cell
-	circuit *entity.Circuit
-	isEOF   bool
-	err     error
-}
-
-func (m *mockReceiveCellUseCase) Handle(in usecase.ReceiveCellInput) (usecase.ReceiveCellOutput, error) {
-	if m.err != nil {
-		return usecase.ReceiveCellOutput{}, m.err
-	}
-	return usecase.ReceiveCellOutput{
-		Cell:    m.cell,
-		Circuit: m.circuit,
-		IsEOF:   m.isEOF,
-	}, nil
-}
-
-type mockDecryptCellDataUseCase struct {
-	cellData    *usecase.DecryptedCellData
-	shouldClose bool
-	err         error
-}
-
-func (m *mockDecryptCellDataUseCase) Handle(in usecase.DecryptCellDataInput) (usecase.DecryptCellDataOutput, error) {
-	if m.err != nil {
-		return usecase.DecryptCellDataOutput{}, m.err
-	}
-	return usecase.DecryptCellDataOutput{
-		CellData:    m.cellData,
-		ShouldClose: m.shouldClose,
-	}, nil
-}
-
-type mockPayloadEncodingService struct {
-	beginPayload []byte
-	err          error
-}
-
-func (m *mockPayloadEncodingService) EncodeExtendPayload(dto *service.ExtendPayloadDTO) ([]byte, error) {
-	return nil, nil
-}
-
-func (m *mockPayloadEncodingService) DecodeExtendPayload(data []byte) (*service.ExtendPayloadDTO, error) {
-	return nil, nil
-}
-
-func (m *mockPayloadEncodingService) EncodeCreatedPayload(dto *service.CreatedPayloadDTO) ([]byte, error) {
-	return nil, nil
-}
-
-func (m *mockPayloadEncodingService) DecodeCreatedPayload(data []byte) (*service.CreatedPayloadDTO, error) {
-	return nil, nil
-}
-
-func (m *mockPayloadEncodingService) EncodeBeginPayload(dto *service.BeginPayloadDTO) ([]byte, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.beginPayload, nil
-}
-
-func (m *mockPayloadEncodingService) DecodeBeginPayload(data []byte) (*service.BeginPayloadDTO, error) {
-	return nil, nil
-}
-
-func (m *mockPayloadEncodingService) EncodeConnectPayload(dto *service.ConnectPayloadDTO) ([]byte, error) {
-	return nil, nil
-}
-
-func (m *mockPayloadEncodingService) DecodeConnectPayload(data []byte) (*service.ConnectPayloadDTO, error) {
-	return nil, nil
-}
-
-func (m *mockPayloadEncodingService) EncodeDataPayload(dto *service.DataPayloadDTO) ([]byte, error) {
-	return nil, nil
-}
-
-func (m *mockPayloadEncodingService) DecodeDataPayload(data []byte) (*service.DataPayloadDTO, error) {
-	return nil, nil
-}
-
-type mockStreamManagerService struct {
-	mu      sync.Mutex
-	streams map[uint16]net.Conn
-}
-
-func (m *mockStreamManagerService) Add(id uint16, conn net.Conn) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.streams == nil {
-		m.streams = make(map[uint16]net.Conn)
-	}
-	m.streams[id] = conn
-}
-
-func (m *mockStreamManagerService) Get(id uint16) (net.Conn, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	conn, ok := m.streams[id]
-	return conn, ok
-}
-
-func (m *mockStreamManagerService) Remove(id uint16) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.streams != nil {
-		delete(m.streams, id)
-	}
-}
-
-func (m *mockStreamManagerService) CloseAll() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.streams != nil {
-		for _, conn := range m.streams {
-			conn.Close()
+	// Set up Read behavior to consume data progressively
+	WhenDouble(mockConn.Read(Any[[]byte]())).ThenAnswer(func(args []any) (int, error) {
+		b := args[0].([]byte)
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		if len(state.readData) == 0 {
+			return 0, io.EOF
 		}
-		m.streams = make(map[uint16]net.Conn)
-	}
+		n := copy(b, state.readData)
+		state.readData = state.readData[n:]
+		return n, nil
+	})
+
+	// Set up Write behavior to capture data
+	WhenDouble(mockConn.Write(Any[[]byte]())).ThenAnswer(func(args []any) (int, error) {
+		b := args[0].([]byte)
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		return state.writeData.Write(b)
+	})
+
+	// Set up Close behavior
+	WhenSingle(mockConn.Close()).ThenAnswer(func(args []any) error {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		state.closed = true
+		return nil
+	})
+
+	// Set up address methods
+	WhenSingle(mockConn.LocalAddr()).ThenReturn(&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1080})
+	WhenSingle(mockConn.RemoteAddr()).ThenReturn(&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345})
+
+	// Set up deadline methods
+	WhenSingle(mockConn.SetDeadline(Any[time.Time]())).ThenReturn(nil)
+	WhenSingle(mockConn.SetReadDeadline(Any[time.Time]())).ThenReturn(nil)
+	WhenSingle(mockConn.SetWriteDeadline(Any[time.Time]())).ThenReturn(nil)
+
+	return mockConn, state
 }
 
 func TestSOCKS5Controller_HandleConnection_InvalidSOCKS5Request(t *testing.T) {
-	// Create mock connection with invalid SOCKS5 data
-	conn := &mockConnection{
-		readData: []byte{0x04}, // Invalid SOCKS version (should be 0x05)
-	}
+	// Create controller with Mockio v2 mocks
+	ctrl := NewMockController(t)
+	conn, state := createMockConnection(ctrl, []byte{0x04}) // Invalid SOCKS version (should be 0x05)
+	resolveUC := Mock[usecase.ResolveTargetAddressUseCase](ctrl)
+	payloadService := Mock[service.PayloadEncodingService](ctrl)
+	streamManager := Mock[service.StreamManagerService](ctrl)
 
-	// Create controller with minimal mocks
+	// Create controller with minimal mocks (UseCases won't be called due to early error)
 	controller := NewSOCKS5Controller(
 		nil, nil, nil, nil, nil, nil, // UseCases won't be called due to early error
-		&mockResolveTargetAddressUseCase{},
+		resolveUC,
 		nil, nil,
-		&mockPayloadEncodingService{},
-		&mockStreamManagerService{},
+		payloadService,
+		streamManager,
 		3,
 	)
 
@@ -288,9 +91,9 @@ func TestSOCKS5Controller_HandleConnection_InvalidSOCKS5Request(t *testing.T) {
 	controller.HandleConnection(conn)
 
 	// Assertions
-	conn.mu.Lock()
-	closed := conn.closed
-	conn.mu.Unlock()
+	state.mu.Lock()
+	closed := state.closed
+	state.mu.Unlock()
 
 	if !closed {
 		t.Error("Expected connection to be closed after invalid SOCKS5 request")
@@ -309,31 +112,46 @@ func TestSOCKS5Controller_HandleConnection_SOCKS5ProtocolParsing(t *testing.T) {
 		0x00, 0x50, // Port 80
 	}
 
-	conn := &mockConnection{
-		readData: socks5Data,
-	}
+	// Create Mockio v2 mocks
+	ctrl := NewMockController(t)
+	conn, state := createMockConnection(ctrl, socks5Data)
+	resolveUC := Mock[usecase.ResolveTargetAddressUseCase](ctrl)
+	buildUC := Mock[usecase.BuildCircuitUseCase](ctrl)
+	sendConnectUC := Mock[usecase.SendConnectUseCase](ctrl)
+	openStreamUC := Mock[usecase.OpenStreamUseCase](ctrl)
+	closeStreamUC := Mock[usecase.CloseStreamUseCase](ctrl)
+	sendDataUC := Mock[usecase.SendDataUseCase](ctrl)
+	handleEndUC := Mock[usecase.HandleEndUseCase](ctrl)
+	receiveCellUC := Mock[usecase.ReceiveCellUseCase](ctrl)
+	decryptCellUC := Mock[usecase.DecryptCellDataUseCase](ctrl)
+	payloadService := Mock[service.PayloadEncodingService](ctrl)
+	streamManager := Mock[service.StreamManagerService](ctrl)
 
-	// Create mocks
-	resolveUC := &mockResolveTargetAddressUseCase{
-		dialAddress: "google.com:80",
-		exitRelayID: "",
-	}
-	buildUC := &mockBuildCircuitUseCase{
-		circuitID: "test-circuit-123",
-	}
+	// Setup mock behaviors
+	WhenDouble(resolveUC.Handle(Any[usecase.ResolveTargetAddressInput]())).ThenReturn(usecase.ResolveTargetAddressOutput{
+		DialAddress: "google.com:80",
+		ExitRelayID: "",
+	}, nil)
+	WhenDouble(buildUC.Handle(Any[usecase.BuildCircuitInput]())).ThenReturn(usecase.BuildCircuitOutput{
+		CircuitID: "test-circuit-123",
+	}, nil)
+	WhenDouble(sendConnectUC.Handle(Any[usecase.SendConnectInput]())).ThenReturn(usecase.SendConnectOutput{Sent: true}, nil)
+	WhenDouble(openStreamUC.Handle(Any[usecase.OpenStreamInput]())).ThenReturn(usecase.OpenStreamOutput{StreamID: uint16(1)}, nil)
+	WhenDouble(receiveCellUC.Handle(Any[usecase.ReceiveCellInput]())).ThenReturn(usecase.ReceiveCellOutput{IsEOF: true}, nil)
+	WhenDouble(payloadService.EncodeBeginPayload(Any[*service.BeginPayloadDTO]())).ThenReturn([]byte("begin-payload"), nil)
 
 	controller := NewSOCKS5Controller(
 		buildUC,
-		&mockSendConnectUseCase{},
-		&mockOpenStreamUseCase{streamID: 1},
-		&mockCloseStreamUseCase{},
-		&mockSendDataUseCase{},
-		&mockHandleEndUseCase{},
+		sendConnectUC,
+		openStreamUC,
+		closeStreamUC,
+		sendDataUC,
+		handleEndUC,
 		resolveUC,
-		&mockReceiveCellUseCase{isEOF: true}, // Will cause recvLoop to exit immediately
-		&mockDecryptCellDataUseCase{},
-		&mockPayloadEncodingService{beginPayload: []byte("begin-payload")},
-		&mockStreamManagerService{},
+		receiveCellUC, // Will cause recvLoop to exit immediately
+		decryptCellUC,
+		payloadService,
+		streamManager,
 		3,
 	)
 
@@ -341,16 +159,16 @@ func TestSOCKS5Controller_HandleConnection_SOCKS5ProtocolParsing(t *testing.T) {
 	controller.HandleConnection(conn)
 
 	// Assertions
-	conn.mu.Lock()
-	closed := conn.closed
-	conn.mu.Unlock()
+	state.mu.Lock()
+	closed := state.closed
+	writtenData := state.writeData.Bytes()
+	state.mu.Unlock()
 
 	if !closed {
 		t.Error("Expected connection to be closed after handling")
 	}
 
 	// Check that handshake response was written
-	writtenData := conn.writeData.Bytes()
 	if len(writtenData) < 2 {
 		t.Error("Expected handshake response to be written")
 	}
@@ -370,30 +188,46 @@ func TestSOCKS5Controller_HandleConnection_IPv4Address(t *testing.T) {
 		0x1f, 0x90, // Port 8080
 	}
 
-	conn := &mockConnection{
-		readData: socks5Data,
-	}
+	// Create Mockio v2 mocks
+	ctrl := NewMockController(t)
+	conn, state := createMockConnection(ctrl, socks5Data)
+	resolveUC := Mock[usecase.ResolveTargetAddressUseCase](ctrl)
+	buildUC := Mock[usecase.BuildCircuitUseCase](ctrl)
+	sendConnectUC := Mock[usecase.SendConnectUseCase](ctrl)
+	openStreamUC := Mock[usecase.OpenStreamUseCase](ctrl)
+	closeStreamUC := Mock[usecase.CloseStreamUseCase](ctrl)
+	sendDataUC := Mock[usecase.SendDataUseCase](ctrl)
+	handleEndUC := Mock[usecase.HandleEndUseCase](ctrl)
+	receiveCellUC := Mock[usecase.ReceiveCellUseCase](ctrl)
+	decryptCellUC := Mock[usecase.DecryptCellDataUseCase](ctrl)
+	payloadService := Mock[service.PayloadEncodingService](ctrl)
+	streamManager := Mock[service.StreamManagerService](ctrl)
 
-	resolveUC := &mockResolveTargetAddressUseCase{
-		dialAddress: "192.168.1.1:8080",
-		exitRelayID: "",
-	}
-	buildUC := &mockBuildCircuitUseCase{
-		circuitID: "test-circuit-456",
-	}
+	// Setup mock behaviors
+	WhenDouble(resolveUC.Handle(Any[usecase.ResolveTargetAddressInput]())).ThenReturn(usecase.ResolveTargetAddressOutput{
+		DialAddress: "192.168.1.1:8080",
+		ExitRelayID: "",
+	}, nil)
+	WhenDouble(buildUC.Handle(Any[usecase.BuildCircuitInput]())).ThenReturn(usecase.BuildCircuitOutput{
+		CircuitID: "test-circuit-456",
+	}, nil)
+	WhenDouble(sendConnectUC.Handle(Any[usecase.SendConnectInput]())).ThenReturn(usecase.SendConnectOutput{Sent: true}, nil)
+	WhenDouble(openStreamUC.Handle(Any[usecase.OpenStreamInput]())).ThenReturn(usecase.OpenStreamOutput{StreamID: uint16(2)}, nil)
+	WhenDouble(receiveCellUC.Handle(Any[usecase.ReceiveCellInput]())).ThenReturn(usecase.ReceiveCellOutput{IsEOF: true}, nil)
+	WhenDouble(payloadService.EncodeBeginPayload(Any[*service.BeginPayloadDTO]())).ThenReturn([]byte("begin-payload"), nil)
 
 	controller := NewSOCKS5Controller(
 		buildUC,
-		&mockSendConnectUseCase{},
-		&mockOpenStreamUseCase{streamID: 2},
-		&mockCloseStreamUseCase{},
-		&mockSendDataUseCase{},
-		&mockHandleEndUseCase{},
+		sendConnectUC,
+		openStreamUC,
+		closeStreamUC,
+		sendDataUC,
+		handleEndUC,
 		resolveUC,
-		&mockReceiveCellUseCase{isEOF: true},
-		&mockDecryptCellDataUseCase{},
-		&mockPayloadEncodingService{beginPayload: []byte("begin-payload")},
-		&mockStreamManagerService{},
+		receiveCellUC,
+		decryptCellUC,
+		payloadService,
+		streamManager,
 		3,
 	)
 
@@ -401,9 +235,9 @@ func TestSOCKS5Controller_HandleConnection_IPv4Address(t *testing.T) {
 	controller.HandleConnection(conn)
 
 	// Assertions
-	conn.mu.Lock()
-	closed := conn.closed
-	conn.mu.Unlock()
+	state.mu.Lock()
+	closed := state.closed
+	state.mu.Unlock()
 
 	if !closed {
 		t.Error("Expected connection to be closed after handling")
@@ -422,30 +256,46 @@ func TestSOCKS5Controller_HandleConnection_HiddenService(t *testing.T) {
 		0x00, 0x50, // Port 80
 	}
 
-	conn := &mockConnection{
-		readData: socks5Data,
-	}
+	// Create Mockio v2 mocks
+	ctrl := NewMockController(t)
+	conn, state := createMockConnection(ctrl, socks5Data)
+	resolveUC := Mock[usecase.ResolveTargetAddressUseCase](ctrl)
+	buildUC := Mock[usecase.BuildCircuitUseCase](ctrl)
+	sendConnectUC := Mock[usecase.SendConnectUseCase](ctrl)
+	openStreamUC := Mock[usecase.OpenStreamUseCase](ctrl)
+	closeStreamUC := Mock[usecase.CloseStreamUseCase](ctrl)
+	sendDataUC := Mock[usecase.SendDataUseCase](ctrl)
+	handleEndUC := Mock[usecase.HandleEndUseCase](ctrl)
+	receiveCellUC := Mock[usecase.ReceiveCellUseCase](ctrl)
+	decryptCellUC := Mock[usecase.DecryptCellDataUseCase](ctrl)
+	payloadService := Mock[service.PayloadEncodingService](ctrl)
+	streamManager := Mock[service.StreamManagerService](ctrl)
 
-	resolveUC := &mockResolveTargetAddressUseCase{
-		dialAddress: "test.ptor:80",
-		exitRelayID: "exit-relay-123", // Hidden service has exit relay ID
-	}
-	buildUC := &mockBuildCircuitUseCase{
-		circuitID: "hidden-circuit-789",
-	}
+	// Setup mock behaviors
+	WhenDouble(resolveUC.Handle(Any[usecase.ResolveTargetAddressInput]())).ThenReturn(usecase.ResolveTargetAddressOutput{
+		DialAddress: "test.ptor:80",
+		ExitRelayID: "exit-relay-123", // Hidden service has exit relay ID
+	}, nil)
+	WhenDouble(buildUC.Handle(Any[usecase.BuildCircuitInput]())).ThenReturn(usecase.BuildCircuitOutput{
+		CircuitID: "hidden-circuit-789",
+	}, nil)
+	WhenDouble(sendConnectUC.Handle(Any[usecase.SendConnectInput]())).ThenReturn(usecase.SendConnectOutput{Sent: true}, nil)
+	WhenDouble(openStreamUC.Handle(Any[usecase.OpenStreamInput]())).ThenReturn(usecase.OpenStreamOutput{StreamID: uint16(3)}, nil)
+	WhenDouble(receiveCellUC.Handle(Any[usecase.ReceiveCellInput]())).ThenReturn(usecase.ReceiveCellOutput{IsEOF: true}, nil)
+	WhenDouble(payloadService.EncodeBeginPayload(Any[*service.BeginPayloadDTO]())).ThenReturn([]byte("begin-payload"), nil)
 
 	controller := NewSOCKS5Controller(
 		buildUC,
-		&mockSendConnectUseCase{}, // This will be called for hidden service
-		&mockOpenStreamUseCase{streamID: 3},
-		&mockCloseStreamUseCase{},
-		&mockSendDataUseCase{},
-		&mockHandleEndUseCase{},
+		sendConnectUC, // This will be called for hidden service
+		openStreamUC,
+		closeStreamUC,
+		sendDataUC,
+		handleEndUC,
 		resolveUC,
-		&mockReceiveCellUseCase{isEOF: true},
-		&mockDecryptCellDataUseCase{},
-		&mockPayloadEncodingService{beginPayload: []byte("begin-payload")},
-		&mockStreamManagerService{},
+		receiveCellUC,
+		decryptCellUC,
+		payloadService,
+		streamManager,
 		3,
 	)
 
@@ -463,9 +313,9 @@ func TestSOCKS5Controller_HandleConnection_HiddenService(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Assertions
-	conn.mu.Lock()
-	closed := conn.closed
-	conn.mu.Unlock()
+	state.mu.Lock()
+	closed := state.closed
+	state.mu.Unlock()
 
 	if !closed {
 		t.Error("Expected connection to be closed after handling")
@@ -481,16 +331,19 @@ func TestSOCKS5Controller_HandleConnection_UnsupportedAddressType(t *testing.T) 
 		0x05, 0x01, 0x00, 0x05, // Version 5, CONNECT, reserved, unsupported type (0x05)
 	}
 
-	conn := &mockConnection{
-		readData: socks5Data,
-	}
+	// Create controller with Mockio v2 mocks
+	ctrl := NewMockController(t)
+	conn, state := createMockConnection(ctrl, socks5Data)
+	resolveUC := Mock[usecase.ResolveTargetAddressUseCase](ctrl)
+	payloadService := Mock[service.PayloadEncodingService](ctrl)
+	streamManager := Mock[service.StreamManagerService](ctrl)
 
 	controller := NewSOCKS5Controller(
 		nil, nil, nil, nil, nil, nil, // UseCases won't be called due to parsing error
-		&mockResolveTargetAddressUseCase{},
+		resolveUC,
 		nil, nil,
-		&mockPayloadEncodingService{},
-		&mockStreamManagerService{},
+		payloadService,
+		streamManager,
 		3,
 	)
 
@@ -498,9 +351,9 @@ func TestSOCKS5Controller_HandleConnection_UnsupportedAddressType(t *testing.T) 
 	controller.HandleConnection(conn)
 
 	// Assertions
-	conn.mu.Lock()
-	closed := conn.closed
-	conn.mu.Unlock()
+	state.mu.Lock()
+	closed := state.closed
+	state.mu.Unlock()
 
 	if !closed {
 		t.Error("Expected connection to be closed after unsupported address type")
@@ -518,16 +371,19 @@ func TestSOCKS5Controller_HandleConnection_UnsupportedCommand(t *testing.T) {
 		0x00, 0x50, // Port 80
 	}
 
-	conn := &mockConnection{
-		readData: socks5Data,
-	}
+	// Create controller with Mockio v2 mocks
+	ctrl := NewMockController(t)
+	conn, state := createMockConnection(ctrl, socks5Data)
+	resolveUC := Mock[usecase.ResolveTargetAddressUseCase](ctrl)
+	payloadService := Mock[service.PayloadEncodingService](ctrl)
+	streamManager := Mock[service.StreamManagerService](ctrl)
 
 	controller := NewSOCKS5Controller(
 		nil, nil, nil, nil, nil, nil, // UseCases won't be called due to unsupported command
-		&mockResolveTargetAddressUseCase{},
+		resolveUC,
 		nil, nil,
-		&mockPayloadEncodingService{},
-		&mockStreamManagerService{},
+		payloadService,
+		streamManager,
 		3,
 	)
 
@@ -535,9 +391,9 @@ func TestSOCKS5Controller_HandleConnection_UnsupportedCommand(t *testing.T) {
 	controller.HandleConnection(conn)
 
 	// Assertions
-	conn.mu.Lock()
-	closed := conn.closed
-	conn.mu.Unlock()
+	state.mu.Lock()
+	closed := state.closed
+	state.mu.Unlock()
 
 	if !closed {
 		t.Error("Expected connection to be closed after unsupported command")

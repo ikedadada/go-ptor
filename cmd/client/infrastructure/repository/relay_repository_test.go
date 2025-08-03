@@ -3,10 +3,11 @@ package repository_test
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"encoding/json"
 	"errors"
 	"testing"
 
+	. "github.com/ovechkin-dm/mockio/v2/mock"
+	"ikedadada/go-ptor/cmd/client/infrastructure/http"
 	repoImpl "ikedadada/go-ptor/cmd/client/infrastructure/repository"
 	"ikedadada/go-ptor/shared/domain/entity"
 	"ikedadada/go-ptor/shared/domain/repository"
@@ -36,21 +37,6 @@ func makeTestRelay(status entity.RelayStatus, idStr string) (*entity.Relay, erro
 	return rel, nil
 }
 
-// Mock HTTPClient for testing
-type mockHTTPClient struct {
-	response interface{}
-	err      error
-}
-
-func (m *mockHTTPClient) FetchJSON(url string, result interface{}) error {
-	if m.err != nil {
-		return m.err
-	}
-	// Simulate JSON unmarshaling
-	data, _ := json.Marshal(m.response)
-	return json.Unmarshal(data, result)
-}
-
 func TestRelayRepo_Save_FindByID(t *testing.T) {
 	// Create mock HTTP client that returns empty relays in new array format
 	type relayDTO struct {
@@ -58,9 +44,9 @@ func TestRelayRepo_Save_FindByID(t *testing.T) {
 		Endpoint string `json:"endpoint"`
 		PubKey   string `json:"pubkey"`
 	}
-	mockClient := &mockHTTPClient{
-		response: []relayDTO{},
-	}
+	ctrl := NewMockController(t)
+	mockClient := Mock[http.HTTPClient](ctrl)
+	WhenSingle(mockClient.FetchJSON(Any[string](), Any[interface{}]())).ThenReturn(nil)
 
 	repo, err := repoImpl.NewRelayRepository(mockClient, "http://test.com")
 	if err != nil {
@@ -91,9 +77,9 @@ func TestRelayRepo_FindByID_NotFound(t *testing.T) {
 		Endpoint string `json:"endpoint"`
 		PubKey   string `json:"pubkey"`
 	}
-	mockClient := &mockHTTPClient{
-		response: []relayDTO{},
-	}
+	ctrl := NewMockController(t)
+	mockClient := Mock[http.HTTPClient](ctrl)
+	WhenSingle(mockClient.FetchJSON(Any[string](), Any[interface{}]())).ThenReturn(nil)
 
 	repo, err := repoImpl.NewRelayRepository(mockClient, "http://test.com")
 	if err != nil {
@@ -117,9 +103,9 @@ func TestRelayRepo_AllOnline(t *testing.T) {
 		Endpoint string `json:"endpoint"`
 		PubKey   string `json:"pubkey"`
 	}
-	mockClient := &mockHTTPClient{
-		response: []relayDTO{},
-	}
+	ctrl := NewMockController(t)
+	mockClient := Mock[http.HTTPClient](ctrl)
+	WhenSingle(mockClient.FetchJSON(Any[string](), Any[interface{}]())).ThenReturn(nil)
 
 	repo, err := repoImpl.NewRelayRepository(mockClient, "http://test.com")
 	if err != nil {

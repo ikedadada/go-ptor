@@ -9,76 +9,14 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/ovechkin-dm/mockio/v2/mock"
 	"ikedadada/go-ptor/cmd/client/usecase"
 	"ikedadada/go-ptor/shared/domain/aggregate"
 	"ikedadada/go-ptor/shared/domain/entity"
+	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
 )
-
-type mockRelayRepo struct {
-	online        []*entity.Relay
-	findByIDRelay *entity.Relay
-	err           error
-}
-
-func (m *mockRelayRepo) AllOnline() ([]*entity.Relay, error) {
-	return m.online, m.err
-}
-func (m *mockRelayRepo) FindByID(id vo.RelayID) (*entity.Relay, error) {
-	if m.findByIDRelay != nil && m.findByIDRelay.ID().Equal(id) {
-		return m.findByIDRelay, m.err
-	}
-	for _, r := range m.online {
-		if r.ID().Equal(id) {
-			return r, nil
-		}
-	}
-	return nil, errors.New("not found")
-}
-func (m *mockRelayRepo) Save(_ *entity.Relay) error { return nil }
-
-type mockCircuitRepo struct {
-	saved *entity.Circuit
-	err   error
-}
-
-func (m *mockCircuitRepo) Save(c *entity.Circuit) error {
-	m.saved = c
-	return m.err
-}
-func (m *mockCircuitRepo) Find(_ vo.CircuitID) (*entity.Circuit, error) { return nil, nil }
-func (m *mockCircuitRepo) Delete(_ vo.CircuitID) error                  { return nil }
-func (m *mockCircuitRepo) ListActive() ([]*entity.Circuit, error)       { return nil, nil }
-
-type mockDialer struct {
-	dialCalled    int
-	sendCalled    int
-	createdCalled int
-	destroyCalled int
-}
-
-func (m *mockDialer) ConnectToRelay(string) (net.Conn, error) {
-	m.dialCalled++
-	return dummyConn{}, nil
-}
-func (m *mockDialer) SendExtendCell(net.Conn, *aggregate.RelayCell) error {
-	m.sendCalled++
-	return nil
-}
-func (m *mockDialer) WaitForCreatedResponse(net.Conn) ([]byte, error) {
-	m.createdCalled++
-	kp, _ := ecdh.X25519().GenerateKey(rand.Reader)
-	var pub [32]byte
-	copy(pub[:], kp.PublicKey().Bytes())
-	payloadEncoder := service.NewPayloadEncodingService()
-	b, _ := payloadEncoder.EncodeCreatedPayload(&service.CreatedPayloadDTO{RelayPub: pub})
-	return b, nil
-}
-func (m *mockDialer) TeardownCircuit(net.Conn, vo.CircuitID) error {
-	m.destroyCalled++
-	return nil
-}
 
 type dummyConn struct{}
 
@@ -111,6 +49,13 @@ func TestBuildCircuitUseCase_Handle_Table(t *testing.T) {
 	exitRelay, _ := makeTestRelay("550e8400-e29b-41d4-a716-446655440000")
 	exitRelay.SetOnline()
 
+	// Generate realistic Created payload for WaitForCreatedResponse
+	kp, _ := ecdh.X25519().GenerateKey(rand.Reader)
+	var pub [32]byte
+	copy(pub[:], kp.PublicKey().Bytes())
+	payloadEncoder := service.NewPayloadEncodingService()
+	createdPayload, _ := payloadEncoder.EncodeCreatedPayload(&service.CreatedPayloadDTO{RelayPub: pub})
+
 	tests := []struct {
 		name          string
 		online        []*entity.Relay
@@ -127,11 +72,25 @@ func TestBuildCircuitUseCase_Handle_Table(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rr := &mockRelayRepo{online: tt.online, findByIDRelay: tt.findByIDRelay, err: tt.relayErr}
-			cr := &mockCircuitRepo{err: tt.saveErr}
-			cbSvc := &mockDialer{}
+			ctrl := NewMockController(t)
+			rr := Mock[repository.RelayRepository](ctrl)
+			cr := Mock[repository.CircuitRepository](ctrl)
+			cbSvc := Mock[service.CircuitBuildService](ctrl)
 			cSvc := service.NewCryptoService()
 			peSvc := service.NewPayloadEncodingService()
+
+			// Setup mock behaviors
+			WhenDouble(rr.AllOnline()).ThenReturn(tt.online, tt.relayErr)
+			if tt.findByIDRelay != nil {
+				relayID, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+				WhenDouble(rr.FindByID(relayID)).ThenReturn(tt.findByIDRelay, tt.relayErr)
+			}
+			WhenSingle(cr.Save(Any[*entity.Circuit]())).ThenReturn(tt.saveErr)
+			WhenDouble(cbSvc.ConnectToRelay(Any[string]())).ThenReturn(dummyConn{}, nil)
+			WhenSingle(cbSvc.SendExtendCell(Any[net.Conn](), Any[*aggregate.RelayCell]())).ThenReturn(nil)
+			WhenDouble(cbSvc.WaitForCreatedResponse(Any[net.Conn]())).ThenReturn(createdPayload, nil)
+			WhenSingle(cbSvc.TeardownCircuit(Any[net.Conn](), Any[vo.CircuitID]())).ThenReturn(nil)
+
 			uc := usecase.NewBuildCircuitUseCase(rr, cr, cbSvc, cSvc, peSvc)
 
 			out, err := uc.Handle(usecase.BuildCircuitInput{Hops: tt.hops, ExitRelayID: "550e8400-e29b-41d4-a716-446655440000"})

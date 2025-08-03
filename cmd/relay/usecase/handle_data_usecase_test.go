@@ -1,34 +1,43 @@
 package usecase_test
 
 import (
-	"bytes"
-	"io"
+	"errors"
 	"net"
 	"testing"
-	"time"
 
-	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	. "github.com/ovechkin-dm/mockio/v2/mock"
+
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
+	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
 )
 
 func TestHandleDataUseCase_DataForwardMiddle(t *testing.T) {
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
-	uc := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
+	ctrl := NewMockController(t)
 
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockCrypto := Mock[service.CryptoService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+
+	uc := usecase.NewHandleDataUseCase(mockRepo, mockCrypto, mockSender, mockEncoder)
+
+	// Setup test data
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
-	up1, _ := net.Pipe()
-	down1, down2 := net.Pipe()
+	encryptedData := []byte("encrypted-data")
+	decryptedData := []byte("decrypted-data")
+	dataPayload := []byte("data-payload")
 
+	// Create mock connections (middle relay - has down connection)
+	up1, _ := net.Pipe()
+	down1, _ := net.Pipe()
 	st := entity.NewConnState(key, nonce, up1, down1)
-	csRepo.Add(cid, st)
+
+	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: dataPayload}
 
 	// Mock ensureServeDown function
 	serveDownCalled := false
@@ -36,190 +45,250 @@ func TestHandleDataUseCase_DataForwardMiddle(t *testing.T) {
 		serveDownCalled = true
 	}
 
-	// Create data with one layer of encryption
-	plain := []byte("hello")
-	enc, _ := cSvc.AESSeal(key, nonce, plain)
-	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: 1, Data: enc})
-	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
+	// Mock data payload DTO
+	dataDTO := &service.DataPayloadDTO{StreamID: 1, Data: encryptedData}
+	forwardPayload := []byte("forward-payload")
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- uc.Data(st, cid, cell, ensureServeDown) }()
+	// Configure mocks for middle relay scenario (st.Down() != nil and not hidden)
+	WhenDouble(mockEncoder.DecodeDataPayload(dataPayload)).ThenReturn(dataDTO, nil)
+	WhenDouble(mockCrypto.AESOpen(key, nonce, encryptedData)).ThenReturn(decryptedData, nil)
+	WhenDouble(mockEncoder.EncodeDataPayload(Any[*service.DataPayloadDTO]())).ThenReturn(forwardPayload, nil)
+	WhenSingle(mockSender.ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())).ThenReturn(nil)
 
-	// Should forward decrypted data downstream
-	buf := make([]byte, 528)
-	if _, err := io.ReadFull(down2, buf); err != nil {
-		t.Fatalf("read forward: %v", err)
-	}
-	fwd, err := entity.Decode(buf[16:])
+	// Execute
+	err := uc.Data(st, cid, cell, ensureServeDown)
+
+	// Verify
 	if err != nil {
-		t.Fatalf("decode forward: %v", err)
-	}
-	if fwd.Cmd != vo.CmdData {
-		t.Fatalf("cmd %d", fwd.Cmd)
-	}
-
-	dp, err := peSvc.DecodeDataPayload(fwd.Payload)
-	if err != nil {
-		t.Fatalf("decode payload: %v", err)
-	}
-	if !bytes.Equal(dp.Data, plain) {
-		t.Fatalf("payload mismatch")
+		t.Fatalf("Data failed: %v", err)
 	}
 
 	if !serveDownCalled {
 		t.Errorf("ensureServeDown not called")
 	}
 
-	if err := <-errCh; err != nil {
-		t.Fatalf("data error: %v", err)
-	}
+	// Verify mock interactions
+	Verify(mockEncoder, Times(1)).DecodeDataPayload(dataPayload)
+	Verify(mockCrypto, Times(1)).AESOpen(key, nonce, encryptedData)
+	Verify(mockEncoder, Times(1)).EncodeDataPayload(Any[*service.DataPayloadDTO]())
+	Verify(mockSender, Times(1)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
 
 	st.Up().Close()
 	st.Down().Close()
 }
 
 func TestHandleDataUseCase_DataExit(t *testing.T) {
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
-	uc := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
+	ctrl := NewMockController(t)
 
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockCrypto := Mock[service.CryptoService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+
+	uc := usecase.NewHandleDataUseCase(mockRepo, mockCrypto, mockSender, mockEncoder)
+
+	// Setup test data
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
+	encryptedData := []byte("encrypted-data")
+	decryptedData := []byte("decrypted-data")
+	dataPayload := []byte("data-payload")
+
+	// Create mock connection (exit node - no down connection)
 	up1, _ := net.Pipe()
-
 	st := entity.NewConnState(key, nonce, up1, nil)
-	csRepo.Add(cid, st)
 
-	// Add stream connection
-	sid, _ := vo.StreamIDFrom(1)
-	local1, local2 := net.Pipe()
-	csRepo.AddStream(cid, sid, local1)
+	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: dataPayload}
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
-	// Create encrypted data
-	plain := []byte("hello")
-	enc, _ := cSvc.AESSeal(key, nonce, plain)
-	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid.UInt16(), Data: enc})
-	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
+	// Mock data payload DTO and stream connection
+	sid, _ := vo.StreamIDFrom(1)
+	dataDTO := &service.DataPayloadDTO{StreamID: 1, Data: encryptedData}
+	mockConn := Mock[net.Conn](ctrl)
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- uc.Data(st, cid, cell, ensureServeDown) }()
+	// Configure mocks for exit scenario (st.Down() == nil and not hidden)
+	WhenDouble(mockEncoder.DecodeDataPayload(dataPayload)).ThenReturn(dataDTO, nil)
+	WhenDouble(mockCrypto.AESOpen(key, nonce, encryptedData)).ThenReturn(decryptedData, nil)
+	WhenDouble(mockRepo.GetStream(cid, sid)).ThenReturn(mockConn, nil)
+	WhenDouble(mockConn.Write(decryptedData)).ThenReturn(len(decryptedData), nil)
 
-	// Should write decrypted data to local stream
-	out := make([]byte, len(plain))
-	if _, err := io.ReadFull(local2, out); err != nil {
-		t.Fatalf("read local: %v", err)
-	}
-	if !bytes.Equal(out, plain) {
-		t.Fatalf("payload mismatch: got %q, want %q", out, plain)
+	// Execute
+	err := uc.Data(st, cid, cell, ensureServeDown)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("Data failed: %v", err)
 	}
 
-	if err := <-errCh; err != nil {
-		t.Fatalf("data error: %v", err)
-	}
+	// Verify mock interactions
+	Verify(mockEncoder, Times(1)).DecodeDataPayload(dataPayload)
+	Verify(mockCrypto, Times(1)).AESOpen(key, nonce, encryptedData)
+	Verify(mockRepo, Times(1)).GetStream(cid, sid)
+	Verify(mockConn, Times(1)).Write(decryptedData)
 
 	st.Up().Close()
-	local1.Close()
-	local2.Close()
 }
 
 func TestHandleDataUseCase_DataHidden(t *testing.T) {
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
-	uc := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
+	ctrl := NewMockController(t)
 
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockCrypto := Mock[service.CryptoService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+
+	uc := usecase.NewHandleDataUseCase(mockRepo, mockCrypto, mockSender, mockEncoder)
+
+	// Setup test data
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
-	up1, _ := net.Pipe()
-	down1, down2 := net.Pipe()
+	encryptedData := []byte("encrypted-data")
+	decryptedData := []byte("decrypted-data")
+	dataPayload := []byte("data-payload")
 
-	st := entity.NewConnState(key, nonce, up1, down1)
-	st.SetHidden(true)
-	csRepo.Add(cid, st)
+	// Create mock connections (hidden service)
+	up1, _ := net.Pipe()
+	mockDown := Mock[net.Conn](ctrl)
+	st := entity.NewConnState(key, nonce, up1, mockDown)
+	st.SetHidden(true) // Set as hidden service
+
+	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: dataPayload}
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
-	// Create encrypted data
-	data := []byte("hello")
-	enc, _ := cSvc.AESSeal(key, nonce, data)
-	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: 1, Data: enc})
-	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
+	// Mock data payload DTO
+	dataDTO := &service.DataPayloadDTO{StreamID: 1, Data: encryptedData}
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- uc.Data(st, cid, cell, ensureServeDown) }()
+	// Configure mocks for hidden scenario
+	WhenDouble(mockEncoder.DecodeDataPayload(dataPayload)).ThenReturn(dataDTO, nil)
+	WhenDouble(mockCrypto.AESOpen(key, nonce, encryptedData)).ThenReturn(decryptedData, nil)
+	WhenDouble(mockDown.Write(decryptedData)).ThenReturn(len(decryptedData), nil)
 
-	// Should write decrypted data to downstream connection
-	out := make([]byte, len(data))
-	if _, err := io.ReadFull(down2, out); err != nil {
-		t.Fatalf("read down: %v", err)
-	}
-	if !bytes.Equal(out, data) {
-		t.Fatalf("payload mismatch")
+	// Execute
+	err := uc.Data(st, cid, cell, ensureServeDown)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("Data failed: %v", err)
 	}
 
-	if err := <-errCh; err != nil {
-		t.Fatalf("data error: %v", err)
-	}
+	// Verify mock interactions
+	Verify(mockEncoder, Times(1)).DecodeDataPayload(dataPayload)
+	Verify(mockCrypto, Times(1)).AESOpen(key, nonce, encryptedData)
+	Verify(mockDown, Times(1)).Write(decryptedData)
+	// Verify ForwardCell is NOT called for hidden services
+	Verify(mockSender, Times(0)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
 
-	up1.Close()
-	down1.Close()
-	down2.Close()
+	st.Up().Close()
 }
 
 func TestHandleDataUseCase_DataUpstream(t *testing.T) {
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
-	uc := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
+	ctrl := NewMockController(t)
 
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockCrypto := Mock[service.CryptoService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+
+	uc := usecase.NewHandleDataUseCase(mockRepo, mockCrypto, mockSender, mockEncoder)
+
+	// Setup test data
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
-	up1, up2 := net.Pipe()
-	down1, _ := net.Pipe()
+	invalidData := []byte("invalid encrypted data")
+	dataPayload := []byte("data-payload")
+	upstreamEncrypted := []byte("upstream-encrypted")
+	upstreamPayload := []byte("upstream-payload")
 
+	// Create mock connections (middle relay with down connection)
+	up1, _ := net.Pipe()
+	down1, _ := net.Pipe()
 	st := entity.NewConnState(key, nonce, up1, down1)
-	csRepo.Add(cid, st)
+
+	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: dataPayload}
 
 	// Mock ensureServeDown function
 	ensureServeDown := func(st *entity.ConnState) {}
 
-	// Create data that fails decryption (simulating upstream data)
-	invalidData := []byte("invalid encrypted data")
-	payload, _ := peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: 1, Data: invalidData})
-	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: payload}
+	// Mock data payload DTO
+	dataDTO := &service.DataPayloadDTO{StreamID: 1, Data: invalidData}
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- uc.Data(st, cid, cell, ensureServeDown) }()
+	// Configure mocks for upstream scenario (decryption fails, but has down connection)
+	cryptoError := errors.New("decryption failed")
+	WhenDouble(mockEncoder.DecodeDataPayload(dataPayload)).ThenReturn(dataDTO, nil)
+	WhenDouble(mockCrypto.AESOpen(key, nonce, invalidData)).ThenReturn(nil, cryptoError)
+	WhenDouble(mockCrypto.AESSeal(key, nonce, invalidData)).ThenReturn(upstreamEncrypted, nil)
+	WhenDouble(mockEncoder.EncodeDataPayload(Any[*service.DataPayloadDTO]())).ThenReturn(upstreamPayload, nil)
+	WhenSingle(mockSender.ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())).ThenReturn(nil)
 
-	// Should add encryption layer and forward upstream
-	buf := make([]byte, 16+entity.MaxCellSize)
-	if _, err := io.ReadFull(up2, buf); err != nil {
-		t.Fatalf("read upstream: %v", err)
-	}
+	// Execute
+	err := uc.Data(st, cid, cell, ensureServeDown)
 
-	fwd, err := entity.Decode(buf[16:])
+	// Verify
 	if err != nil {
-		t.Fatalf("decode upstream: %v", err)
-	}
-	if fwd.Cmd != vo.CmdData {
-		t.Fatalf("cmd %d", fwd.Cmd)
+		t.Fatalf("Data failed: %v", err)
 	}
 
-	if err := <-errCh; err != nil {
-		t.Fatalf("data error: %v", err)
-	}
+	// Verify mock interactions
+	Verify(mockEncoder, Times(1)).DecodeDataPayload(dataPayload)
+	Verify(mockCrypto, Times(1)).AESOpen(key, nonce, invalidData)
+	Verify(mockCrypto, Times(1)).AESSeal(key, nonce, invalidData)
+	Verify(mockEncoder, Times(1)).EncodeDataPayload(Any[*service.DataPayloadDTO]())
+	Verify(mockSender, Times(1)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
 
 	st.Up().Close()
 	st.Down().Close()
+}
+
+// Test payload decoding failure
+func TestHandleDataUseCase_PayloadDecodingFailure(t *testing.T) {
+	ctrl := NewMockController(t)
+
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockCrypto := Mock[service.CryptoService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+
+	uc := usecase.NewHandleDataUseCase(mockRepo, mockCrypto, mockSender, mockEncoder)
+
+	// Setup test data
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	cid := vo.NewCircuitID()
+	dataPayload := []byte("invalid-payload")
+
+	// Create mock connection
+	up1, _ := net.Pipe()
+	st := entity.NewConnState(key, nonce, up1, nil)
+
+	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: dataPayload}
+
+	ensureServeDown := func(st *entity.ConnState) {}
+
+	// Configure mocks
+	decodingError := errors.New("payload decoding failed")
+	WhenDouble(mockEncoder.DecodeDataPayload(dataPayload)).ThenReturn(nil, decodingError)
+
+	// Execute
+	err := uc.Data(st, cid, cell, ensureServeDown)
+
+	// Verify error is returned
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !errors.Is(err, decodingError) {
+		t.Fatalf("Expected decoding error, got: %v", err)
+	}
+
+	// Verify interactions
+	Verify(mockEncoder, Times(1)).DecodeDataPayload(dataPayload)
+	Verify(mockCrypto, Times(0)).AESOpen(Any[vo.AESKey](), Any[vo.Nonce](), Any[[]byte]())
+
+	st.Up().Close()
 }

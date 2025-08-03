@@ -1,291 +1,527 @@
 package handler_test
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"io"
+	"errors"
 	"net"
 	"testing"
-	"time"
+
+	. "github.com/ovechkin-dm/mockio/v2/mock"
 
 	"ikedadada/go-ptor/cmd/relay/handler"
-	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
+	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
 )
 
 func TestRelayHandler_HandleCellExtend(t *testing.T) {
-	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-	priv := vo.NewRSAPrivKey(rawKey)
-	repo := repository.NewConnStateRepository(time.Second)
-	crypto := service.NewCryptoService()
-	reader := service.NewCellReaderService()
+	ctrl := NewMockController(t)
 
-	// Create cell sender and usecases
-	cellSender := service.NewCellSenderService()
-	payloadEncoder := service.NewPayloadEncodingService()
-	extendUC := usecase.NewHandleExtendUseCase(priv, repo, crypto, cellSender, payloadEncoder)
-	beginUC := usecase.NewHandleBeginUseCase(repo, crypto, cellSender, payloadEncoder)
-	dataUC := usecase.NewHandleDataUseCase(repo, crypto, cellSender, payloadEncoder)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(repo, cellSender, payloadEncoder)
-	destroyUC := usecase.NewHandleDestroyUseCase(repo, cellSender)
-	connectUC := usecase.NewHandleConnectUseCase(repo, crypto, cellSender, payloadEncoder)
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
 
-	h := handler.NewRelayHandler(repo, reader, cellSender, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
 
-	// Create extend cell
-	_, pub, _ := crypto.X25519Generate()
-	var pubArr [32]byte
-	copy(pubArr[:], pub)
-	payload, _ := payloadEncoder.EncodeExtendPayload(&service.ExtendPayloadDTO{ClientPub: pubArr})
+	// Test data
 	cid := vo.NewCircuitID()
-	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
+	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: []byte("extend-payload")}
+	conn := &net.TCPConn{}
 
-	up1, up2 := net.Pipe()
-	errCh := make(chan error, 1)
-	go func() { errCh <- h.HandleCell(up1, cid, cell) }()
+	// Mock circuit not found (new circuit scenario)
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(nil, repository.ErrNotFound)
 
-	// Should create circuit and send created response
-	hdr := make([]byte, 20)
-	if _, err := io.ReadFull(up2, hdr); err != nil {
-		t.Fatalf("read header: %v", err)
-	}
-	if vo.CellCommand(hdr[16]) != vo.CmdCreated {
-		t.Fatalf("expected created, got %d", hdr[16])
-	}
-	// Read payload
-	l := int(hdr[18])<<8 | int(hdr[19])
-	if l > 0 {
-		payload := make([]byte, l)
-		if _, err := io.ReadFull(up2, payload); err != nil {
-			t.Fatalf("read payload: %v", err)
-		}
-	}
+	// Mock successful extend operation
+	WhenSingle(mockExtendUC.Extend(conn, cid, cell)).ThenReturn(nil)
 
-	if err := <-errCh; err != nil {
-		t.Fatalf("handle cell error: %v", err)
-	}
+	// Execute
+	err := h.HandleCell(conn, cid, cell)
 
-	// Circuit should be created
-	if _, err := repo.Find(cid); err != nil {
-		t.Fatalf("circuit not created: %v", err)
+	// Verify
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	up1.Close()
-	up2.Close()
+	Verify(mockRepo, Times(1)).Find(cid)
+	Verify(mockExtendUC, Times(1)).Extend(conn, cid, cell)
 }
 
 func TestRelayHandler_HandleCellBeginAck(t *testing.T) {
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	crSvc := service.NewCellReaderService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
+	ctrl := NewMockController(t)
 
-	// Create dummy usecases (not used for this test)
-	extendUC := usecase.NewHandleExtendUseCase(nil, csRepo, cSvc, csSvc, peSvc)
-	beginUC := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
-	dataUC := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
-	destroyUC := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
-	connectUC := usecase.NewHandleConnectUseCase(csRepo, cSvc, csSvc, peSvc)
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
 
-	h := handler.NewRelayHandler(csRepo, crSvc, csSvc, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
 
-	// Create state
+	// Test data
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdBeginAck, Version: vo.ProtocolV1}
+	conn := &net.TCPConn{}
+
+	// Create mock connection state
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-	up1, up2 := net.Pipe()
+	upConn := &net.TCPConn{}
+	st := entity.NewConnState(key, nonce, upConn, nil)
 
-	st := entity.NewConnState(key, nonce, up1, nil)
-	csRepo.Add(cid, st)
+	// Mock circuit found
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(st, nil)
 
-	// Create begin ack cell
-	cell := &entity.Cell{Cmd: vo.CmdBeginAck, Version: vo.ProtocolV1}
+	// Mock forwarding cell upstream
+	WhenSingle(mockSender.ForwardCell(st.Up(), cid, cell)).ThenReturn(nil)
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- h.HandleCell(up1, cid, cell) }()
+	// Execute
+	err := h.HandleCell(conn, cid, cell)
 
-	// Should forward cell upstream
-	buf := make([]byte, 16+entity.MaxCellSize)
-	if _, err := io.ReadFull(up2, buf); err != nil {
-		t.Fatalf("read forward: %v", err)
-	}
-	fwd, err := entity.Decode(buf[16:])
+	// Verify
 	if err != nil {
-		t.Fatalf("decode forward: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if fwd.Cmd != vo.CmdBeginAck {
-		t.Fatalf("cmd %d", fwd.Cmd)
-	}
-
-	if err := <-errCh; err != nil {
-		t.Fatalf("handle cell error: %v", err)
-	}
-
-	st.Up().Close()
+	Verify(mockRepo, Times(1)).Find(cid)
+	Verify(mockSender, Times(1)).ForwardCell(st.Up(), cid, cell)
 }
 
 func TestRelayHandler_HandleCellDestroy(t *testing.T) {
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	crSvc := service.NewCellReaderService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
+	ctrl := NewMockController(t)
 
-	// Create dummy usecases (not used for this test)
-	extendUC := usecase.NewHandleExtendUseCase(nil, csRepo, cSvc, csSvc, peSvc)
-	beginUC := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
-	dataUC := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
-	destroyUC := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
-	connectUC := usecase.NewHandleConnectUseCase(csRepo, cSvc, csSvc, peSvc)
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
 
-	h := handler.NewRelayHandler(csRepo, crSvc, csSvc, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
 
-	// Create state
+	// Test data
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdDestroy, Version: vo.ProtocolV1}
+	conn := &net.TCPConn{}
+
+	// Create mock connection state
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-	up1, _ := net.Pipe()
-	down1, down2 := net.Pipe()
+	upConn := &net.TCPConn{}
+	downConn := &net.TCPConn{}
+	st := entity.NewConnState(key, nonce, upConn, downConn)
 
-	st := entity.NewConnState(key, nonce, up1, down1)
-	csRepo.Add(cid, st)
+	// Mock circuit found
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(st, nil)
 
-	// Create destroy cell
-	cell := &entity.Cell{Cmd: vo.CmdDestroy, Version: vo.ProtocolV1}
+	// Mock destroy operation
+	WhenSingle(mockDestroyUC.Destroy(st, cid)).ThenReturn(nil)
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- h.HandleCell(up1, cid, cell) }()
+	// Execute
+	err := h.HandleCell(conn, cid, cell)
 
-	// Should forward destroy cell downstream
-	buf := make([]byte, 528)
-	if _, err := io.ReadFull(down2, buf); err != nil {
-		t.Fatalf("read forward: %v", err)
-	}
-	fwd, err := entity.Decode(buf[16:])
+	// Verify
 	if err != nil {
-		t.Fatalf("decode forward: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if fwd.Cmd != vo.CmdDestroy {
-		t.Fatalf("cmd %d", fwd.Cmd)
-	}
-
-	if err := <-errCh; err != nil {
-		t.Fatalf("handle cell error: %v", err)
-	}
-
-	// Circuit should be deleted
-	if _, err := csRepo.Find(cid); err == nil {
-		t.Errorf("circuit not deleted")
-	}
-
-	st.Up().Close()
-	st.Down().Close()
+	Verify(mockRepo, Times(1)).Find(cid)
+	Verify(mockDestroyUC, Times(1)).Destroy(st, cid)
 }
 
 func TestRelayHandler_HandleCellEndUnknown(t *testing.T) {
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	crSvc := service.NewCellReaderService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
+	ctrl := NewMockController(t)
 
-	// Create dummy usecases (not used for this test)
-	extendUC := usecase.NewHandleExtendUseCase(nil, csRepo, cSvc, csSvc, peSvc)
-	beginUC := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
-	dataUC := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
-	destroyUC := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
-	connectUC := usecase.NewHandleConnectUseCase(csRepo, cSvc, csSvc, peSvc)
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
 
-	h := handler.NewRelayHandler(csRepo, crSvc, csSvc, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
 
-	// Create end cell for unknown circuit
+	// Test data
 	cid := vo.NewCircuitID()
 	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: nil}
+	conn := &net.TCPConn{}
 
-	// Should ignore end for unknown circuit
-	if err := h.HandleCell(nil, cid, cell); err != nil {
+	// Mock circuit not found (unknown circuit scenario)
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(nil, repository.ErrNotFound)
+
+	// Execute - should ignore end for unknown circuit
+	err := h.HandleCell(conn, cid, cell)
+
+	// Verify - no error should be returned, and no usecases should be called
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	Verify(mockRepo, Times(1)).Find(cid)
+	// Verify that no usecases were called since the circuit is unknown and command is End
+	Verify(mockExtendUC, Never()).Extend(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
+	Verify(mockEndStreamUC, Never()).EndStream(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())
 }
 
 func TestRelayHandler_ServeConn(t *testing.T) {
-	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-	priv := vo.NewRSAPrivKey(rawKey)
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	crSvc := service.NewCellReaderService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
+	ctrl := NewMockController(t)
 
-	// Create dummy usecases (not used for this test)
-	extendUC := usecase.NewHandleExtendUseCase(priv, csRepo, cSvc, csSvc, peSvc)
-	beginUC := usecase.NewHandleBeginUseCase(csRepo, cSvc, csSvc, peSvc)
-	dataUC := usecase.NewHandleDataUseCase(csRepo, cSvc, csSvc, peSvc)
-	endStreamUC := usecase.NewHandleEndStreamUseCase(csRepo, csSvc, peSvc)
-	destroyUC := usecase.NewHandleDestroyUseCase(csRepo, csSvc)
-	connectUC := usecase.NewHandleConnectUseCase(csRepo, cSvc, csSvc, peSvc)
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
 
-	h := handler.NewRelayHandler(csRepo, crSvc, csSvc, extendUC, beginUC, dataUC, endStreamUC, destroyUC, connectUC)
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
 
-	// Create pipe connection
-	conn1, conn2 := net.Pipe()
-
-	// Channel to signal goroutine completion
-	done := make(chan struct{})
-
-	// Start serving connection
-	go func() {
-		defer close(done)
-		h.ServeConn(conn1)
-	}()
-
-	// Send extend cell
-	_, pub, _ := cSvc.X25519Generate()
-	var pubArr [32]byte
-	copy(pubArr[:], pub)
-	payload, _ := peSvc.EncodeExtendPayload(&service.ExtendPayloadDTO{ClientPub: pubArr})
+	// Test data
+	conn := &net.TCPConn{}
 	cid := vo.NewCircuitID()
-	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
-	cellData, _ := entity.Encode(*cell)
-	fullCell := append(cid.Bytes(), cellData...)
+	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: []byte("extend-payload")}
 
-	_, err := conn2.Write(fullCell)
+	// Mock reading cells - first return a cell, then EOF to terminate the loop
+	When(mockReader.ReadCell(conn)).ThenReturn(cid, cell, nil).ThenReturn(vo.CircuitID{}, nil, errors.New("EOF"))
+
+	// Mock circuit not found (new extend scenario)
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(nil, repository.ErrNotFound)
+
+	// Mock successful extend operation
+	WhenSingle(mockExtendUC.Extend(conn, cid, cell)).ThenReturn(nil)
+
+	// Execute ServeConn - it should read one cell, handle it, then exit on EOF
+	h.ServeConn(conn)
+
+	// Verify
+	Verify(mockReader, Times(2)).ReadCell(conn)
+	Verify(mockRepo, Times(1)).Find(cid)
+	Verify(mockExtendUC, Times(1)).Extend(conn, cid, cell)
+}
+
+// Additional test cases for different cell commands
+
+func TestRelayHandler_HandleCellBegin(t *testing.T) {
+	ctrl := NewMockController(t)
+
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
+
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
+
+	// Test data
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdBegin, Version: vo.ProtocolV1}
+	conn := &net.TCPConn{}
+
+	// Create mock connection state
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	upConn := &net.TCPConn{}
+	st := entity.NewConnState(key, nonce, upConn, nil)
+
+	// Mock circuit found
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(st, nil)
+
+	// Mock begin operation
+	WhenSingle(mockBeginUC.Begin(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())).ThenReturn(nil)
+
+	// Execute
+	err := h.HandleCell(conn, cid, cell)
+
+	// Verify
 	if err != nil {
-		t.Fatalf("write cell: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
+	Verify(mockRepo, Times(1)).Find(cid)
+	Verify(mockBeginUC, Times(1)).Begin(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())
+}
 
-	// Should receive created response
-	hdr := make([]byte, 20)
-	if _, err := io.ReadFull(conn2, hdr); err != nil {
-		t.Fatalf("read header: %v", err)
-	}
-	if vo.CellCommand(hdr[16]) != vo.CmdCreated {
-		t.Fatalf("expected created, got %d", hdr[16])
-	}
-	// Read payload
-	l := int(hdr[18])<<8 | int(hdr[19])
-	if l > 0 {
-		payload := make([]byte, l)
-		if _, err := io.ReadFull(conn2, payload); err != nil {
-			t.Fatalf("read payload: %v", err)
-		}
-	}
+func TestRelayHandler_HandleCellData(t *testing.T) {
+	ctrl := NewMockController(t)
 
-	conn1.Close()
-	conn2.Close()
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
 
-	// Wait for goroutine to complete with timeout
-	select {
-	case <-done:
-		// ServeConn completed successfully
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("timeout waiting for ServeConn to complete")
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
+
+	// Test data
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1, Payload: []byte("data-payload")}
+	conn := &net.TCPConn{}
+
+	// Create mock connection state
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	upConn := &net.TCPConn{}
+	st := entity.NewConnState(key, nonce, upConn, nil)
+
+	// Mock circuit found
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(st, nil)
+
+	// Mock data operation
+	WhenSingle(mockDataUC.Data(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())).ThenReturn(nil)
+
+	// Execute
+	err := h.HandleCell(conn, cid, cell)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
+	Verify(mockRepo, Times(1)).Find(cid)
+	Verify(mockDataUC, Times(1)).Data(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())
+}
+
+// Additional test cases for comprehensive coverage
+
+func TestRelayHandler_HandleCellConnect(t *testing.T) {
+	ctrl := NewMockController(t)
+
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
+
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
+
+	// Test data
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdConnect, Version: vo.ProtocolV1}
+	conn := &net.TCPConn{}
+
+	// Create mock connection state
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	upConn := &net.TCPConn{}
+	st := entity.NewConnState(key, nonce, upConn, nil)
+
+	// Mock circuit found
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(st, nil)
+
+	// Mock connect operation
+	WhenSingle(mockConnectUC.Connect(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())).ThenReturn(nil)
+
+	// Execute
+	err := h.HandleCell(conn, cid, cell)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	Verify(mockRepo, Times(1)).Find(cid)
+	Verify(mockConnectUC, Times(1)).Connect(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())
+}
+
+func TestRelayHandler_HandleCellExtendForwarding(t *testing.T) {
+	ctrl := NewMockController(t)
+
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
+
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
+
+	// Test data
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: []byte("extend-payload")}
+	conn := &net.TCPConn{}
+
+	// Create mock connection state (existing circuit)
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	upConn := &net.TCPConn{}
+	st := entity.NewConnState(key, nonce, upConn, nil)
+
+	// Mock circuit found (existing circuit - should forward)
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(st, nil)
+
+	// Mock forward extend operation
+	WhenSingle(mockExtendUC.ForwardExtend(st, cid, cell)).ThenReturn(nil)
+
+	// Execute
+	err := h.HandleCell(conn, cid, cell)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	Verify(mockRepo, Times(1)).Find(cid)
+	Verify(mockExtendUC, Times(1)).ForwardExtend(st, cid, cell)
+}
+
+func TestRelayHandler_HandleCellEnd(t *testing.T) {
+	ctrl := NewMockController(t)
+
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
+
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
+
+	// Test data
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1}
+	conn := &net.TCPConn{}
+
+	// Create mock connection state (existing circuit)
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	upConn := &net.TCPConn{}
+	downConn := &net.TCPConn{}
+	st := entity.NewConnState(key, nonce, upConn, downConn)
+
+	// Mock circuit found
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(st, nil)
+
+	// Mock end stream operation
+	WhenSingle(mockEndStreamUC.EndStream(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())).ThenReturn(nil)
+
+	// Execute
+	err := h.HandleCell(conn, cid, cell)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	Verify(mockRepo, Times(1)).Find(cid)
+	Verify(mockEndStreamUC, Times(1)).EndStream(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())
+}
+
+func TestRelayHandler_HandleCellUnknownCommand(t *testing.T) {
+	ctrl := NewMockController(t)
+
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
+
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
+
+	// Test data with unknown command
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CellCommand(255), Version: vo.ProtocolV1} // Unknown command (255 is within byte range but not a defined command)
+	conn := &net.TCPConn{}
+
+	// Create mock connection state
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	upConn := &net.TCPConn{}
+	st := entity.NewConnState(key, nonce, upConn, nil)
+
+	// Mock circuit found
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(st, nil)
+
+	// Execute - should handle unknown command gracefully
+	err := h.HandleCell(conn, cid, cell)
+
+	// Verify - no error should be returned for unknown commands
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	Verify(mockRepo, Times(1)).Find(cid)
+	// Verify that no usecases were called for unknown command
+	Verify(mockExtendUC, Never()).Extend(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
+	Verify(mockExtendUC, Never()).ForwardExtend(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell]())
+}
+
+func TestRelayHandler_HandleCellRepositoryError(t *testing.T) {
+	ctrl := NewMockController(t)
+
+	// Create mocks
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockReader := Mock[service.CellReaderService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockExtendUC := Mock[usecase.HandleExtendUseCase](ctrl)
+	mockBeginUC := Mock[usecase.HandleBeginUseCase](ctrl)
+	mockDataUC := Mock[usecase.HandleDataUseCase](ctrl)
+	mockEndStreamUC := Mock[usecase.HandleEndStreamUseCase](ctrl)
+	mockDestroyUC := Mock[usecase.HandleDestroyUseCase](ctrl)
+	mockConnectUC := Mock[usecase.HandleConnectUseCase](ctrl)
+
+	h := handler.NewRelayHandler(mockRepo, mockReader, mockSender, mockExtendUC, mockBeginUC, mockDataUC, mockEndStreamUC, mockDestroyUC, mockConnectUC)
+
+	// Test data
+	cid := vo.NewCircuitID()
+	cell := &entity.Cell{Cmd: vo.CmdData, Version: vo.ProtocolV1}
+	conn := &net.TCPConn{}
+
+	// Mock repository error (not ErrNotFound)
+	repoErr := errors.New("database connection error")
+	WhenDouble(mockRepo.Find(cid)).ThenReturn(nil, repoErr)
+
+	// Execute
+	err := h.HandleCell(conn, cid, cell)
+
+	// Verify - should return the repository error
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("expected repository error but got: %v", err)
+	}
+	Verify(mockRepo, Times(1)).Find(cid)
+	// Verify that no usecases were called due to repository error
+	Verify(mockDataUC, Never()).Data(Any[*entity.ConnState](), Any[vo.CircuitID](), Any[*entity.Cell](), Any[func(*entity.ConnState)]())
 }
