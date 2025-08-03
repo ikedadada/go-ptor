@@ -166,7 +166,7 @@ func TestStreamManagerService_ConcurrentAccess(t *testing.T) {
 	ctrl := NewMockController(t)
 	sm := NewStreamManagerService()
 	numGoroutines := 10
-	numOperations := 10 // Reduced to avoid race condition in Mockio
+	numOperations := 10 // Reduced from 100 with pre-created mocks to avoid Mockio race conditions
 
 	// Pre-create mocks to avoid concurrent mock creation
 	mocks := make(map[vo.StreamID]net.Conn)
