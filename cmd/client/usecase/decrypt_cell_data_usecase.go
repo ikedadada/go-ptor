@@ -17,7 +17,7 @@ type DecryptCellDataInput struct {
 
 // DecryptedCellData represents a decrypted cell with its metadata
 type DecryptedCellData struct {
-	StreamID uint16
+	StreamID vo.StreamID
 	Data     []byte
 	Command  vo.CellCommand
 }
@@ -50,25 +50,61 @@ func NewDecryptCellDataUseCase(
 }
 
 func (uc *decryptCellDataUseCaseImpl) Handle(in DecryptCellDataInput) (DecryptCellDataOutput, error) {
-	// Handle different cell types
+	if in.Cell == nil {
+		return DecryptCellDataOutput{}, fmt.Errorf("nil cell")
+	}
+	if in.Circuit == nil {
+		return DecryptCellDataOutput{}, fmt.Errorf("nil circuit")
+	}
 	switch in.Cell.Cmd {
 	case vo.CmdData:
-		cellData, err := uc.handleDataCell(in.Cell, in.Circuit)
+		dp, err := uc.peSvc.DecodeDataPayload(in.Cell.Payload)
 		if err != nil {
-			log.Printf("handle data cell error: %v", err)
-			return DecryptCellDataOutput{}, err
+			log.Printf("decode data payload error: %v", err)
+			return DecryptCellDataOutput{}, fmt.Errorf("decode data payload: %w", err)
 		}
-		return DecryptCellDataOutput{CellData: cellData}, nil
+
+		// Decrypt multi-layer onion encryption
+		hopCount := len(in.Circuit.Hops())
+
+		keys := make([][32]byte, hopCount)
+		nonces := make([][12]byte, hopCount)
+
+		// Collect keys and nonces for each hop
+		for hop := 0; hop < hopCount; hop++ {
+			keys[hop] = in.Circuit.HopKey(hop)
+			nonces[hop] = in.Circuit.HopUpstreamDataNonce(hop)
+		}
+		data, err := uc.cSvc.AESMultiOpen(keys, nonces, dp.Data)
+
+		if err != nil {
+			log.Printf("decrypt onion layers error: %v", err)
+			return DecryptCellDataOutput{}, fmt.Errorf("onion decryption failed: %w", err)
+		}
+
+		return DecryptCellDataOutput{CellData: &DecryptedCellData{
+			StreamID: dp.StreamID,
+			Data:     data,
+			Command:  vo.CmdData,
+		}}, nil
 
 	case vo.CmdEnd:
-		cellData, err := uc.handleEndCell(in.Cell)
-		if err != nil {
-			log.Printf("handle end cell error: %v", err)
-			return DecryptCellDataOutput{}, err
+		sid := vo.NewStreamIDControl()
+		if len(in.Cell.Payload) > 0 {
+			if p, err := uc.peSvc.DecodeDataPayload(in.Cell.Payload); err == nil {
+				sid = p.StreamID
+			} else {
+				log.Printf("decode data payload for end cell error: %v", err)
+				return DecryptCellDataOutput{}, fmt.Errorf("decode data payload for end cell: %w", err)
+			}
 		}
 		return DecryptCellDataOutput{
-			CellData:    cellData,
-			ShouldClose: cellData.StreamID == 0, // Close all if stream ID is 0
+			CellData: &DecryptedCellData{
+				StreamID: sid,
+				Data:     nil,
+				Command:  vo.CmdEnd,
+			},
+			ShouldClose: sid.Equal(0), // Close all if stream ID is 0
 		}, nil
 
 	case vo.CmdDestroy:
@@ -78,59 +114,4 @@ func (uc *decryptCellDataUseCaseImpl) Handle(in DecryptCellDataInput) (DecryptCe
 		log.Printf("unhandled cell command: %v", in.Cell.Cmd)
 		return DecryptCellDataOutput{}, nil
 	}
-}
-
-// handleDataCell processes incoming data cells and decrypts onion layers
-func (uc *decryptCellDataUseCaseImpl) handleDataCell(cell *entity.Cell, cir *entity.Circuit) (*DecryptedCellData, error) {
-	dp, err := uc.peSvc.DecodeDataPayload(cell.Payload)
-	if err != nil {
-		return nil, fmt.Errorf("decode data payload: %w", err)
-	}
-
-	// Decrypt multi-layer onion encryption
-	data, err := uc.decryptOnionLayers(dp.Data, cir)
-	if err != nil {
-		return nil, fmt.Errorf("onion decryption failed: %w", err)
-	}
-
-	return &DecryptedCellData{
-		StreamID: dp.StreamID,
-		Data:     data,
-		Command:  cell.Cmd,
-	}, nil
-}
-
-// handleEndCell processes stream end commands
-func (uc *decryptCellDataUseCaseImpl) handleEndCell(cell *entity.Cell) (*DecryptedCellData, error) {
-	sid := uint16(0)
-	if len(cell.Payload) > 0 {
-		if p, err := uc.peSvc.DecodeDataPayload(cell.Payload); err == nil {
-			sid = p.StreamID
-		}
-	}
-
-	return &DecryptedCellData{
-		StreamID: sid,
-		Data:     nil,
-		Command:  cell.Cmd,
-	}, nil
-}
-
-// decryptOnionLayers decrypts multi-layer onion encryption for response data
-func (uc *decryptCellDataUseCaseImpl) decryptOnionLayers(data []byte, cir *entity.Circuit) ([]byte, error) {
-	hopCount := len(cir.Hops())
-
-	// Decrypt each layer in reverse circuit order (first hop to exit hop)
-	for hop := 0; hop < hopCount; hop++ {
-		key := cir.HopKey(hop)
-		nonce := cir.HopUpstreamDataNonce(hop)
-
-		decrypted, err := uc.cSvc.AESOpen(key, nonce, data)
-		if err != nil {
-			return nil, fmt.Errorf("response decrypt failed hop=%d: %w", hop, err)
-		}
-		data = decrypted
-	}
-
-	return data, nil
 }

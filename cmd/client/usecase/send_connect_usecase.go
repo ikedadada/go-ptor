@@ -12,7 +12,7 @@ import (
 // SendConnectInput triggers a CONNECT cell to the exit relay.
 // Target may be empty to use the relay's default hidden service address.
 type SendConnectInput struct {
-	CircuitID string
+	CircuitID vo.CircuitID
 	Target    string
 }
 
@@ -38,11 +38,8 @@ func NewSendConnectUseCase(cRepo repository.CircuitRepository, cSvc service.Cryp
 }
 
 func (uc *sendConnectUseCaseImpl) Handle(in SendConnectInput) (SendConnectOutput, error) {
-	cid, err := vo.CircuitIDFrom(in.CircuitID)
-	if err != nil {
-		return SendConnectOutput{}, fmt.Errorf("parse circuit id: %w", err)
-	}
-	cir, err := uc.cRepo.Find(cid)
+
+	cir, err := uc.cRepo.Find(in.CircuitID)
 	if err != nil {
 		return SendConnectOutput{}, fmt.Errorf("circuit not found: %w", err)
 	}
@@ -72,7 +69,7 @@ func (uc *sendConnectUseCaseImpl) Handle(in SendConnectInput) (SendConnectOutput
 	if err != nil {
 		return SendConnectOutput{}, err
 	}
-	if err := cell.SendToConnection(cir.Conn(0), cid); err != nil {
+	if err := cell.SendToConnection(cir.Conn(0), in.CircuitID); err != nil {
 		return SendConnectOutput{}, err
 	}
 	return SendConnectOutput{Sent: true}, nil

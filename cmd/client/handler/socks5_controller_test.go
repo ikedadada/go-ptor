@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"ikedadada/go-ptor/cmd/client/usecase"
+	vo "ikedadada/go-ptor/shared/domain/value_object"
+	"ikedadada/go-ptor/shared/service"
+
 	"github.com/ovechkin-dm/mockio/v2/matchers"
 	. "github.com/ovechkin-dm/mockio/v2/mock"
-	"ikedadada/go-ptor/cmd/client/usecase"
-	"ikedadada/go-ptor/shared/service"
 )
 
 // Helper struct to track connection state for tests
@@ -132,11 +134,13 @@ func TestSOCKS5Controller_HandleConnection_SOCKS5ProtocolParsing(t *testing.T) {
 		DialAddress: "google.com:80",
 		ExitRelayID: "",
 	}, nil)
+	cid, _ := vo.CircuitIDFrom("test-circuit-123")
 	WhenDouble(buildUC.Handle(Any[usecase.BuildCircuitInput]())).ThenReturn(usecase.BuildCircuitOutput{
-		CircuitID: "test-circuit-123",
+		CircuitID: cid,
 	}, nil)
 	WhenDouble(sendConnectUC.Handle(Any[usecase.SendConnectInput]())).ThenReturn(usecase.SendConnectOutput{Sent: true}, nil)
-	WhenDouble(openStreamUC.Handle(Any[usecase.OpenStreamInput]())).ThenReturn(usecase.OpenStreamOutput{StreamID: uint16(1)}, nil)
+	sid, _ := vo.StreamIDFrom(uint16(1))
+	WhenDouble(openStreamUC.Handle(Any[usecase.OpenStreamInput]())).ThenReturn(usecase.OpenStreamOutput{StreamID: sid}, nil)
 	WhenDouble(receiveCellUC.Handle(Any[usecase.ReceiveCellInput]())).ThenReturn(usecase.ReceiveCellOutput{IsEOF: true}, nil)
 	WhenDouble(payloadService.EncodeBeginPayload(Any[*service.BeginPayloadDTO]())).ThenReturn([]byte("begin-payload"), nil)
 
@@ -208,11 +212,13 @@ func TestSOCKS5Controller_HandleConnection_IPv4Address(t *testing.T) {
 		DialAddress: "192.168.1.1:8080",
 		ExitRelayID: "",
 	}, nil)
+	cid, _ := vo.CircuitIDFrom("test-circuit-456")
 	WhenDouble(buildUC.Handle(Any[usecase.BuildCircuitInput]())).ThenReturn(usecase.BuildCircuitOutput{
-		CircuitID: "test-circuit-456",
+		CircuitID: cid,
 	}, nil)
 	WhenDouble(sendConnectUC.Handle(Any[usecase.SendConnectInput]())).ThenReturn(usecase.SendConnectOutput{Sent: true}, nil)
-	WhenDouble(openStreamUC.Handle(Any[usecase.OpenStreamInput]())).ThenReturn(usecase.OpenStreamOutput{StreamID: uint16(2)}, nil)
+	sid, _ := vo.StreamIDFrom(uint16(2))
+	WhenDouble(openStreamUC.Handle(Any[usecase.OpenStreamInput]())).ThenReturn(usecase.OpenStreamOutput{StreamID: sid}, nil)
 	WhenDouble(receiveCellUC.Handle(Any[usecase.ReceiveCellInput]())).ThenReturn(usecase.ReceiveCellOutput{IsEOF: true}, nil)
 	WhenDouble(payloadService.EncodeBeginPayload(Any[*service.BeginPayloadDTO]())).ThenReturn([]byte("begin-payload"), nil)
 
@@ -276,11 +282,13 @@ func TestSOCKS5Controller_HandleConnection_HiddenService(t *testing.T) {
 		DialAddress: "test.ptor:80",
 		ExitRelayID: "exit-relay-123", // Hidden service has exit relay ID
 	}, nil)
+	cid, _ := vo.CircuitIDFrom("hidden-circuit-789")
 	WhenDouble(buildUC.Handle(Any[usecase.BuildCircuitInput]())).ThenReturn(usecase.BuildCircuitOutput{
-		CircuitID: "hidden-circuit-789",
+		CircuitID: cid,
 	}, nil)
 	WhenDouble(sendConnectUC.Handle(Any[usecase.SendConnectInput]())).ThenReturn(usecase.SendConnectOutput{Sent: true}, nil)
-	WhenDouble(openStreamUC.Handle(Any[usecase.OpenStreamInput]())).ThenReturn(usecase.OpenStreamOutput{StreamID: uint16(3)}, nil)
+	sid, _ := vo.StreamIDFrom(uint16(3))
+	WhenDouble(openStreamUC.Handle(Any[usecase.OpenStreamInput]())).ThenReturn(usecase.OpenStreamOutput{StreamID: sid}, nil)
 	WhenDouble(receiveCellUC.Handle(Any[usecase.ReceiveCellInput]())).ThenReturn(usecase.ReceiveCellOutput{IsEOF: true}, nil)
 	WhenDouble(payloadService.EncodeBeginPayload(Any[*service.BeginPayloadDTO]())).ThenReturn([]byte("begin-payload"), nil)
 

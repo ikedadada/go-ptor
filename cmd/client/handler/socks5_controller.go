@@ -153,7 +153,7 @@ func (c *SOCKS5Controller) HandleConnection(conn net.Conn) {
 }
 
 // setupStreamAndRelay sets up stream management and handles data relay
-func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitRelayID, addr string) error {
+func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID vo.CircuitID, exitRelayID, addr string) error {
 	// === 1. Initialize stream manager and start receiving loop ===
 	go c.recvLoop(circuitID)
 
@@ -173,13 +173,13 @@ func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitRel
 		return fmt.Errorf("open stream: %w", err)
 	}
 	streamID := stOut.StreamID
-	c.smSvc.Add(uint16(streamID), conn)
-	defer c.smSvc.Remove(uint16(streamID))
+	c.smSvc.Add(streamID, conn)
+	defer c.smSvc.Remove(streamID)
 	log.Printf("stream opened and registered cid=%s sid=%d", circuitID, streamID)
 
 	// === 4. Send BEGIN command to establish stream connection ===
 	payload, err := c.peSvc.EncodeBeginPayload(&service.BeginPayloadDTO{
-		StreamID: uint16(streamID),
+		StreamID: streamID,
 		Target:   addr,
 	})
 	if err != nil {
@@ -189,7 +189,7 @@ func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitRel
 	log.Printf("establishing stream connection cid=%s sid=%d target=%s", circuitID, streamID, addr)
 	_, err = c.sendUC.Handle(usecase.SendDataInput{
 		CircuitID: circuitID,
-		StreamID:  uint16(streamID),
+		StreamID:  streamID,
 		Data:      payload,
 		Cmd:       vo.CmdBegin,
 	})
@@ -211,7 +211,7 @@ func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitRel
 			log.Printf("relaying data cid=%s sid=%d bytes=%d", circuitID, streamID, n)
 			_, sendErr := c.sendUC.Handle(usecase.SendDataInput{
 				CircuitID: circuitID,
-				StreamID:  uint16(streamID),
+				StreamID:  streamID,
 				Data:      buf[:n],
 			})
 			if sendErr != nil {
@@ -224,10 +224,14 @@ func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitRel
 		if err != nil {
 			if err == io.EOF {
 				log.Printf("client connection closed cid=%s sid=%d", circuitID, streamID)
-				_, _ = c.endUC.Handle(usecase.HandleEndInput{
+				err = c.endUC.Handle(usecase.HandleEndInput{
 					CircuitID: circuitID,
-					StreamID:  uint16(streamID),
+					StreamID:  streamID,
 				})
+				if err != nil {
+					log.Printf("failed to close stream cid=%s sid=%d: %v", circuitID, streamID, err)
+				}
+				break
 			} else {
 				log.Printf("client connection error cid=%s sid=%d: %v", circuitID, streamID, err)
 			}
@@ -236,7 +240,7 @@ func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitRel
 	}
 
 	// === 7. Cleanup stream resources ===
-	if _, err := c.closeUC.Handle(usecase.CloseStreamInput{
+	if err := c.closeUC.Handle(usecase.CloseStreamInput{
 		CircuitID: circuitID,
 		StreamID:  streamID,
 	}); err != nil {
@@ -247,7 +251,7 @@ func (c *SOCKS5Controller) setupStreamAndRelay(conn net.Conn, circuitID, exitRel
 }
 
 // recvLoop handles incoming data from the circuit
-func (c *SOCKS5Controller) recvLoop(circuitID string) {
+func (c *SOCKS5Controller) recvLoop(circuitID vo.CircuitID) {
 	for {
 		// Step 1: Receive cell from circuit
 		receiveOut, err := c.receiveCellUC.Handle(usecase.ReceiveCellInput{
