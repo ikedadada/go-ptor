@@ -98,7 +98,7 @@ func TestHandleBeginUseCase_Begin(t *testing.T) {
 				WhenSingle(mocks.sender.ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())).ThenReturn(nil)
 			},
 			expectError:     false,
-			expectedCalls:   expectedCalls{aesOpen: 1, decodePayload: 1, forwardCell: 2, sendAck: 0, addStream: 1},
+			expectedCalls:   expectedCalls{aesOpen: 1, decodePayload: 1, forwardCell: 1, sendAck: 0, addStream: 1},
 			expectServeDown: false,
 		},
 
