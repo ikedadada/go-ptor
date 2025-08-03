@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"fmt"
 	"ikedadada/go-ptor/shared/domain/entity"
 	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
@@ -48,11 +49,10 @@ func (uc *handleEndStreamUseCaseImpl) EndStream(st *entity.ConnState, cid vo.Cir
 		_ = uc.csRepo.Delete(cid)
 		return nil
 	}
-	sid, err := vo.StreamIDFrom(p.StreamID)
+	err = uc.csRepo.RemoveStream(cid, p.StreamID)
 	if err != nil {
-		return err
+		return fmt.Errorf("remove stream: %w", err)
 	}
-	_ = uc.csRepo.RemoveStream(cid, sid)
 	if st.Down() != nil {
 		ensureServeDown(st)
 		return uc.csSvc.ForwardCell(st.Down(), cid, cell)

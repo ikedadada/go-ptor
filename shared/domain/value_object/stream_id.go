@@ -20,7 +20,12 @@ func NewStreamIDAuto() StreamID {
 	return StreamID(v)
 }
 
-// StreamIDFrom は外部値から作成（0 は無効）。
+// NewStreamIDControl は制御メッセージ用の StreamID (0) を作成します。
+func NewStreamIDControl() StreamID {
+	return StreamID(0)
+}
+
+// StreamIDFrom は外部値から作成。
 func StreamIDFrom(v uint16) (StreamID, error) {
 	if v == 0 {
 		return 0, fmt.Errorf("streamID 0 is reserved")

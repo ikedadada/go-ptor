@@ -26,11 +26,7 @@ type BuildCircuitInput struct {
 
 // BuildCircuitOutput は UI / API に返すレスポンス
 type BuildCircuitOutput struct {
-	CircuitID string        `json:"circuit_id"`
-	Hops      []string      `json:"relay_ids"`
-	Keys      [][]byte      `json:"aes_keys"` // Base64 等はプレゼン層で
-	Nonces    [][]byte      `json:"nonces"`   // 同上
-	AddrList  []vo.Endpoint `json:"endpoints"`
+	CircuitID vo.CircuitID `json:"circuit_id"`
 }
 
 // BuildCircuitUseCase creates new circuits according to the input parameters.
@@ -68,27 +64,21 @@ func (uc *buildCircuitUseCaseImpl) Handle(in BuildCircuitInput) (BuildCircuitOut
 		return BuildCircuitOutput{}, err
 	}
 
+	// 5. 保存
+	if err := uc.cRepo.Save(cir); err != nil {
+		_ = uc.cbSvc.TeardownCircuit(cir.Conn(0), cir.ID())
+		cir.Conn(0).Close()
+		return BuildCircuitOutput{}, fmt.Errorf("save circuit: %w", err)
+	}
+
 	out := BuildCircuitOutput{
-		CircuitID: cir.ID().String(),
-	}
-
-	// Relay ID
-	for _, rid := range cir.Hops() {
-		out.Hops = append(out.Hops, rid.String())
-	}
-
-	// 鍵・ノンス（array → slice 変換）
-	for i := range cir.Hops() {
-		key := cir.HopKey(i)         // [32]byte
-		nonce := cir.HopBaseNonce(i) // [12]byte - use base nonce for circuit info
-		out.Keys = append(out.Keys, key[:])
-		out.Nonces = append(out.Nonces, nonce[:])
+		CircuitID: cir.ID(),
 	}
 
 	return out, nil
 }
 
-func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Circuit, error) {
+func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (cir *entity.Circuit, err error) {
 	if hops <= 0 {
 		hops = 3
 	}
@@ -166,11 +156,14 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Cir
 		c   net.Conn
 		err error
 	}
+	// 4. 各 hop に ExtendCell を送信
 	dch := make(chan dialRes, 1)
 	go func() {
 		c, err := uc.cbSvc.ConnectToRelay(selected[0].Endpoint().String())
 		dch <- dialRes{c: c, err: err}
 	}()
+
+	// 待機して接続を取得
 	var conn net.Conn
 	select {
 	case <-dialCtx.Done():
@@ -182,64 +175,62 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Cir
 		conn = res.c
 	}
 
-	for i := 0; i < hops; i++ {
-		next := ""
-		if i+1 < hops {
-			next = selected[i+1].Endpoint().String()
-		}
+	// 4. 各 hop に ExtendCell を送信
+	for i := range selected {
+		defer func() {
+			if err != nil {
+				_ = uc.cbSvc.TeardownCircuit(conn, cid)
+				conn.Close()
+			}
+		}()
+		// 4.1. 各 hop の鍵と nonce を生成
 		cliPriv, cliPub, err := uc.cSvc.X25519Generate()
 		if err != nil {
-			_ = uc.cbSvc.TeardownCircuit(conn, cid)
-			conn.Close()
-			return nil, err
+			return nil, fmt.Errorf("generate x25519 key: %w", err)
 		}
 		var pubArr [32]byte
 		copy(pubArr[:], cliPub)
+
+		nextHop := ""
+		if i+1 < len(selected) {
+			nextHop = selected[i+1].Endpoint().String()
+		}
+
+		// 4.2. ExtendCell を生成
 		payload, err := uc.peSvc.EncodeExtendPayload(&service.ExtendPayloadDTO{
-			NextHop:   next,
+			NextHop:   nextHop,
 			ClientPub: pubArr,
 		})
 		if err != nil {
-			_ = uc.cbSvc.TeardownCircuit(conn, cid)
-			conn.Close()
 			return nil, err
 		}
-		streamID, _ := vo.StreamIDFrom(0)
-		cell, err := aggregate.NewRelayCell(vo.CmdExtend, cid, streamID, payload)
+
+		// 4.3. ExtendCell を送信
+		cell, err := aggregate.NewRelayCell(vo.CmdExtend, cid, vo.NewStreamIDControl(), payload)
 		if err != nil {
-			_ = uc.cbSvc.TeardownCircuit(conn, cid)
-			conn.Close()
 			return nil, err
 		}
-		_ = conn.SetDeadline(time.Now().Add(ioTimeout))
+		conn.SetDeadline(time.Now().Add(ioTimeout))
 		if err := uc.cbSvc.SendExtendCell(conn, cell); err != nil {
-			_ = uc.cbSvc.TeardownCircuit(conn, cid)
-			conn.Close()
 			return nil, err
 		}
 		resp, err := uc.cbSvc.WaitForCreatedResponse(conn)
 		if err != nil {
-			_ = uc.cbSvc.TeardownCircuit(conn, cid)
-			conn.Close()
 			return nil, err
 		}
-		_ = conn.SetDeadline(time.Time{})
+
+		// 4.4. レスポンスから鍵と nonce を生成
+		conn.SetDeadline(time.Time{})
 		created, err := uc.peSvc.DecodeCreatedPayload(resp)
 		if err != nil {
-			_ = uc.cbSvc.TeardownCircuit(conn, cid)
-			conn.Close()
 			return nil, err
 		}
 		secret, err := uc.cSvc.X25519Shared(cliPriv, created.RelayPub[:])
 		if err != nil {
-			_ = uc.cbSvc.TeardownCircuit(conn, cid)
-			conn.Close()
 			return nil, err
 		}
 		key, nonce, err := uc.cSvc.DeriveKeyNonce(secret)
 		if err != nil {
-			_ = uc.cbSvc.TeardownCircuit(conn, cid)
-			conn.Close()
 			return nil, err
 		}
 		keys[i] = key
@@ -248,18 +239,11 @@ func (uc *buildCircuitUseCaseImpl) build(hops int, exit vo.RelayID) (*entity.Cir
 
 	circuit, err := entity.NewCircuit(cid, relayIDs, keys, nonces, priv)
 	if err != nil {
-		_ = uc.cbSvc.TeardownCircuit(conn, cid)
-		conn.Close()
 		return nil, err
 	}
-	circuit.SetConn(0, conn)
 
-	// 5. 保存
-	if err := uc.cRepo.Save(circuit); err != nil {
-		_ = uc.cbSvc.TeardownCircuit(conn, cid)
-		conn.Close()
-		return nil, fmt.Errorf("save circuit: %w", err)
-	}
+	// 5. 接続をセット
+	circuit.SetConn(0, conn)
 
 	return circuit, nil
 }

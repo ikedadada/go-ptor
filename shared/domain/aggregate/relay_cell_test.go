@@ -339,7 +339,7 @@ func TestRelayCell_MaxPayloadBoundary(t *testing.T) {
 
 func TestRelayCell_ZeroStreamID(t *testing.T) {
 	circuitID := vo.NewCircuitID()
-	streamID, _ := vo.StreamIDFrom(0)
+	streamID := vo.NewStreamIDControl()
 
 	relayCell, err := NewRelayCell(vo.CmdConnect, circuitID, streamID, []byte("control message"))
 	if err != nil {

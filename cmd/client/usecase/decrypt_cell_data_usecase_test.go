@@ -1,70 +1,160 @@
-package usecase
+package usecase_test
 
 import (
-	"testing"
-
+	"ikedadada/go-ptor/cmd/client/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
+	"ikedadada/go-ptor/shared/service"
+	"testing"
+
+	. "github.com/ovechkin-dm/mockio/v2/mock"
 )
 
-func TestDecryptCellDataUseCase_Handle_DestroyCell(t *testing.T) {
-	// Create mock cell
-	cell, err := entity.NewCell(vo.CmdDestroy, []byte("test payload"))
-	if err != nil {
-		t.Fatalf("NewCell: %v", err)
+func TestDecryptCellDataUseCase_Handle(t *testing.T) {
+	circuit, _ := makeTestCircuit()
+
+	tests := []struct {
+		name                         string
+		DecryptCellDataInput         usecase.DecryptCellDataInput
+		cSvcAESMultiOpenRes          []byte
+		cSvcAESMultiOpenErr          error
+		peSvcDecodeDataPayloadRes    *service.DataPayloadDTO
+		peSvcDecodeDataPayloadErr    error
+		expectsErr                   bool
+		expectsDecriptCellDataOutput usecase.DecryptCellDataOutput
+	}{
+		{
+			name: "Data cell",
+			DecryptCellDataInput: usecase.DecryptCellDataInput{
+				Cell:    &entity.Cell{Cmd: vo.CmdData, Payload: []byte("test payload")},
+				Circuit: circuit,
+			},
+			cSvcAESMultiOpenRes:       []byte("decrypted data"),
+			cSvcAESMultiOpenErr:       nil,
+			peSvcDecodeDataPayloadRes: &service.DataPayloadDTO{StreamID: 1, Data: []byte("decrypted data")},
+			peSvcDecodeDataPayloadErr: nil,
+			expectsErr:                false,
+			expectsDecriptCellDataOutput: usecase.DecryptCellDataOutput{
+				CellData: &usecase.DecryptedCellData{
+					StreamID: 1,
+					Data:     []byte("decrypted data"),
+					Command:  vo.CmdData,
+				},
+				ShouldClose: false,
+			},
+		},
+		{
+			name: "End cell with stream ID = 2",
+			DecryptCellDataInput: usecase.DecryptCellDataInput{
+				Cell:    &entity.Cell{Cmd: vo.CmdEnd, Payload: []byte("test payload")},
+				Circuit: circuit,
+			},
+			peSvcDecodeDataPayloadRes: &service.DataPayloadDTO{StreamID: 2, Data: []byte("decrypted data")},
+			peSvcDecodeDataPayloadErr: nil,
+			expectsErr:                false,
+			expectsDecriptCellDataOutput: usecase.DecryptCellDataOutput{
+				CellData: &usecase.DecryptedCellData{
+					StreamID: 2,
+					Data:     nil,
+					Command:  vo.CmdEnd,
+				},
+				ShouldClose: false,
+			},
+		},
+		{
+			name: "End cell with stream ID == 0",
+			DecryptCellDataInput: usecase.DecryptCellDataInput{
+				Cell:    &entity.Cell{Cmd: vo.CmdEnd, Payload: []byte("test payload")},
+				Circuit: circuit,
+			},
+			peSvcDecodeDataPayloadRes: &service.DataPayloadDTO{StreamID: 0, Data: []byte("decrypted data")},
+			peSvcDecodeDataPayloadErr: nil,
+			expectsErr:                false,
+			expectsDecriptCellDataOutput: usecase.DecryptCellDataOutput{
+				CellData: &usecase.DecryptedCellData{
+					StreamID: 0,
+					Data:     nil,
+					Command:  vo.CmdEnd,
+				},
+				ShouldClose: true,
+			},
+		},
+		{
+			name: "Destory cell",
+			DecryptCellDataInput: usecase.DecryptCellDataInput{
+				Cell:    &entity.Cell{Cmd: vo.CmdDestroy, Payload: []byte("test payload")},
+				Circuit: &entity.Circuit{},
+			},
+			expectsErr: false,
+			expectsDecriptCellDataOutput: usecase.DecryptCellDataOutput{
+				ShouldClose: true,
+			},
+		},
+		{
+			name: "Relay cell",
+			DecryptCellDataInput: usecase.DecryptCellDataInput{
+				Cell:    &entity.Cell{Cmd: vo.CmdBegin, Payload: []byte("test payload")},
+				Circuit: &entity.Circuit{},
+			},
+			expectsErr:                   false,
+			expectsDecriptCellDataOutput: usecase.DecryptCellDataOutput{},
+		},
+		{
+			name: "nil cell",
+			DecryptCellDataInput: usecase.DecryptCellDataInput{
+				Circuit: &entity.Circuit{},
+			},
+			expectsErr:                   true,
+			expectsDecriptCellDataOutput: usecase.DecryptCellDataOutput{},
+		},
+		{
+			name: "nil circuit",
+			DecryptCellDataInput: usecase.DecryptCellDataInput{
+				Cell: &entity.Cell{Cmd: vo.CmdDestroy, Payload: []byte("test payload")},
+			},
+			expectsErr:                   true,
+			expectsDecriptCellDataOutput: usecase.DecryptCellDataOutput{},
+		},
 	}
 
-	// Create mock circuit
-	circuit := &entity.Circuit{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := NewMockController(t)
 
-	// Create use case with nil services (won't be called for destroy cell)
-	uc := NewDecryptCellDataUseCase(nil, nil)
+			cSvc := Mock[service.CryptoService](ctrl)
+			peSvc := Mock[service.PayloadEncodingService](ctrl)
+			// Setup mock behaviors
+			if tt.cSvcAESMultiOpenRes != nil || tt.cSvcAESMultiOpenErr != nil {
+				When(cSvc.AESMultiOpen(Any[[][32]byte](), Any[[][12]byte](), Any[[]byte]())).ThenReturn(tt.cSvcAESMultiOpenRes, tt.cSvcAESMultiOpenErr)
+			}
+			if tt.peSvcDecodeDataPayloadRes != nil || tt.peSvcDecodeDataPayloadErr != nil {
+				When(peSvc.DecodeDataPayload(Any[[]byte]())).ThenReturn(tt.peSvcDecodeDataPayloadRes, tt.peSvcDecodeDataPayloadErr)
+			}
 
-	// Test
-	result, err := uc.Handle(DecryptCellDataInput{
-		Cell:    cell,
-		Circuit: circuit,
-	})
+			uc := usecase.NewDecryptCellDataUseCase(cSvc, peSvc) // Use nil services for simplicity
 
-	// Assertions
-	if err != nil {
-		t.Fatalf("Handle: %v", err)
-	}
-	if !result.ShouldClose {
-		t.Error("Expected ShouldClose to be true for destroy cell")
-	}
-	if result.CellData != nil {
-		t.Error("Expected CellData to be nil for destroy cell")
-	}
-}
+			result, err := uc.Handle(tt.DecryptCellDataInput)
 
-func TestDecryptCellDataUseCase_Handle_UnhandledCommand(t *testing.T) {
-	// Create mock cell with unhandled command
-	cell, err := entity.NewCell(vo.CmdBegin, []byte("test payload"))
-	if err != nil {
-		t.Fatalf("NewCell: %v", err)
-	}
+			if tt.expectsErr == (err == nil) {
+				t.Errorf("expected error: %v, got: %v", tt.expectsErr, err)
+			}
 
-	// Create mock circuit
-	circuit := &entity.Circuit{}
+			// useMatchers to check the output
+			if result.CellData != nil && tt.expectsDecriptCellDataOutput.CellData != nil {
+				if result.CellData.StreamID != tt.expectsDecriptCellDataOutput.CellData.StreamID {
+					t.Errorf("expected StreamID %d, got %d", tt.expectsDecriptCellDataOutput.CellData.StreamID, result.CellData.StreamID)
+				}
+				if string(result.CellData.Data) != string(tt.expectsDecriptCellDataOutput.CellData.Data) {
+					t.Errorf("expected Data %s, got %s", tt.expectsDecriptCellDataOutput.CellData.Data, result.CellData.Data)
+				}
+				if result.CellData.Command != tt.expectsDecriptCellDataOutput.CellData.Command {
+					t.Errorf("expected Command %s, got %s", tt.expectsDecriptCellDataOutput.CellData.Command, result.CellData.Command)
+				}
+			}
 
-	// Create use case with nil services (won't be called for unhandled command)
-	uc := NewDecryptCellDataUseCase(nil, nil)
-
-	// Test
-	result, err := uc.Handle(DecryptCellDataInput{
-		Cell:    cell,
-		Circuit: circuit,
-	})
-
-	// Assertions
-	if err != nil {
-		t.Fatalf("Handle: %v", err)
-	}
-	if result.ShouldClose {
-		t.Error("Expected ShouldClose to be false for unhandled command")
-	}
-	if result.CellData != nil {
-		t.Error("Expected CellData to be nil for unhandled command")
+			if result.ShouldClose != tt.expectsDecriptCellDataOutput.ShouldClose {
+				t.Errorf("expected ShouldClose %v, got %v", tt.expectsDecriptCellDataOutput.ShouldClose, result.ShouldClose)
+			}
+		})
 	}
 }

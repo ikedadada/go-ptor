@@ -12,7 +12,7 @@ import (
 
 // ReceiveCellInput specifies the circuit to receive data from
 type ReceiveCellInput struct {
-	CircuitID string
+	CircuitID vo.CircuitID
 }
 
 // ReceiveCellOutput contains the received cell data
@@ -44,12 +44,8 @@ func NewReceiveCellUseCase(
 }
 
 func (uc *receiveCellUseCaseImpl) Handle(in ReceiveCellInput) (ReceiveCellOutput, error) {
-	cid, err := vo.CircuitIDFrom(in.CircuitID)
-	if err != nil {
-		return ReceiveCellOutput{}, fmt.Errorf("parse circuit id: %w", err)
-	}
 
-	cir, err := uc.cRepo.Find(cid)
+	cir, err := uc.cRepo.Find(in.CircuitID)
 	if err != nil {
 		return ReceiveCellOutput{}, fmt.Errorf("find circuit: %w", err)
 	}

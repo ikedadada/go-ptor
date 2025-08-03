@@ -96,7 +96,7 @@ func TestRelayMain_E2E(t *testing.T) {
 	}
 
 	cid := uuid.New()
-	sid := uint16(1)
+	sid, _ := vo.StreamIDFrom(uint16(1))
 	data := []byte("ok")
 	payloadEncoder := service.NewPayloadEncodingService()
 	inner, _ := payloadEncoder.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid, Data: data})

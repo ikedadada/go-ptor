@@ -12,8 +12,8 @@ import (
 
 // SendDataInput represents application data to forward on a circuit.
 type SendDataInput struct {
-	CircuitID string
-	StreamID  uint16
+	CircuitID vo.CircuitID
+	StreamID  vo.StreamID
 	Data      []byte
 	Cmd       vo.CellCommand // default CmdData
 }
@@ -40,15 +40,8 @@ func NewSendDataUseCase(cRepo repository.CircuitRepository, cSvc service.CryptoS
 }
 
 func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) {
-	cid, err := vo.CircuitIDFrom(in.CircuitID)
-	if err != nil {
-		return SendDataOutput{}, err
-	}
-	sid, err := vo.StreamIDFrom(in.StreamID)
-	if err != nil {
-		return SendDataOutput{}, err
-	}
-
+	cid := in.CircuitID
+	sid := in.StreamID
 	// 回路存在確認（データリンクには不要だがバリデーションで利用）
 	cir, err := uc.cRepo.Find(cid)
 	if err != nil {
@@ -100,7 +93,7 @@ func (uc *sendDataUseCaseImpl) Handle(in SendDataInput) (SendDataOutput, error) 
 	switch cmd {
 	case vo.CmdData:
 		// DATA commands need gob-encoded DataPayloadDTO
-		payload, err = uc.peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid.UInt16(), Data: enc})
+		payload, err = uc.peSvc.EncodeDataPayload(&service.DataPayloadDTO{StreamID: sid, Data: enc})
 		if err != nil {
 			return SendDataOutput{}, err
 		}

@@ -9,18 +9,13 @@ import (
 
 // HandleEndInput represents a received END cell.
 type HandleEndInput struct {
-	CircuitID string
-	StreamID  uint16 // 0 means control END
-}
-
-// HandleEndOutput reports the result of closing streams.
-type HandleEndOutput struct {
-	Closed bool `json:"closed"`
+	CircuitID vo.CircuitID
+	StreamID  vo.StreamID // 0 means control END
 }
 
 // HandleEndUseCase processes incoming END cells.
 type HandleEndUseCase interface {
-	Handle(in HandleEndInput) (HandleEndOutput, error)
+	Handle(in HandleEndInput) error
 }
 
 type handleEndUseCaseImpl struct {
@@ -32,30 +27,24 @@ func NewHandleEndUseCase(cRepo repository.CircuitRepository) HandleEndUseCase {
 	return &handleEndUseCaseImpl{cRepo: cRepo}
 }
 
-func (uc *handleEndUseCaseImpl) Handle(in HandleEndInput) (HandleEndOutput, error) {
-	cid, err := vo.CircuitIDFrom(in.CircuitID)
-	if err != nil {
-		return HandleEndOutput{}, fmt.Errorf("parse circuit id: %w", err)
-	}
+func (uc *handleEndUseCaseImpl) Handle(in HandleEndInput) error {
+	cid := in.CircuitID
 
 	cir, err := uc.cRepo.Find(cid)
 	if err != nil {
-		return HandleEndOutput{}, fmt.Errorf("circuit not found: %w", err)
+		return fmt.Errorf("circuit not found: %w", err)
 	}
 
-	if in.StreamID == 0 {
+	if in.StreamID.Equal(0) {
 		// close entire circuit
 		for _, sid := range cir.ActiveStreams() {
 			cir.CloseStream(sid)
 		}
 		_ = uc.cRepo.Delete(cid)
-		return HandleEndOutput{Closed: true}, nil
+		return nil
 	}
 
-	sid, err := vo.StreamIDFrom(in.StreamID)
-	if err != nil {
-		return HandleEndOutput{}, fmt.Errorf("parse stream id: %w", err)
-	}
-	cir.CloseStream(sid)
-	return HandleEndOutput{Closed: true}, nil
+	// close specific stream
+	cir.CloseStream(in.StreamID)
+	return nil
 }

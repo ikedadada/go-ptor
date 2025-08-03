@@ -14,253 +14,238 @@ import (
 	"ikedadada/go-ptor/shared/service"
 )
 
-func TestHandleEndStreamUseCase_EndStreamSpecific(t *testing.T) {
-	ctrl := NewMockController(t)
-
-	mockRepo := Mock[repository.ConnStateRepository](ctrl)
-	mockSender := Mock[service.CellSenderService](ctrl)
-	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
-
-	uc := usecase.NewHandleEndStreamUseCase(mockRepo, mockSender, mockEncoder)
-
-	// Setup test data
-	key, _ := vo.NewAESKey()
-	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-	endPayload := []byte("end-payload")
-
-	// Create mock connection (exit node - no down connection)
-	up1, _ := net.Pipe()
-	st := entity.NewConnState(key, nonce, up1, nil)
-
-	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: endPayload}
-
-	// Mock ensureServeDown function
-	ensureServeDown := func(st *entity.ConnState) {}
-
-	// Mock data payload DTO for specific stream
-	sid, _ := vo.StreamIDFrom(1)
-	dataDTO := &service.DataPayloadDTO{StreamID: 1}
-
-	// Configure mocks for specific stream termination (st.Down() == nil)
-	WhenDouble(mockEncoder.DecodeDataPayload(endPayload)).ThenReturn(dataDTO, nil)
-	WhenSingle(mockRepo.RemoveStream(cid, sid)).ThenReturn(nil)
-
-	// Execute
-	err := uc.EndStream(st, cid, cell, ensureServeDown)
-
-	// Verify
-	if err != nil {
-		t.Fatalf("EndStream failed: %v", err)
+func TestHandleEndStreamUseCase_EndStream(t *testing.T) {
+	type endstreamTestMocks struct {
+		repo    repository.ConnStateRepository
+		sender  service.CellSenderService
+		encoder service.PayloadEncodingService
 	}
 
-	// Verify mock interactions
-	Verify(mockEncoder, Times(1)).DecodeDataPayload(endPayload)
-	Verify(mockRepo, Times(1)).RemoveStream(cid, sid)
-	// Verify ForwardCell is not called for exit nodes
-	Verify(mockSender, Times(0)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
-
-	st.Up().Close()
-}
-
-func TestHandleEndStreamUseCase_EndAllStreams(t *testing.T) {
-	ctrl := NewMockController(t)
-
-	mockRepo := Mock[repository.ConnStateRepository](ctrl)
-	mockSender := Mock[service.CellSenderService](ctrl)
-	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
-
-	uc := usecase.NewHandleEndStreamUseCase(mockRepo, mockSender, mockEncoder)
-
-	// Setup test data
-	key, _ := vo.NewAESKey()
-	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-
-	// Create mock connection (exit node - no down connection)
-	up1, _ := net.Pipe()
-	st := entity.NewConnState(key, nonce, up1, nil)
-
-	// Empty payload means end all streams (StreamID = 0)
-	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: []byte{}}
-
-	// Mock ensureServeDown function
-	ensureServeDown := func(st *entity.ConnState) {}
-
-	// Configure mocks for ending all streams (empty payload)
-	WhenSingle(mockRepo.Delete(cid)).ThenReturn(nil)
-
-	// Execute
-	err := uc.EndStream(st, cid, cell, ensureServeDown)
-
-	// Verify
-	if err != nil {
-		t.Fatalf("EndStream failed: %v", err)
+	type endstreamConnStateSetup struct {
+		hasDown bool
 	}
 
-	// Verify mock interactions
-	// No payload decoding for empty payload
-	Verify(mockEncoder, Times(0)).DecodeDataPayload(Any[[]byte]())
-	Verify(mockRepo, Times(1)).Delete(cid)
-	// Verify ForwardCell is not called for exit nodes
-	Verify(mockSender, Times(0)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
-
-	st.Up().Close()
-}
-
-func TestHandleEndStreamUseCase_EndStreamWithForward(t *testing.T) {
-	ctrl := NewMockController(t)
-
-	mockRepo := Mock[repository.ConnStateRepository](ctrl)
-	mockSender := Mock[service.CellSenderService](ctrl)
-	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
-
-	uc := usecase.NewHandleEndStreamUseCase(mockRepo, mockSender, mockEncoder)
-
-	// Setup test data
-	key, _ := vo.NewAESKey()
-	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-	endPayload := []byte("end-payload")
-
-	// Create mock connections (middle relay - has down connection)
-	up1, _ := net.Pipe()
-	down1, _ := net.Pipe()
-	st := entity.NewConnState(key, nonce, up1, down1)
-
-	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: endPayload}
-
-	// Mock ensureServeDown function
-	serveDownCalled := false
-	ensureServeDown := func(st *entity.ConnState) {
-		serveDownCalled = true
+	type endstreamExpectedCalls struct {
+		decodeDataPayload int
+		removeStream      int
+		delete            int
+		forwardCell       int
 	}
 
-	// Mock data payload DTO for specific stream
-	sid, _ := vo.StreamIDFrom(1)
-	dataDTO := &service.DataPayloadDTO{StreamID: 1}
-
-	// Configure mocks for middle relay scenario (st.Down() != nil)
-	WhenDouble(mockEncoder.DecodeDataPayload(endPayload)).ThenReturn(dataDTO, nil)
-	WhenSingle(mockRepo.RemoveStream(cid, sid)).ThenReturn(nil)
-	WhenSingle(mockSender.ForwardCell(st.Down(), cid, cell)).ThenReturn(nil)
-
-	// Execute
-	err := uc.EndStream(st, cid, cell, ensureServeDown)
-
-	// Verify
-	if err != nil {
-		t.Fatalf("EndStream failed: %v", err)
+	type endstreamTestData struct {
+		payload     []byte
+		isAllStream bool // true for empty payload (end all streams)
+		streamID    vo.StreamID
 	}
 
-	if !serveDownCalled {
-		t.Errorf("ensureServeDown not called")
+	tests := []struct {
+		name            string
+		setupConn       func() (*entity.ConnState, endstreamConnStateSetup)
+		setupTestData   func() endstreamTestData
+		setupMocks      func(mocks endstreamTestMocks, cid vo.CircuitID, testData endstreamTestData, setup endstreamConnStateSetup)
+		expectError     bool
+		errorCheck      func(error) bool
+		expectedCalls   endstreamExpectedCalls
+		expectServeDown bool
+	}{
+		{
+			name: "End specific stream - exit node",
+			setupConn: func() (*entity.ConnState, endstreamConnStateSetup) {
+				key, _ := vo.NewAESKey()
+				nonce, _ := vo.NewNonce()
+				up1, _ := net.Pipe()
+				st := entity.NewConnState(key, nonce, up1, nil)
+				return st, endstreamConnStateSetup{hasDown: false}
+			},
+			setupTestData: func() endstreamTestData {
+				return endstreamTestData{
+					payload:     []byte("end-payload"),
+					isAllStream: false,
+					streamID:    vo.StreamID(1),
+				}
+			},
+			setupMocks: func(mocks endstreamTestMocks, cid vo.CircuitID, testData endstreamTestData, setup endstreamConnStateSetup) {
+				dataDTO := &service.DataPayloadDTO{StreamID: testData.streamID}
+				WhenDouble(mocks.encoder.DecodeDataPayload(testData.payload)).ThenReturn(dataDTO, nil)
+				sid, _ := vo.StreamIDFrom(uint16(testData.streamID))
+				WhenSingle(mocks.repo.RemoveStream(cid, sid)).ThenReturn(nil)
+			},
+			expectError:     false,
+			expectedCalls:   endstreamExpectedCalls{decodeDataPayload: 1, removeStream: 1, delete: 0, forwardCell: 0},
+			expectServeDown: false,
+		},
+		{
+			name: "End all streams - exit node",
+			setupConn: func() (*entity.ConnState, endstreamConnStateSetup) {
+				key, _ := vo.NewAESKey()
+				nonce, _ := vo.NewNonce()
+				up1, _ := net.Pipe()
+				st := entity.NewConnState(key, nonce, up1, nil)
+				return st, endstreamConnStateSetup{hasDown: false}
+			},
+			setupTestData: func() endstreamTestData {
+				return endstreamTestData{
+					payload:     []byte{}, // Empty payload means end all streams
+					isAllStream: true,
+					streamID:    vo.StreamID(0),
+				}
+			},
+			setupMocks: func(mocks endstreamTestMocks, cid vo.CircuitID, testData endstreamTestData, setup endstreamConnStateSetup) {
+				WhenSingle(mocks.repo.Delete(cid)).ThenReturn(nil)
+			},
+			expectError:     false,
+			expectedCalls:   endstreamExpectedCalls{decodeDataPayload: 0, removeStream: 0, delete: 1, forwardCell: 0},
+			expectServeDown: false,
+		},
+		{
+			name: "End specific stream with forward - middle relay",
+			setupConn: func() (*entity.ConnState, endstreamConnStateSetup) {
+				key, _ := vo.NewAESKey()
+				nonce, _ := vo.NewNonce()
+				up1, _ := net.Pipe()
+				down1, _ := net.Pipe()
+				st := entity.NewConnState(key, nonce, up1, down1)
+				return st, endstreamConnStateSetup{hasDown: true}
+			},
+			setupTestData: func() endstreamTestData {
+				return endstreamTestData{
+					payload:     []byte("end-payload"),
+					isAllStream: false,
+					streamID:    vo.StreamID(1),
+				}
+			},
+			setupMocks: func(mocks endstreamTestMocks, cid vo.CircuitID, testData endstreamTestData, setup endstreamConnStateSetup) {
+				dataDTO := &service.DataPayloadDTO{StreamID: testData.streamID}
+				WhenDouble(mocks.encoder.DecodeDataPayload(testData.payload)).ThenReturn(dataDTO, nil)
+				sid, _ := vo.StreamIDFrom(uint16(testData.streamID))
+				WhenSingle(mocks.repo.RemoveStream(cid, sid)).ThenReturn(nil)
+				WhenSingle(mocks.sender.ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())).ThenReturn(nil)
+			},
+			expectError:     false,
+			expectedCalls:   endstreamExpectedCalls{decodeDataPayload: 1, removeStream: 1, delete: 0, forwardCell: 1},
+			expectServeDown: true,
+		},
+		{
+			name: "Payload decoding failure",
+			setupConn: func() (*entity.ConnState, endstreamConnStateSetup) {
+				key, _ := vo.NewAESKey()
+				nonce, _ := vo.NewNonce()
+				up1, _ := net.Pipe()
+				st := entity.NewConnState(key, nonce, up1, nil)
+				return st, endstreamConnStateSetup{hasDown: false}
+			},
+			setupTestData: func() endstreamTestData {
+				return endstreamTestData{
+					payload:     []byte("invalid-payload"),
+					isAllStream: false,
+					streamID:    vo.StreamID(1),
+				}
+			},
+			setupMocks: func(mocks endstreamTestMocks, cid vo.CircuitID, testData endstreamTestData, setup endstreamConnStateSetup) {
+				decodingError := errors.New("payload decoding failed")
+				WhenDouble(mocks.encoder.DecodeDataPayload(testData.payload)).ThenReturn(nil, decodingError)
+			},
+			expectError: true,
+			errorCheck: func(err error) bool {
+				return err != nil && err.Error() == "payload decoding failed"
+			},
+			expectedCalls:   endstreamExpectedCalls{decodeDataPayload: 1, removeStream: 0, delete: 0, forwardCell: 0},
+			expectServeDown: false,
+		},
+		{
+			name: "End all streams with forward - middle relay",
+			setupConn: func() (*entity.ConnState, endstreamConnStateSetup) {
+				key, _ := vo.NewAESKey()
+				nonce, _ := vo.NewNonce()
+				up1, _ := net.Pipe()
+				down1, _ := net.Pipe()
+				st := entity.NewConnState(key, nonce, up1, down1)
+				return st, endstreamConnStateSetup{hasDown: true}
+			},
+			setupTestData: func() endstreamTestData {
+				return endstreamTestData{
+					payload:     []byte{}, // Empty payload means end all streams
+					isAllStream: true,
+					streamID:    vo.StreamID(0),
+				}
+			},
+			setupMocks: func(mocks endstreamTestMocks, cid vo.CircuitID, testData endstreamTestData, setup endstreamConnStateSetup) {
+				WhenSingle(mocks.sender.ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())).ThenReturn(nil)
+				WhenSingle(mocks.repo.Delete(cid)).ThenReturn(nil)
+			},
+			expectError:     false,
+			expectedCalls:   endstreamExpectedCalls{decodeDataPayload: 0, removeStream: 0, delete: 1, forwardCell: 1},
+			expectServeDown: true,
+		},
 	}
 
-	// Verify mock interactions
-	Verify(mockEncoder, Times(1)).DecodeDataPayload(endPayload)
-	Verify(mockRepo, Times(1)).RemoveStream(cid, sid)
-	Verify(mockSender, Times(1)).ForwardCell(st.Down(), cid, cell)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := NewMockController(t)
 
-	st.Up().Close()
-	st.Down().Close()
-}
+			// Create mocks
+			mocks := endstreamTestMocks{
+				repo:    Mock[repository.ConnStateRepository](ctrl),
+				sender:  Mock[service.CellSenderService](ctrl),
+				encoder: Mock[service.PayloadEncodingService](ctrl),
+			}
 
-// Test payload decoding failure
-func TestHandleEndStreamUseCase_PayloadDecodingFailure(t *testing.T) {
-	ctrl := NewMockController(t)
+			// Setup connection state
+			st, connSetup := tt.setupConn()
+			defer func() {
+				if st.Up() != nil {
+					st.Up().Close()
+				}
+				if st.Down() != nil {
+					st.Down().Close()
+				}
+			}()
 
-	mockRepo := Mock[repository.ConnStateRepository](ctrl)
-	mockSender := Mock[service.CellSenderService](ctrl)
-	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+			// Setup test data
+			testData := tt.setupTestData()
+			cid := vo.NewCircuitID()
+			cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: testData.payload}
 
-	uc := usecase.NewHandleEndStreamUseCase(mockRepo, mockSender, mockEncoder)
+			// Setup mock behaviors
+			tt.setupMocks(mocks, cid, testData, connSetup)
 
-	// Setup test data
-	key, _ := vo.NewAESKey()
-	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-	invalidPayload := []byte("invalid-payload")
+			// Track ensureServeDown calls
+			serveDownCalled := false
+			ensureServeDown := func(st *entity.ConnState) {
+				serveDownCalled = true
+			}
 
-	up1, _ := net.Pipe()
-	st := entity.NewConnState(key, nonce, up1, nil)
+			// Create usecase and execute
+			uc := usecase.NewHandleEndStreamUseCase(mocks.repo, mocks.sender, mocks.encoder)
+			err := uc.EndStream(st, cid, cell, ensureServeDown)
 
-	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: invalidPayload}
+			// Verify error expectations
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("Expected error, got nil")
+				}
+				if tt.errorCheck != nil && !tt.errorCheck(err) {
+					t.Fatalf("Error check failed for error: %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+			}
 
-	ensureServeDown := func(st *entity.ConnState) {}
+			// Verify ensureServeDown call
+			if tt.expectServeDown && !serveDownCalled {
+				t.Errorf("Expected ensureServeDown to be called")
+			}
+			if !tt.expectServeDown && serveDownCalled {
+				t.Errorf("Unexpected ensureServeDown call")
+			}
 
-	// Configure mocks
-	decodingError := errors.New("payload decoding failed")
-	WhenDouble(mockEncoder.DecodeDataPayload(invalidPayload)).ThenReturn(nil, decodingError)
-
-	// Execute
-	err := uc.EndStream(st, cid, cell, ensureServeDown)
-
-	// Verify error is returned
-	if err == nil {
-		t.Fatal("Expected error, got nil")
+			// Verify mock interactions using parameterized call counts
+			Verify(mocks.encoder, Times(tt.expectedCalls.decodeDataPayload)).DecodeDataPayload(Any[[]byte]())
+			Verify(mocks.repo, Times(tt.expectedCalls.removeStream)).RemoveStream(Any[vo.CircuitID](), Any[vo.StreamID]())
+			Verify(mocks.repo, Times(tt.expectedCalls.delete)).Delete(Any[vo.CircuitID]())
+			Verify(mocks.sender, Times(tt.expectedCalls.forwardCell)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
+		})
 	}
-	if !errors.Is(err, decodingError) {
-		t.Fatalf("Expected decoding error, got: %v", err)
-	}
-
-	// Verify interactions
-	Verify(mockEncoder, Times(1)).DecodeDataPayload(invalidPayload)
-	Verify(mockRepo, Times(0)).RemoveStream(Any[vo.CircuitID](), Any[vo.StreamID]())
-
-	st.Up().Close()
-}
-
-// Test ending all streams with downstream connection
-func TestHandleEndStreamUseCase_EndAllStreamsWithForward(t *testing.T) {
-	ctrl := NewMockController(t)
-
-	mockRepo := Mock[repository.ConnStateRepository](ctrl)
-	mockSender := Mock[service.CellSenderService](ctrl)
-	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
-
-	uc := usecase.NewHandleEndStreamUseCase(mockRepo, mockSender, mockEncoder)
-
-	// Setup test data
-	key, _ := vo.NewAESKey()
-	nonce, _ := vo.NewNonce()
-	cid := vo.NewCircuitID()
-
-	// Create mock connections (middle relay - has down connection)
-	up1, _ := net.Pipe()
-	down1, _ := net.Pipe()
-	st := entity.NewConnState(key, nonce, up1, down1)
-
-	// Empty payload means end all streams (StreamID = 0)
-	cell := &entity.Cell{Cmd: vo.CmdEnd, Version: vo.ProtocolV1, Payload: []byte{}}
-
-	// Mock ensureServeDown function
-	serveDownCalled := false
-	ensureServeDown := func(st *entity.ConnState) {
-		serveDownCalled = true
-	}
-
-	// Configure mocks for ending all streams with downstream forwarding
-	WhenSingle(mockSender.ForwardCell(st.Down(), cid, cell)).ThenReturn(nil)
-	WhenSingle(mockRepo.Delete(cid)).ThenReturn(nil)
-
-	// Execute
-	err := uc.EndStream(st, cid, cell, ensureServeDown)
-
-	// Verify
-	if err != nil {
-		t.Fatalf("EndStream failed: %v", err)
-	}
-
-	if !serveDownCalled {
-		t.Errorf("ensureServeDown not called")
-	}
-
-	// Verify mock interactions
-	Verify(mockEncoder, Times(0)).DecodeDataPayload(Any[[]byte]())
-	Verify(mockSender, Times(1)).ForwardCell(st.Down(), cid, cell)
-	Verify(mockRepo, Times(1)).Delete(cid)
-
-	st.Up().Close()
-	st.Down().Close()
 }

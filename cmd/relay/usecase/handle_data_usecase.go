@@ -38,10 +38,7 @@ func (uc *handleDataUseCaseImpl) Data(st *entity.ConnState, cid vo.CircuitID, ce
 	if err != nil {
 		return err
 	}
-	sid, err := vo.StreamIDFrom(p.StreamID)
-	if err != nil {
-		return err
-	}
+	sid := p.StreamID
 
 	// Try to decrypt the data for downstream flow
 	nonce := st.DataNonce()

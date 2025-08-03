@@ -6,76 +6,57 @@ import (
 
 func TestCellCommand_String(t *testing.T) {
 	tests := []struct {
+		name     string
 		cmd      CellCommand
 		expected string
 	}{
-		{CmdExtend, "EXTEND"},
-		{CmdConnect, "CONNECT"},
-		{CmdData, "DATA"},
-		{CmdEnd, "END"},
-		{CmdDestroy, "DESTROY"},
-		{CmdBegin, "BEGIN"},
-		{CmdBeginAck, "BEGIN_ACK"},
-		{CmdCreated, "CREATED"},
+		{"EXTEND", CmdExtend, "EXTEND"},
+		{"CONNECT", CmdConnect, "CONNECT"},
+		{"DATA", CmdData, "DATA"},
+		{"END", CmdEnd, "END"},
+		{"DESTROY", CmdDestroy, "DESTROY"},
+		{"BEGIN", CmdBegin, "BEGIN"},
+		{"BEGIN_ACK", CmdBeginAck, "BEGIN_ACK"},
+		{"CREATED", CmdCreated, "CREATED"},
+		{"UNKNOWN_255", CellCommand(0xFF), "UNKNOWN(255)"},
+		{"UNKNOWN_0", CellCommand(0x00), "UNKNOWN(0)"},
 	}
 
-	for _, test := range tests {
-		result := test.cmd.String()
-		if result != test.expected {
-			t.Errorf("CellCommand(%d).String() = %s, want %s", test.cmd, result, test.expected)
-		}
-	}
-}
-
-func TestCellCommand_String_Unknown(t *testing.T) {
-	unknownCmd := CellCommand(0xFF)
-	result := unknownCmd.String()
-	expected := "UNKNOWN(255)"
-
-	if result != expected {
-		t.Errorf("Unknown CellCommand.String() = %s, want %s", result, expected)
-	}
-}
-
-func TestCellCommand_IsValid(t *testing.T) {
-	tests := []struct {
-		name string
-		cmd  CellCommand
-	}{
-		{"CmdExtend", CmdExtend},
-		{"CmdConnect", CmdConnect},
-		{"CmdData", CmdData},
-		{"CmdEnd", CmdEnd},
-		{"CmdDestroy", CmdDestroy},
-		{"CmdBegin", CmdBegin},
-		{"CmdBeginAck", CmdBeginAck},
-		{"CmdCreated", CmdCreated},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if !test.cmd.IsValid() {
-				t.Errorf("CellCommand(%d) should be valid but IsValid() returned false", test.cmd)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.cmd.String()
+			if result != tt.expected {
+				t.Errorf("CellCommand(%d).String() = %s, want %s", tt.cmd, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestCellCommand_IsValid_Invalid(t *testing.T) {
+func TestCellCommand_IsValid(t *testing.T) {
 	tests := []struct {
-		name string
-		cmd  CellCommand
+		name        string
+		cmd         CellCommand
+		expectValid bool
 	}{
-		{"Zero value", CellCommand(0x00)},
-		{"Undefined 9", CellCommand(0x09)},
-		{"Undefined 16", CellCommand(0x10)},
-		{"Maximum byte", CellCommand(0xFF)},
+		{"CmdExtend", CmdExtend, true},
+		{"CmdConnect", CmdConnect, true},
+		{"CmdData", CmdData, true},
+		{"CmdEnd", CmdEnd, true},
+		{"CmdDestroy", CmdDestroy, true},
+		{"CmdBegin", CmdBegin, true},
+		{"CmdBeginAck", CmdBeginAck, true},
+		{"CmdCreated", CmdCreated, true},
+		{"Zero value", CellCommand(0x00), false},
+		{"Undefined 9", CellCommand(0x09), false},
+		{"Undefined 16", CellCommand(0x10), false},
+		{"Maximum byte", CellCommand(0xFF), false},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if test.cmd.IsValid() {
-				t.Errorf("CellCommand(%d) should be invalid but IsValid() returned true", test.cmd)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isValid := tt.cmd.IsValid()
+			if isValid != tt.expectValid {
+				t.Errorf("CellCommand(%d).IsValid() = %v, want %v", tt.cmd, isValid, tt.expectValid)
 			}
 		})
 	}
@@ -97,39 +78,43 @@ func TestCellCommand_Constants(t *testing.T) {
 		{"CmdCreated", CmdCreated, 0x08},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if byte(test.cmd) != test.expectedValue {
-				t.Errorf("CellCommand constant value mismatch: %s = %d, want %d", test.cmd.String(), byte(test.cmd), test.expectedValue)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if byte(tt.cmd) != tt.expectedValue {
+				t.Errorf("CellCommand constant value mismatch: %s = %d, want %d", tt.cmd.String(), byte(tt.cmd), tt.expectedValue)
 			}
 		})
 	}
 }
 
 func TestCellCommand_Coverage(t *testing.T) {
-	// Test all valid commands to ensure they're covered by both String() and IsValid()
-	allValidCommands := []CellCommand{
-		CmdExtend,
-		CmdConnect,
-		CmdData,
-		CmdEnd,
-		CmdDestroy,
-		CmdBegin,
-		CmdBeginAck,
-		CmdCreated,
+	tests := []struct {
+		name string
+		cmd  CellCommand
+	}{
+		{"CmdExtend", CmdExtend},
+		{"CmdConnect", CmdConnect},
+		{"CmdData", CmdData},
+		{"CmdEnd", CmdEnd},
+		{"CmdDestroy", CmdDestroy},
+		{"CmdBegin", CmdBegin},
+		{"CmdBeginAck", CmdBeginAck},
+		{"CmdCreated", CmdCreated},
 	}
 
-	for _, cmd := range allValidCommands {
-		// Ensure String() doesn't return "UNKNOWN" for valid commands
-		str := cmd.String()
-		if str == "UNKNOWN("+string(rune(byte(cmd)))+")" {
-			t.Errorf("Valid command %d returned UNKNOWN from String()", cmd)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Ensure String() doesn't return "UNKNOWN" for valid commands
+			str := tt.cmd.String()
+			if str == "UNKNOWN("+string(rune(byte(tt.cmd)))+")" {
+				t.Errorf("Valid command %d returned UNKNOWN from String()", tt.cmd)
+			}
 
-		// Ensure IsValid() returns true for all valid commands
-		if !cmd.IsValid() {
-			t.Errorf("Valid command %d returned false from IsValid()", cmd)
-		}
+			// Ensure IsValid() returns true for all valid commands
+			if !tt.cmd.IsValid() {
+				t.Errorf("Valid command %d returned false from IsValid()", tt.cmd)
+			}
+		})
 	}
 }
 
