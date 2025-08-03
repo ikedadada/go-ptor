@@ -6,23 +6,12 @@ import (
 	"errors"
 	"testing"
 
+	. "github.com/ovechkin-dm/mockio/v2/mock"
 	"ikedadada/go-ptor/cmd/client/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 )
-
-type mockCircuitRepoOpen struct {
-	circuit *entity.Circuit
-	err     error
-}
-
-func (m *mockCircuitRepoOpen) Find(id vo.CircuitID) (*entity.Circuit, error) {
-	return m.circuit, m.err
-}
-func (m *mockCircuitRepoOpen) Save(*entity.Circuit) error             { return nil }
-func (m *mockCircuitRepoOpen) Delete(vo.CircuitID) error              { return nil }
-func (m *mockCircuitRepoOpen) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
 func makeTestCircuit() (*entity.Circuit, error) {
 	id, err := vo.CircuitIDFrom("550e8400-e29b-41d4-a716-446655440000")
@@ -61,18 +50,30 @@ func TestOpenStreamInteractor_Handle(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		cRepo      repository.CircuitRepository
+		circuitRes *entity.Circuit
+		circuitErr error
 		input      usecase.OpenStreamInput
 		expectsErr bool
 	}{
-		{"ok", &mockCircuitRepoOpen{circuit: circuit}, usecase.OpenStreamInput{CircuitID: circuit.ID().String()}, false},
-		{"circuit not found", &mockCircuitRepoOpen{circuit: nil, err: errors.New("not found")}, usecase.OpenStreamInput{CircuitID: "550e8400-e29b-41d4-a716-446655440000"}, true},
-		{"bad id", &mockCircuitRepoOpen{circuit: nil}, usecase.OpenStreamInput{CircuitID: "bad-uuid"}, true},
+		{"ok", circuit, nil, usecase.OpenStreamInput{CircuitID: circuit.ID().String()}, false},
+		{"circuit not found", nil, errors.New("not found"), usecase.OpenStreamInput{CircuitID: "550e8400-e29b-41d4-a716-446655440000"}, true},
+		{"bad id", nil, nil, usecase.OpenStreamInput{CircuitID: "bad-uuid"}, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := usecase.NewOpenStreamUseCase(tt.cRepo)
+			ctrl := NewMockController(t)
+			cRepo := Mock[repository.CircuitRepository](ctrl)
+
+			// Setup mock behavior based on test case
+			if tt.input.CircuitID == "bad-uuid" {
+				// For bad UUID case, the error will be from parsing, not from Find call
+			} else {
+				circuitID, _ := vo.CircuitIDFrom(tt.input.CircuitID)
+				WhenDouble(cRepo.Find(circuitID)).ThenReturn(tt.circuitRes, tt.circuitErr)
+			}
+
+			uc := usecase.NewOpenStreamUseCase(cRepo)
 			_, err := uc.Handle(tt.input)
 			if tt.expectsErr && err == nil {
 				t.Errorf("expected error")

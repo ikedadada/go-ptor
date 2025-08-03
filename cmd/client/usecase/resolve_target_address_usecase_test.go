@@ -6,57 +6,19 @@ import (
 	"errors"
 	"testing"
 
+	. "github.com/ovechkin-dm/mockio/v2/mock"
 	"ikedadada/go-ptor/shared/domain/entity"
+	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 )
 
 var ErrHiddenServiceNotFound = errors.New("hidden service not found")
 
-// mockHiddenServiceRepository for testing
-type mockHiddenServiceRepository struct {
-	services map[string]*entity.HiddenService
-}
-
-func newMockHiddenServiceRepository() *mockHiddenServiceRepository {
-	return &mockHiddenServiceRepository{
-		services: make(map[string]*entity.HiddenService),
-	}
-}
-
-func (m *mockHiddenServiceRepository) FindByAddress(address vo.HiddenAddr) (*entity.HiddenService, error) {
-	hs, exists := m.services[address.String()]
-	if !exists {
-		return nil, ErrHiddenServiceNotFound
-	}
-	return hs, nil
-}
-
-func (m *mockHiddenServiceRepository) FindByAddressString(address string) (*entity.HiddenService, error) {
-	hs, exists := m.services[address]
-	if !exists {
-		return nil, ErrHiddenServiceNotFound
-	}
-	return hs, nil
-}
-
-func (m *mockHiddenServiceRepository) Save(hs *entity.HiddenService) error {
-	m.services[hs.Address().String()] = hs
-	return nil
-}
-
-func (m *mockHiddenServiceRepository) All() ([]*entity.HiddenService, error) {
-	var result []*entity.HiddenService
-	for _, hs := range m.services {
-		result = append(result, hs)
-	}
-	return result, nil
-}
-
 func TestResolveTargetAddressUseCase_Handle(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       ResolveTargetAddressInput
-		setupMock   func(*mockHiddenServiceRepository)
+		setupMock   func(repository.HiddenServiceRepository)
 		expected    ResolveTargetAddressOutput
 		expectError bool
 	}{
@@ -66,7 +28,7 @@ func TestResolveTargetAddressUseCase_Handle(t *testing.T) {
 				Host: "192.168.1.1",
 				Port: 80,
 			},
-			setupMock: func(m *mockHiddenServiceRepository) {},
+			setupMock: func(m repository.HiddenServiceRepository) {},
 			expected: ResolveTargetAddressOutput{
 				DialAddress: "192.168.1.1:80",
 				ExitRelayID: "",
@@ -79,7 +41,7 @@ func TestResolveTargetAddressUseCase_Handle(t *testing.T) {
 				Host: "example.com",
 				Port: 443,
 			},
-			setupMock: func(m *mockHiddenServiceRepository) {},
+			setupMock: func(m repository.HiddenServiceRepository) {},
 			expected: ResolveTargetAddressOutput{
 				DialAddress: "example.com:443",
 				ExitRelayID: "",
@@ -92,7 +54,7 @@ func TestResolveTargetAddressUseCase_Handle(t *testing.T) {
 				Host: "2001:db8::1",
 				Port: 80,
 			},
-			setupMock: func(m *mockHiddenServiceRepository) {},
+			setupMock: func(m repository.HiddenServiceRepository) {},
 			expected: ResolveTargetAddressOutput{
 				DialAddress: "[2001:db8::1]:80",
 				ExitRelayID: "",
@@ -105,15 +67,21 @@ func TestResolveTargetAddressUseCase_Handle(t *testing.T) {
 				Host: "test.ptor",
 				Port: 80,
 			},
-			setupMock: func(m *mockHiddenServiceRepository) {
-				// Create a test public key
-				pub, _, _ := ed25519.GenerateKey(rand.Reader)
+			setupMock: func(m repository.HiddenServiceRepository) {
+				if mockRepo, ok := m.(interface {
+					FindByAddressString(string) (*entity.HiddenService, error)
+				}); ok {
+					// Create a test public key
+					pub, _, _ := ed25519.GenerateKey(rand.Reader)
 
-				addr := vo.HiddenAddrFromString("test.ptor")
-				relayID, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
-				pubKey := vo.Ed25519PubKey{PublicKey: pub}
-				hs := entity.NewHiddenService(addr, relayID, pubKey)
-				m.Save(hs)
+					addr := vo.HiddenAddrFromString("test.ptor")
+					relayID, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440000")
+					pubKey := vo.Ed25519PubKey{PublicKey: pub}
+					hs := entity.NewHiddenService(addr, relayID, pubKey)
+
+					// Setup mock behavior for FindByAddressString
+					WhenDouble(mockRepo.FindByAddressString(Any[string]())).ThenReturn(hs, nil)
+				}
 			},
 			expected: ResolveTargetAddressOutput{
 				DialAddress: "test.ptor:80",
@@ -127,7 +95,14 @@ func TestResolveTargetAddressUseCase_Handle(t *testing.T) {
 				Host: "notfound.ptor",
 				Port: 80,
 			},
-			setupMock:   func(m *mockHiddenServiceRepository) {},
+			setupMock: func(m repository.HiddenServiceRepository) {
+				if mockRepo, ok := m.(interface {
+					FindByAddressString(string) (*entity.HiddenService, error)
+				}); ok {
+					// Setup mock behavior for FindByAddressString to return error
+					WhenDouble(mockRepo.FindByAddressString(Any[string]())).ThenReturn((*entity.HiddenService)(nil), repository.ErrNotFound)
+				}
+			},
 			expected:    ResolveTargetAddressOutput{},
 			expectError: true,
 		},
@@ -137,15 +112,21 @@ func TestResolveTargetAddressUseCase_Handle(t *testing.T) {
 				Host: "TEST.PTOR",
 				Port: 443,
 			},
-			setupMock: func(m *mockHiddenServiceRepository) {
-				// Create a test public key
-				pub, _, _ := ed25519.GenerateKey(rand.Reader)
+			setupMock: func(m repository.HiddenServiceRepository) {
+				if mockRepo, ok := m.(interface {
+					FindByAddressString(string) (*entity.HiddenService, error)
+				}); ok {
+					// Create a test public key
+					pub, _, _ := ed25519.GenerateKey(rand.Reader)
 
-				addr := vo.HiddenAddrFromString("test.ptor")
-				relayID, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440001")
-				pubKey := vo.Ed25519PubKey{PublicKey: pub}
-				hs := entity.NewHiddenService(addr, relayID, pubKey)
-				m.Save(hs)
+					addr := vo.HiddenAddrFromString("test.ptor")
+					relayID, _ := vo.NewRelayID("550e8400-e29b-41d4-a716-446655440001")
+					pubKey := vo.Ed25519PubKey{PublicKey: pub}
+					hs := entity.NewHiddenService(addr, relayID, pubKey)
+
+					// Setup mock behavior for FindByAddressString with case insensitive match
+					WhenDouble(mockRepo.FindByAddressString(Any[string]())).ThenReturn(hs, nil)
+				}
 			},
 			expected: ResolveTargetAddressOutput{
 				DialAddress: "test.ptor:443",
@@ -157,7 +138,8 @@ func TestResolveTargetAddressUseCase_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockRepo := newMockHiddenServiceRepository()
+			ctrl := NewMockController(t)
+			mockRepo := Mock[repository.HiddenServiceRepository](ctrl)
 			tt.setupMock(mockRepo)
 
 			uc := NewResolveTargetAddressUseCase(mockRepo)

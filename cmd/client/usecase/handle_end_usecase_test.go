@@ -5,24 +5,12 @@ import (
 	"crypto/rsa"
 	"testing"
 
+	. "github.com/ovechkin-dm/mockio/v2/mock"
 	"ikedadada/go-ptor/cmd/client/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
 	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 )
-
-type mockRepoEnd struct {
-	cir   *entity.Circuit
-	find  error
-	delID vo.CircuitID
-}
-
-func (m *mockRepoEnd) Find(id vo.CircuitID) (*entity.Circuit, error) {
-	return m.cir, m.find
-}
-func (m *mockRepoEnd) Save(*entity.Circuit) error             { return nil }
-func (m *mockRepoEnd) Delete(id vo.CircuitID) error           { m.delID = id; return nil }
-func (m *mockRepoEnd) ListActive() ([]*entity.Circuit, error) { return nil, nil }
 
 func makeCircuitForEnd() (*entity.Circuit, vo.StreamID, error) {
 	id := vo.NewCircuitID()
@@ -50,7 +38,9 @@ func TestHandleEndUseCase(t *testing.T) {
 	cid := cir.ID().String()
 
 	t.Run("stream", func(t *testing.T) {
-		cRepo := &mockRepoEnd{cir: cir}
+		ctrl := NewMockController(t)
+		cRepo := Mock[repository.CircuitRepository](ctrl)
+		WhenDouble(cRepo.Find(cir.ID())).ThenReturn(cir, nil)
 		uc := usecase.NewHandleEndUseCase(cRepo)
 		out, err := uc.Handle(usecase.HandleEndInput{CircuitID: cid, StreamID: sid.UInt16()})
 		if err != nil {
@@ -62,22 +52,26 @@ func TestHandleEndUseCase(t *testing.T) {
 	})
 
 	t.Run("circuit", func(t *testing.T) {
-		repo := &mockRepoEnd{cir: cir}
+		ctrl := NewMockController(t)
+		repo := Mock[repository.CircuitRepository](ctrl)
+		WhenDouble(repo.Find(cir.ID())).ThenReturn(cir, nil)
+		WhenSingle(repo.Delete(cir.ID())).ThenReturn(nil)
 		uc := usecase.NewHandleEndUseCase(repo)
 		out, err := uc.Handle(usecase.HandleEndInput{CircuitID: cid, StreamID: 0})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if repo.delID.String() != cid {
-			t.Errorf("expected delete called")
-		}
+		// Verify that Delete was called with the correct circuit ID
+		Verify(repo, Times(1)).Delete(cir.ID())
 		if !out.Closed {
 			t.Errorf("expected closed")
 		}
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		repo := &mockRepoEnd{cir: nil, find: repository.ErrNotFound}
+		ctrl := NewMockController(t)
+		repo := Mock[repository.CircuitRepository](ctrl)
+		WhenDouble(repo.Find(cir.ID())).ThenReturn(nil, repository.ErrNotFound)
 		uc := usecase.NewHandleEndUseCase(repo)
 		_, err := uc.Handle(usecase.HandleEndInput{CircuitID: cid, StreamID: sid.UInt16()})
 		if err == nil {
@@ -86,7 +80,9 @@ func TestHandleEndUseCase(t *testing.T) {
 	})
 
 	t.Run("bad id", func(t *testing.T) {
-		repo := &mockRepoEnd{}
+		ctrl := NewMockController(t)
+		repo := Mock[repository.CircuitRepository](ctrl)
+		// No need to setup mock behavior as the error will come from parsing the bad ID
 		uc := usecase.NewHandleEndUseCase(repo)
 		_, err := uc.Handle(usecase.HandleEndInput{CircuitID: "bad", StreamID: 1})
 		if err == nil {

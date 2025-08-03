@@ -3,154 +3,225 @@ package usecase_test
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"encoding/binary"
-	"io"
+	"errors"
 	"net"
 	"testing"
-	"time"
 
-	"ikedadada/go-ptor/cmd/relay/infrastructure/repository"
+	. "github.com/ovechkin-dm/mockio/v2/mock"
+
 	"ikedadada/go-ptor/cmd/relay/usecase"
 	"ikedadada/go-ptor/shared/domain/entity"
+	"ikedadada/go-ptor/shared/domain/repository"
 	vo "ikedadada/go-ptor/shared/domain/value_object"
 	"ikedadada/go-ptor/shared/service"
 )
 
 func TestHandleExtendUseCase_Extend(t *testing.T) {
+	ctrl := NewMockController(t)
+
 	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	priv := vo.NewRSAPrivKey(rawKey)
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
-	uc := usecase.NewHandleExtendUseCase(priv, csRepo, cSvc, csSvc, peSvc)
 
-	// prepare extend cell
-	_, pub, _ := cSvc.X25519Generate()
-	ln, _ := net.Listen("tcp", "127.0.0.1:0")
-	defer ln.Close()
-	go func() { ln.Accept() }()
-	var pubArr [32]byte
-	copy(pubArr[:], pub)
-	payload, _ := peSvc.EncodeExtendPayload(&service.ExtendPayloadDTO{NextHop: ln.Addr().String(), ClientPub: pubArr})
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockCrypto := Mock[service.CryptoService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+
+	uc := usecase.NewHandleExtendUseCase(priv, mockRepo, mockCrypto, mockSender, mockEncoder)
+
+	// Setup test data
 	cid := vo.NewCircuitID()
-	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
+	extendPayload := []byte("extend-payload")
+	clientPub := [32]byte{1, 2, 3, 4}
+	relayPriv := []byte("relay-private-key")
+	relayPub := []byte("relay-public-key")
+	sharedSecret := []byte("shared-secret")
+	derivedKey, _ := vo.NewAESKey()
+	derivedNonce, _ := vo.NewNonce()
+	createdPayload := []byte("created-payload")
 
-	up1, up2 := net.Pipe()
-	errCh := make(chan error, 1)
-	go func() { errCh <- uc.Extend(up1, cid, cell) }()
+	up1, _ := net.Pipe()
+	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: extendPayload}
 
-	// Read created response
-	hdr := make([]byte, 20)
-	if _, err := io.ReadFull(up2, hdr); err != nil {
-		t.Fatalf("read header: %v", err)
-	}
-	if vo.CellCommand(hdr[16]) != vo.CmdCreated {
-		t.Fatalf("created cmd %d", hdr[16])
-	}
-	if hdr[17] != byte(vo.ProtocolV1) {
-		t.Fatalf("created version %d", hdr[17])
-	}
-	l := binary.BigEndian.Uint16(hdr[18:20])
-	body := make([]byte, l)
-	if _, err := io.ReadFull(up2, body); err != nil {
-		t.Fatalf("read body: %v", err)
+	// Mock extend payload DTO (no next hop - exit node scenario)
+	extendDTO := &service.ExtendPayloadDTO{NextHop: "", ClientPub: clientPub}
+
+	// Configure mocks for successful extend operation
+	WhenDouble(mockEncoder.DecodeExtendPayload(extendPayload)).ThenReturn(extendDTO, nil)
+	When(mockCrypto.X25519Generate()).ThenReturn(relayPriv, relayPub, nil)
+	WhenDouble(mockCrypto.X25519Shared(relayPriv, clientPub[:])).ThenReturn(sharedSecret, nil)
+	When(mockCrypto.DeriveKeyNonce(sharedSecret)).ThenReturn(derivedKey, derivedNonce, nil)
+	WhenSingle(mockRepo.Add(Any[vo.CircuitID](), Any[*entity.ConnState]())).ThenReturn(nil)
+	WhenDouble(mockEncoder.EncodeCreatedPayload(Any[*service.CreatedPayloadDTO]())).ThenReturn(createdPayload, nil)
+	WhenSingle(mockSender.SendCreated(up1, cid, createdPayload)).ThenReturn(nil)
+
+	// Execute
+	err := uc.Extend(up1, cid, cell)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("Extend failed: %v", err)
 	}
 
-	// ensure entry created with retry
-	var st *entity.ConnState
-	var err error
-	timeout := time.After(100 * time.Millisecond)
-	ticker := time.NewTicker(5 * time.Millisecond)
-	defer ticker.Stop()
+	// Verify mock interactions
+	Verify(mockEncoder, Times(1)).DecodeExtendPayload(extendPayload)
+	Verify(mockCrypto, Times(1)).X25519Generate()
+	Verify(mockCrypto, Times(1)).X25519Shared(relayPriv, clientPub[:])
+	Verify(mockCrypto, Times(1)).DeriveKeyNonce(sharedSecret)
+	Verify(mockRepo, Times(1)).Add(Any[vo.CircuitID](), Any[*entity.ConnState]())
+	Verify(mockEncoder, Times(1)).EncodeCreatedPayload(Any[*service.CreatedPayloadDTO]())
+	Verify(mockSender, Times(1)).SendCreated(up1, cid, createdPayload)
 
-	for {
-		select {
-		case <-timeout:
-			t.Fatal("timeout waiting for entry creation")
-		case <-ticker.C:
-			st, err = csRepo.Find(cid)
-			if err == nil {
-				goto found // Entry created successfully
-			}
-		}
-	}
-found:
-	if st.Down() != nil {
-		st.Down().Close()
-	}
-	st.Up().Close()
-
-	if err := <-errCh; err != nil {
-		t.Fatalf("extend error: %v", err)
-	}
+	up1.Close()
 }
 
 func TestHandleExtendUseCase_ForwardExtend(t *testing.T) {
+	ctrl := NewMockController(t)
+
 	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	priv := vo.NewRSAPrivKey(rawKey)
-	csRepo := repository.NewConnStateRepository(time.Second)
-	cSvc := service.NewCryptoService()
-	csSvc := service.NewCellSenderService()
-	peSvc := service.NewPayloadEncodingService()
-	uc := usecase.NewHandleExtendUseCase(priv, csRepo, cSvc, csSvc, peSvc)
 
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockCrypto := Mock[service.CryptoService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+
+	uc := usecase.NewHandleExtendUseCase(priv, mockRepo, mockCrypto, mockSender, mockEncoder)
+
+	// Setup test data
 	key, _ := vo.NewAESKey()
 	nonce, _ := vo.NewNonce()
 	cid := vo.NewCircuitID()
-	up1, up2 := net.Pipe()
-	down1, down2 := net.Pipe()
+	extendPayload := []byte("extend-payload")
+	createdPayload := []byte("created-payload")
 
-	st := entity.NewConnState(key, nonce, up1, down1)
-	csRepo.Add(cid, st)
+	// Create mock connections
+	up1, _ := net.Pipe()
+	mockDown := Mock[net.Conn](ctrl)
+	st := entity.NewConnState(key, nonce, up1, mockDown)
 
-	_, pub, _ := cSvc.X25519Generate()
-	var pubArr [32]byte
-	copy(pubArr[:], pub)
-	payload, _ := peSvc.EncodeExtendPayload(&service.ExtendPayloadDTO{ClientPub: pubArr})
-	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: payload}
+	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: extendPayload}
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- uc.ForwardExtend(st, cid, cell) }()
+	// Configure mocks for forward extend operation
+	WhenSingle(mockSender.ForwardCell(mockDown, cid, cell)).ThenReturn(nil)
 
-	// Should forward the extend cell downstream
-	fwd := make([]byte, 528)
-	if _, err := io.ReadFull(down2, fwd); err != nil {
-		t.Fatalf("read forward: %v", err)
-	}
-	if vo.CellCommand(fwd[16]) != vo.CmdExtend {
-		t.Fatalf("forwarded cmd %d", fwd[16])
-	}
+	// Mock reading response header and payload
+	responseHeader := make([]byte, 20)
+	responseHeader[16] = byte(vo.CmdCreated)
+	responseHeader[17] = byte(vo.ProtocolV1)
+	responseHeader[18] = 0
+	responseHeader[19] = byte(len(createdPayload))
 
-	// Send back created response
-	created, _ := peSvc.EncodeCreatedPayload(&service.CreatedPayloadDTO{RelayPub: pubArr})
-	var hdr [20]byte
-	copy(hdr[:16], cid.Bytes())
-	binary.BigEndian.PutUint16(hdr[18:20], uint16(len(created)))
-	down2.Write(hdr[:])
-	down2.Write(created)
+	WhenDouble(mockDown.Read(Any[[]byte]())).ThenAnswer(func(args []any) (int, error) {
+		buf := args[0].([]byte)
+		copy(buf, responseHeader)
+		return len(responseHeader), nil
+	}).ThenAnswer(func(args []any) (int, error) {
+		buf := args[0].([]byte)
+		copy(buf, createdPayload)
+		return len(createdPayload), nil
+	})
 
-	// Should forward created response upstream
-	var respHdr [20]byte
-	if _, err := io.ReadFull(up2, respHdr[:]); err != nil {
-		t.Fatalf("read created hdr: %v", err)
-	}
-	if vo.CellCommand(respHdr[16]) != vo.CmdCreated {
-		t.Fatalf("created cmd %d", respHdr[16])
-	}
-	if respHdr[17] != byte(vo.ProtocolV1) {
-		t.Fatalf("created version %d", respHdr[17])
-	}
-	l := binary.BigEndian.Uint16(respHdr[18:20])
-	resp := make([]byte, l)
-	if _, err := io.ReadFull(up2, resp); err != nil {
-		t.Fatalf("read created body: %v", err)
+	WhenSingle(mockSender.SendCreated(up1, cid, createdPayload)).ThenReturn(nil)
+
+	// Execute
+	err := uc.ForwardExtend(st, cid, cell)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("ForwardExtend failed: %v", err)
 	}
 
-	if err := <-errCh; err != nil {
-		t.Fatalf("forward extend error: %v", err)
-	}
+	// Verify mock interactions
+	Verify(mockSender, Times(1)).ForwardCell(mockDown, cid, cell)
+	Verify(mockDown, Times(2)).Read(Any[[]byte]())
+	Verify(mockSender, Times(1)).SendCreated(up1, cid, createdPayload)
 
 	st.Up().Close()
-	st.Down().Close()
+}
+
+// Test payload decoding failure
+func TestHandleExtendUseCase_PayloadDecodingFailure(t *testing.T) {
+	ctrl := NewMockController(t)
+
+	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	priv := vo.NewRSAPrivKey(rawKey)
+
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockCrypto := Mock[service.CryptoService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+
+	uc := usecase.NewHandleExtendUseCase(priv, mockRepo, mockCrypto, mockSender, mockEncoder)
+
+	// Setup test data
+	cid := vo.NewCircuitID()
+	invalidPayload := []byte("invalid-payload")
+
+	up1, _ := net.Pipe()
+	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: invalidPayload}
+
+	// Configure mocks
+	decodingError := errors.New("payload decoding failed")
+	WhenDouble(mockEncoder.DecodeExtendPayload(invalidPayload)).ThenReturn(nil, decodingError)
+
+	// Execute
+	err := uc.Extend(up1, cid, cell)
+
+	// Verify error is returned
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !errors.Is(err, decodingError) {
+		t.Fatalf("Expected decoding error, got: %v", err)
+	}
+
+	// Verify interactions
+	Verify(mockEncoder, Times(1)).DecodeExtendPayload(invalidPayload)
+	Verify(mockCrypto, Times(0)).X25519Generate()
+
+	up1.Close()
+}
+
+// Test ForwardExtend with no down connection
+func TestHandleExtendUseCase_ForwardExtendNoDownConnection(t *testing.T) {
+	ctrl := NewMockController(t)
+
+	rawKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	priv := vo.NewRSAPrivKey(rawKey)
+
+	mockRepo := Mock[repository.ConnStateRepository](ctrl)
+	mockCrypto := Mock[service.CryptoService](ctrl)
+	mockSender := Mock[service.CellSenderService](ctrl)
+	mockEncoder := Mock[service.PayloadEncodingService](ctrl)
+
+	uc := usecase.NewHandleExtendUseCase(priv, mockRepo, mockCrypto, mockSender, mockEncoder)
+
+	// Setup test data
+	key, _ := vo.NewAESKey()
+	nonce, _ := vo.NewNonce()
+	cid := vo.NewCircuitID()
+	extendPayload := []byte("extend-payload")
+
+	// Create state with no down connection
+	up1, _ := net.Pipe()
+	st := entity.NewConnState(key, nonce, up1, nil)
+
+	cell := &entity.Cell{Cmd: vo.CmdExtend, Version: vo.ProtocolV1, Payload: extendPayload}
+
+	// Execute
+	err := uc.ForwardExtend(st, cid, cell)
+
+	// Verify error is returned
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if err.Error() != "no downstream connection" {
+		t.Fatalf("Expected 'no downstream connection' error, got: %v", err)
+	}
+
+	// Verify no mock interactions
+	Verify(mockSender, Times(0)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
+
+	st.Up().Close()
 }
