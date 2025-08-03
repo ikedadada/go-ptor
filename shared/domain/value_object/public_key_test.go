@@ -79,63 +79,54 @@ func TestParsePublicKeyFromPEM_RSA(t *testing.T) {
 	}
 }
 
-func TestParsePublicKeyFromPEM_NoPEMData(t *testing.T) {
-	invalidPEM := []byte("not a pem data")
-
-	_, err := ParsePublicKeyFromPEM(invalidPEM)
-	if err == nil {
-		t.Error("Expected error for invalid PEM data")
+func TestParsePublicKeyFromPEM_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		pemData       []byte
+		expectedError string
+	}{
+		{
+			name:          "No PEM data",
+			pemData:       []byte("not a pem data"),
+			expectedError: "no PEM data",
+		},
+		{
+			name: "Invalid PKIX data",
+			pemData: pem.EncodeToMemory(&pem.Block{
+				Type:  "PUBLIC KEY",
+				Bytes: []byte("invalid pkix data"),
+			}),
+			expectedError: "", // Any error is acceptable
+		},
+		{
+			name: "Unsupported key type",
+			pemData: pem.EncodeToMemory(&pem.Block{
+				Type:  "PUBLIC KEY",
+				Bytes: []byte{0x30, 0x00}, // Empty ASN.1 sequence
+			}),
+			expectedError: "", // Any error is acceptable
+		},
+		{
+			name: "Empty PEM block",
+			pemData: pem.EncodeToMemory(&pem.Block{
+				Type:  "PUBLIC KEY",
+				Bytes: []byte{},
+			}),
+			expectedError: "", // Any error is acceptable
+		},
 	}
-	if err.Error() != "no PEM data" {
-		t.Errorf("Expected 'no PEM data' error, got: %v", err)
-	}
-}
 
-func TestParsePublicKeyFromPEM_InvalidPKIX(t *testing.T) {
-	// Create PEM with invalid PKIX data
-	invalidPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: []byte("invalid pkix data"),
-	})
-
-	_, err := ParsePublicKeyFromPEM(invalidPEM)
-	if err == nil {
-		t.Error("Expected error for invalid PKIX data")
-	}
-}
-
-func TestParsePublicKeyFromPEM_UnsupportedKeyType(t *testing.T) {
-	// Create a minimal ASN.1 structure that parses but isn't RSA or Ed25519
-	// This is a minimal valid ASN.1 sequence that x509.ParsePKIXPublicKey will accept
-	// but will return an unsupported key type
-	const (
-		// ASN.1 SEQUENCE tag
-		asn1SequenceTag = 0x30
-		// Empty sequence length
-		emptySequenceLength = 0x00
-	)
-
-	pemData := pem.EncodeToMemory(&pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: []byte{asn1SequenceTag, emptySequenceLength}, // Empty ASN.1 sequence
-	})
-
-	_, err := ParsePublicKeyFromPEM(pemData)
-	if err == nil {
-		t.Error("Expected error for unsupported key type")
-	}
-}
-
-func TestParsePublicKeyFromPEM_EmptyPEMBlock(t *testing.T) {
-	// Create PEM with empty data
-	emptyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: []byte{},
-	})
-
-	_, err := ParsePublicKeyFromPEM(emptyPEM)
-	if err == nil {
-		t.Error("Expected error for empty PEM block")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParsePublicKeyFromPEM(tt.pemData)
+			if err == nil {
+				t.Errorf("Expected error for %s", tt.name)
+				return
+			}
+			if tt.expectedError != "" && err.Error() != tt.expectedError {
+				t.Errorf("Expected error '%s', got: %v", tt.expectedError, err)
+			}
+		})
 	}
 }
 
@@ -255,21 +246,21 @@ func TestParsePublicKeyFromPEM_DifferentPEMTypes(t *testing.T) {
 		{"PRIVATE KEY format", "PRIVATE KEY"},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			pemData := pem.EncodeToMemory(&pem.Block{
-				Type:  test.blockType,
+				Type:  tt.blockType,
 				Bytes: pubKeyBytes,
 			})
 
 			parsed, err := ParsePublicKeyFromPEM(pemData)
 			if err != nil {
-				t.Errorf("ParsePublicKeyFromPEM failed for block type %q: %v", test.blockType, err)
+				t.Errorf("ParsePublicKeyFromPEM failed for block type %q: %v", tt.blockType, err)
 			}
 
 			// Verify we got the correct key type
 			if _, ok := parsed.(Ed25519PubKey); !ok {
-				t.Errorf("Expected Ed25519PubKey for block type %q, got %T", test.blockType, parsed)
+				t.Errorf("Expected Ed25519PubKey for block type %q, got %T", tt.blockType, parsed)
 			}
 		})
 	}
@@ -329,9 +320,9 @@ func TestParsePublicKeyFromPEM_MalformedPEMStructure(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			_, err := ParsePublicKeyFromPEM(test.pemData)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParsePublicKeyFromPEM(tt.pemData)
 			if err == nil {
 				t.Error("Expected error for malformed PEM structure")
 			}

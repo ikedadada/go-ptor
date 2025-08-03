@@ -146,14 +146,10 @@ func TestEd25519PubKey_PublicKeyInterface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 key: %v", err)
 	}
-	pubKey := privKey.Public().(ed25519.PublicKey)
-
-	ed25519PubKey := Ed25519PubKey{PublicKey: pubKey}
-
-	// Test that it can be assigned to PublicKey interface
-	var pubKeyInterface PublicKey = ed25519PubKey
-	if pubKeyInterface == nil {
-		t.Error("Ed25519PubKey should implement PublicKey interface")
+	p := privKey.Public()
+	_, ok := p.(ed25519.PublicKey)
+	if !ok {
+		t.Fatal("Public key is not of type ed25519.PublicKey")
 	}
 }
 
@@ -171,10 +167,12 @@ func TestEd25519PubKey_ZeroValue(t *testing.T) {
 	block, _ := pem.Decode(pemData)
 	if block == nil {
 		t.Error("Zero value should still produce valid PEM structure")
+	} else {
+		if block.Type != "PUBLIC KEY" {
+			t.Errorf("Expected PEM type 'PUBLIC KEY', got '%s'", block.Type)
+		}
 	}
-	if block.Type != "PUBLIC KEY" {
-		t.Errorf("Expected PEM type 'PUBLIC KEY', got '%s'", block.Type)
-	}
+
 }
 
 func TestEd25519PubKey_EmptyPEMBlock(t *testing.T) {

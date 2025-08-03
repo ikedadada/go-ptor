@@ -6,20 +6,21 @@ import (
 
 func TestProtocolVersion_String(t *testing.T) {
 	tests := []struct {
+		name     string
 		version  ProtocolVersion
 		expected string
 	}{
-		{ProtocolV1, "v1"},
-		{ProtocolVersion(0x02), "unknown(2)"},
-		{ProtocolVersion(0x00), "unknown(0)"},
-		{ProtocolVersion(0xFF), "unknown(255)"},
+		{"ProtocolV1", ProtocolV1, "v1"},
+		{"Version_2", ProtocolVersion(0x02), "unknown(2)"},
+		{"Version_0", ProtocolVersion(0x00), "unknown(0)"},
+		{"Version_255", ProtocolVersion(0xFF), "unknown(255)"},
 	}
 
-	for _, test := range tests {
-		t.Run(test.expected, func(t *testing.T) {
-			result := test.version.String()
-			if result != test.expected {
-				t.Errorf("String() = %q, want %q", result, test.expected)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.version.String()
+			if result != tt.expected {
+				t.Errorf("String() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
@@ -27,20 +28,21 @@ func TestProtocolVersion_String(t *testing.T) {
 
 func TestProtocolVersion_IsSupported(t *testing.T) {
 	tests := []struct {
+		name      string
 		version   ProtocolVersion
 		supported bool
 	}{
-		{ProtocolV1, true},
-		{ProtocolVersion(0x02), false},
-		{ProtocolVersion(0x00), false},
-		{ProtocolVersion(0xFF), false},
+		{"ProtocolV1", ProtocolV1, true},
+		{"Version_2", ProtocolVersion(0x02), false},
+		{"Version_0", ProtocolVersion(0x00), false},
+		{"Version_255", ProtocolVersion(0xFF), false},
 	}
 
-	for _, test := range tests {
-		t.Run(test.version.String(), func(t *testing.T) {
-			result := test.version.IsSupported()
-			if result != test.supported {
-				t.Errorf("IsSupported() = %v, want %v", result, test.supported)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.version.IsSupported()
+			if result != tt.supported {
+				t.Errorf("IsSupported() = %v, want %v", result, tt.supported)
 			}
 		})
 	}
@@ -68,38 +70,24 @@ func TestProtocolVersion_ByteConversion(t *testing.T) {
 	}
 }
 
-func TestProtocolVersion_AllSupportedVersions(t *testing.T) {
+func TestProtocolVersion_AllVersions(t *testing.T) {
 	tests := []struct {
-		name    string
-		version ProtocolVersion
+		name            string
+		version         ProtocolVersion
+		expectSupported bool
 	}{
-		{"ProtocolV1", ProtocolV1},
+		{"ProtocolV1", ProtocolV1, true},
+		{"Zero value", ProtocolVersion(0x00), false},
+		{"Future version", ProtocolVersion(0x02), false},
+		{"Random version", ProtocolVersion(0x10), false},
+		{"Maximum byte value", ProtocolVersion(0xFF), false},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if !test.version.IsSupported() {
-				t.Errorf("Protocol version %v should be supported", test.version)
-			}
-		})
-	}
-}
-
-func TestProtocolVersion_UnsupportedVersions(t *testing.T) {
-	tests := []struct {
-		name    string
-		version ProtocolVersion
-	}{
-		{"Zero value", ProtocolVersion(0x00)},
-		{"Future version", ProtocolVersion(0x02)},
-		{"Random version", ProtocolVersion(0x10)},
-		{"Maximum byte value", ProtocolVersion(0xFF)},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if test.version.IsSupported() {
-				t.Errorf("Protocol version %v should not be supported", test.version)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isSupported := tt.version.IsSupported()
+			if isSupported != tt.expectSupported {
+				t.Errorf("Protocol version %v IsSupported() = %v, want %v", tt.version, isSupported, tt.expectSupported)
 			}
 		})
 	}
@@ -148,13 +136,13 @@ func TestProtocolVersion_EdgeCases(t *testing.T) {
 		{"Value 255", ProtocolVersion(255), false, "unknown(255)"},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if test.version.IsSupported() != test.expectSupported {
-				t.Errorf("IsSupported() = %v, want %v", test.version.IsSupported(), test.expectSupported)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.version.IsSupported() != tt.expectSupported {
+				t.Errorf("IsSupported() = %v, want %v", tt.version.IsSupported(), tt.expectSupported)
 			}
-			if test.version.String() != test.expectString {
-				t.Errorf("String() = %q, want %q", test.version.String(), test.expectString)
+			if tt.version.String() != tt.expectString {
+				t.Errorf("String() = %q, want %q", tt.version.String(), tt.expectString)
 			}
 		})
 	}
