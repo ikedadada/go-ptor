@@ -223,7 +223,7 @@ func TestHandleDataUseCase_DataUpstream(t *testing.T) {
 	cryptoError := errors.New("decryption failed")
 	WhenDouble(mockEncoder.DecodeDataPayload(dataPayload)).ThenReturn(dataDTO, nil)
 	WhenDouble(mockCrypto.AESOpen(key, nonce, invalidData)).ThenReturn(nil, cryptoError)
-	WhenDouble(mockCrypto.AESSeal(Any[vo.AESKey](), Any[vo.Nonce](), Any[[]byte]())).ThenReturn(upstreamEncrypted, nil)
+	WhenDouble(mockCrypto.AESSeal(key, nonce, invalidData)).ThenReturn(upstreamEncrypted, nil)
 	WhenDouble(mockEncoder.EncodeDataPayload(Any[*service.DataPayloadDTO]())).ThenReturn(upstreamPayload, nil)
 	WhenSingle(mockSender.ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())).ThenReturn(nil)
 
@@ -238,7 +238,7 @@ func TestHandleDataUseCase_DataUpstream(t *testing.T) {
 	// Verify mock interactions
 	Verify(mockEncoder, Times(1)).DecodeDataPayload(dataPayload)
 	Verify(mockCrypto, Times(1)).AESOpen(key, nonce, invalidData)
-	Verify(mockCrypto, Times(1)).AESSeal(Any[vo.AESKey](), Any[vo.Nonce](), Any[[]byte]())
+	Verify(mockCrypto, Times(1)).AESSeal(key, nonce, invalidData)
 	Verify(mockEncoder, Times(1)).EncodeDataPayload(Any[*service.DataPayloadDTO]())
 	Verify(mockSender, Times(1)).ForwardCell(Any[net.Conn](), Any[vo.CircuitID](), Any[*entity.Cell]())
 
